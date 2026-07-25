@@ -24,6 +24,14 @@ public class ExtendedSessionsCache : IDisposable
     /// </summary>
     public void Dispose()
     {
+        // MemoryCache.Dispose() does NOT invoke post-eviction callbacks for entries that are still
+        // present in the cache -- it merely tears down the cache's internal state. Any entries
+        // (e.g. cached extended-session state holding an IDisposable shim) that are still cached at
+        // shutdown would therefore never be disposed. Calling Clear() first forces every remaining
+        // entry to be removed via the normal removal path, which does invoke eviction callbacks
+        // synchronously-scheduled (via Task.Factory.StartNew) for each entry, ensuring deterministic
+        // cleanup of any cached shim/SHA1 resources before the cache itself is torn down.
+        this.extendedSessions?.Clear();
         this.extendedSessions?.Dispose();
         GC.SuppressFinalize(this);
     }

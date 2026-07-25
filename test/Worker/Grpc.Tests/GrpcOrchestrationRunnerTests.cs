@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
 using Google.Protobuf;
@@ -458,11 +459,16 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
-    public void ExternallyEndedExtendedSession_Evicted_DisposesCachedShimResources()
+    public async Task ExternallyEndedExtendedSession_Evicted_DisposesCachedShimResources()
     {
         // Regression test for the round-3 lifecycle fix: the extended-session MemoryCache must dispose
         // the cached shim (and, transitively, its wrapper's cached SHA1 backing NewGuid()) whenever an
         // entry is evicted -- not just when the shim is replaced within a single Execute() call.
+        //
+        // Note: MemoryCache invokes post-eviction callbacks via Task.Factory.StartNew (i.e.
+        // asynchronously, on a background thread), so disposal is not guaranteed to have happened by
+        // the time Remove()/TryGetValue() returns. WaitUntilDisposedAsync polls with a bounded timeout
+        // instead of asserting disposal immediately, to avoid flakiness under load.
         using var extendedSessions = new ExtendedSessionsCache();
         var historyEvent = new Protobuf.HistoryEvent
         {
@@ -500,8 +506,7 @@ public class GrpcOrchestrationRunnerTests
         GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
         Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out _));
 
-        Action useAfterDispose = () => cachedHashAlgorithm.ComputeHash(new byte[] { 1, 2, 3 });
-        useAfterDispose.Should().Throw<ObjectDisposedException>();
+        await WaitUntilDisposedAsync(cachedHashAlgorithm, TimeSpan.FromSeconds(10));
     }
 
     [Fact]
@@ -509,6 +514,11 @@ public class GrpcOrchestrationRunnerTests
     {
         // Regression test for the round-3 lifecycle fix: sliding-expiration eviction of a stale
         // extended session must also dispose the cached shim's resources.
+        //
+        // Note: MemoryCache invokes post-eviction callbacks via Task.Factory.StartNew (i.e.
+        // asynchronously, on a background thread), so disposal is not guaranteed to have happened
+        // immediately after the scan removes the entry. WaitUntilDisposedAsync polls with a bounded
+        // timeout instead of asserting disposal immediately, to avoid flakiness under load.
         using var extendedSessions = new ExtendedSessionsCache();
         int extendedSessionIdleTimeout = 5;
         var historyEvent = new Protobuf.HistoryEvent
@@ -539,8 +549,47 @@ public class GrpcOrchestrationRunnerTests
         await Task.Delay(extendedSessionIdleTimeout * 1000 * 2);
         Assert.False(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out _));
 
-        Action useAfterDispose = () => cachedHashAlgorithm.ComputeHash(new byte[] { 1, 2, 3 });
-        useAfterDispose.Should().Throw<ObjectDisposedException>();
+        await WaitUntilDisposedAsync(cachedHashAlgorithm, TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task ExtendedSessionsCache_Dispose_DisposesCachedShimResources()
+    {
+        // Regression test for round-4: MemoryCache.Dispose() alone does NOT invoke post-eviction
+        // callbacks for entries that are still cached (confirmed against the pinned
+        // Microsoft.Extensions.Caching.Memory 8.0.1 source), so ExtendedSessionsCache.Dispose() must
+        // explicitly Clear() the cache before disposing it. Otherwise a still-pending extended session
+        // at worker shutdown would leak its cached shim's resources (e.g. the SHA1 instance backing
+        // NewGuid()) for the remaining lifetime of the process.
+        var extendedSessions = new ExtendedSessionsCache();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(extendedSession!);
+
+        // Simulate a worker shutting down while an extended session is still pending in the cache.
+        extendedSessions.Dispose();
+
+        await WaitUntilDisposedAsync(cachedHashAlgorithm, TimeSpan.FromSeconds(10));
     }
 
     [Fact]
@@ -610,6 +659,36 @@ public class GrpcOrchestrationRunnerTests
                 "TaskOrchestrationContextWrapper.cachedHashAlgorithm was not found.");
         return (SHA1)(cachedHashAlgorithmField.GetValue(wrapperContext)
             ?? throw new InvalidOperationException("cachedHashAlgorithm was null; NewGuid() may not have run."));
+    }
+
+    // Eviction callbacks on the extended-sessions MemoryCache are dispatched via
+    // Task.Factory.StartNew (i.e. asynchronously, on a background thread pool task) rather than
+    // synchronously on the calling thread -- see Microsoft.Extensions.Caching.Memory's
+    // CacheEntryTokens.InvokeEvictionCallbacks. This helper polls with a bounded timeout for the given
+    // SHA1 instance to become disposed, instead of asserting disposal immediately after triggering an
+    // eviction, to avoid flakiness from that inherent async scheduling.
+    static async Task WaitUntilDisposedAsync(SHA1 hashAlgorithm, TimeSpan timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                hashAlgorithm.ComputeHash([1, 2, 3]);
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            if (stopwatch.Elapsed >= timeout)
+            {
+                throw new TimeoutException(
+                    $"SHA1 instance was not disposed within {timeout} of the triggering eviction/disposal.");
+            }
+
+            await Task.Delay(20);
+        }
     }
 
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)

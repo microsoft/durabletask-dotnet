@@ -197,41 +197,56 @@ public static class GrpcOrchestrationRunner
                     : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
                 TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
 
-                TaskOrchestrationExecutor executor = new(
-                    runtimeState,
-                    shim,
-                    BehaviorOnContinueAsNew.Carryover,
-                    request.EntityParameters.ToCore(),
-                    ErrorPropagationMode.UseFailureDetails);
-                result = executor.Execute();
-
-                if (addToExtendedSessions && !executor.IsCompleted)
+                // Tracks whether ownership of the shim has been successfully transferred to the
+                // extended-sessions cache. Execute() (or the subsequent cache Set() call) could throw;
+                // in that case ownership is never transferred, and the finally block below must dispose
+                // the shim itself rather than leaking it.
+                bool transferredShimToCache = false;
+                try
                 {
-                    // addToExtendedSessions can only be set to true if extendedSessions is not null.
-                    // The shim is now owned by the cache; it must not be disposed here since the
-                    // orchestration may resume via ExecuteNewEvents() on a future call. Instead, register
-                    // an eviction callback so it's disposed exactly once, whenever this entry is removed
-                    // for any reason (explicit Remove, sliding-expiration timeout, capacity eviction, or
-                    // cache disposal).
-                    MemoryCacheEntryOptions cacheEntryOptions = new()
+                    TaskOrchestrationExecutor executor = new(
+                        runtimeState,
+                        shim,
+                        BehaviorOnContinueAsNew.Carryover,
+                        request.EntityParameters.ToCore(),
+                        ErrorPropagationMode.UseFailureDetails);
+                    result = executor.Execute();
+
+                    if (addToExtendedSessions && !executor.IsCompleted)
                     {
-                        SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds),
-                    };
-                    cacheEntryOptions.RegisterPostEvictionCallback(DisposeEvictedExtendedSession);
-                    extendedSessions!.Set<ExtendedSessionState>(
-                        request.InstanceId,
-                        new(runtimeState, shim, executor),
-                        cacheEntryOptions);
+                        // addToExtendedSessions can only be set to true if extendedSessions is not null.
+                        // The shim is now owned by the cache; it must not be disposed here since the
+                        // orchestration may resume via ExecuteNewEvents() on a future call. Instead, register
+                        // an eviction callback so it's disposed exactly once, whenever this entry is removed
+                        // for any reason (explicit Remove, sliding-expiration timeout, capacity eviction, or
+                        // cache disposal).
+                        MemoryCacheEntryOptions cacheEntryOptions = new()
+                        {
+                            SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds),
+                        };
+                        cacheEntryOptions.RegisterPostEvictionCallback(DisposeEvictedExtendedSession);
+                        extendedSessions!.Set<ExtendedSessionState>(
+                            request.InstanceId,
+                            new(runtimeState, shim, executor),
+                            cacheEntryOptions);
+                        transferredShimToCache = true;
+                    }
+                    else
+                    {
+                        extendedSessions?.Remove(request.InstanceId);
+                    }
                 }
-                else
+                finally
                 {
-                    extendedSessions?.Remove(request.InstanceId);
-
-                    // This execution either isn't part of an extended session, or it completed on its
-                    // first execution, so the shim was never handed off to the cache above. Nothing else
-                    // will ever use it again, so it must be disposed here to release its resources (e.g.
-                    // the SHA1 instance cached by NewGuid).
-                    (shim as IDisposable)?.Dispose();
+                    if (!transferredShimToCache)
+                    {
+                        // This execution either isn't part of an extended session, it completed on its
+                        // first execution, or an exception was thrown before ownership could be
+                        // transferred to the cache above. In every one of these cases nothing else will
+                        // ever use the shim again, so it must be disposed here to release its resources
+                        // (e.g. the SHA1 instance cached by NewGuid).
+                        (shim as IDisposable)?.Dispose();
+                    }
                 }
             }
         }

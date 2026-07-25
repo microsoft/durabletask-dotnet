@@ -402,7 +402,7 @@ public class TaskOrchestrationContextWrapperTests
         // This regression test protects replay compatibility: it must keep producing these exact GUIDs.
         TestOrchestrationContext innerContext = new(
             "fixed-instance-id",
-            DateTime.Parse("2023-05-06T07:08:09.1234567Z", null, DateTimeStyles.RoundtripKind));
+            DateTime.Parse("2023-05-06T07:08:09.1234567Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
@@ -425,7 +425,7 @@ public class TaskOrchestrationContextWrapperTests
         // the hashed name and that the namespace/algorithm/byte-ordering were not altered.
         TestOrchestrationContext innerContext = new(
             "other-instance-id",
-            DateTime.Parse("2023-05-06T07:08:09.1234567Z", null, DateTimeStyles.RoundtripKind));
+            DateTime.Parse("2023-05-06T07:08:09.1234567Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
@@ -443,7 +443,7 @@ public class TaskOrchestrationContextWrapperTests
         // instance ID and timestamp must still yield distinct GUIDs.
         TestOrchestrationContext innerContext = new(
             "repeat-instance-id",
-            DateTime.Parse("2024-01-01T00:00:00.0000000Z", null, DateTimeStyles.RoundtripKind));
+            DateTime.Parse("2024-01-01T00:00:00.0000000Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
@@ -465,7 +465,7 @@ public class TaskOrchestrationContextWrapperTests
         // separate replay passes over the same orchestration history) observe the same instance ID and
         // the same sequence of CurrentUtcDateTime values as history is replayed.
         string instanceId = "replay-instance-id";
-        DateTime timestamp = DateTime.Parse("2022-11-11T11:11:11.1111111Z", null, DateTimeStyles.RoundtripKind);
+        DateTime timestamp = DateTime.Parse("2022-11-11T11:11:11.1111111Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
         TestOrchestrationContext innerContext1 = new(instanceId, timestamp);
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
@@ -573,7 +573,7 @@ public class TaskOrchestrationContextWrapperTests
         // GUIDs to the ones computed with a fresh instance, proving disposal does not affect correctness.
         TestOrchestrationContext innerContext = new(
             "fixed-instance-id",
-            DateTime.Parse("2023-05-06T07:08:09.1234567Z", null, DateTimeStyles.RoundtripKind));
+            DateTime.Parse("2023-05-06T07:08:09.1234567Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 

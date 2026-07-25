@@ -495,7 +495,9 @@ public class GrpcOrchestrationRunnerTests
         SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(extendedSession!);
 
         // Now set the extended session flag to false for this instance, which removes/evicts the cache
-        // entry and should synchronously invoke the eviction callback that disposes the cached shim.
+        // entry and queues the eviction callback that disposes the cached shim. The callback runs
+        // asynchronously (see the note above), which is why this test awaits WaitUntilDisposedAsync
+        // below instead of asserting disposal immediately.
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
             { "IncludeState", Value.ForBool(true) },
@@ -675,6 +677,66 @@ public class GrpcOrchestrationRunnerTests
         // disposed exactly once.
         Assert.Null(concurrentDisposeException);
         await WaitUntilDisposedAsync(cachedHashAlgorithm, TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task ExtendedSessionsCache_DisposeRaceWithGetOrInitializeCache_NeverLeaksCache()
+    {
+        // Regression test: guards against a race between Dispose() and GetOrInitializeCache() where
+        // Dispose() could observe the `extendedSessions` field as still null (not yet lazily
+        // created), mark itself disposed, and return having done nothing -- while a concurrent
+        // GetOrInitializeCache() call then constructs a brand-new MemoryCache that Dispose() has
+        // already finished running and will never see again, permanently leaking it (all future
+        // Dispose() calls short-circuit once `disposed` is true).
+        //
+        // The fix synchronizes both methods under a single shared lock, so the two operations are
+        // always fully serialized -- never interleaved -- for any given ExtendedSessionsCache
+        // instance:
+        //  * If GetOrInitializeCache() completes (and returns a cache) strictly before Dispose()
+        //    acquires the lock, Dispose() is then guaranteed to observe and dispose that exact
+        //    cache.
+        //  * If Dispose() completes strictly first, GetOrInitializeCache() must throw
+        //    ObjectDisposedException instead of creating a now-unreachable cache.
+        // Run many iterations, racing the two calls from separate threads, to exercise both
+        // orderings rather than relying on a single attempt.
+        for (int iteration = 0; iteration < 50; iteration++)
+        {
+            var extendedSessions = new ExtendedSessionsCache();
+
+            Task<MemoryCache?> getOrInitTask = Task.Run(() =>
+            {
+                try
+                {
+                    return extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Losing the race to a Dispose() that ran first is an expected, safe outcome.
+                    return null;
+                }
+            });
+            Task disposeTask = Task.Run(() => extendedSessions.Dispose());
+
+            await Task.WhenAll(getOrInitTask, disposeTask);
+            MemoryCache? cache = await getOrInitTask;
+
+            if (cache is not null)
+            {
+                // GetOrInitializeCache() won the race and returned a cache. Because both methods are
+                // mutually exclusive under the shared lock, and Task.WhenAll has already awaited the
+                // Dispose() call to completion, Dispose() must have run strictly after
+                // initialization -- so it is guaranteed to have already captured and disposed this
+                // exact cache instance. Verify it is genuinely disposed (not merely leaked out of
+                // reach) by asserting further use throws ObjectDisposedException.
+                Assert.Throws<ObjectDisposedException>(() => cache.TryGetValue("any-key", out _));
+            }
+
+            // Regardless of which call won the race, a repeated Dispose() call must remain a safe,
+            // idempotent no-op -- proving the cache reached a single, well-defined disposed state
+            // with no lingering, undisposed MemoryCache left behind.
+            Exception? repeatDisposeException = Record.Exception(() => extendedSessions.Dispose());
+            Assert.Null(repeatDisposeException);
+        }
     }
 
     [Fact]

@@ -96,4 +96,79 @@ public class ExtendedSessionsCache : IDisposable
             return this.extendedSessions;
         }
     }
+
+    /// <summary>
+    /// Attempts to retrieve the cached value for the given key, if present and this cache has not been
+    /// disposed (nor is concurrently being disposed by another thread). Callers should use this instead
+    /// of calling <see cref="IMemoryCache.TryGetValue(object, out object)"/> directly on the
+    /// <see cref="MemoryCache"/> returned by <see cref="GetOrInitializeCache"/>, since this method is
+    /// synchronized with <see cref="Dispose"/> and therefore can never observe -- or throw from -- a
+    /// cache instance that is concurrently being torn down.
+    /// </summary>
+    /// <typeparam name="T">The type of the cached value.</typeparam>
+    /// <param name="key">The cache key.</param>
+    /// <param name="value">When this method returns, contains the cached value, if found.</param>
+    /// <returns><c>true</c> if a value was found; <c>false</c> if not found, or if this cache is disposed.</returns>
+    internal bool TryGetCachedValue<T>(string key, out T? value)
+    {
+        lock (this.syncRoot)
+        {
+            if (this.disposed || this.extendedSessions is null)
+            {
+                value = default;
+                return false;
+            }
+
+            return this.extendedSessions.TryGetValue(key, out value);
+        }
+    }
+
+    /// <summary>
+    /// Removes the cached value for the given key, if present. This is a safe no-op if this cache has
+    /// already been disposed (or is concurrently being disposed). Synchronized with <see cref="Dispose"/>
+    /// for the same reason as <see cref="TryGetCachedValue{T}(string, out T)"/>.
+    /// </summary>
+    /// <param name="key">The cache key to remove.</param>
+    internal void RemoveCachedValue(string key)
+    {
+        lock (this.syncRoot)
+        {
+            if (this.disposed || this.extendedSessions is null)
+            {
+                return;
+            }
+
+            this.extendedSessions.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to insert or replace the cached value for the given key. Returns <c>false</c> without
+    /// modifying the cache if this <see cref="ExtendedSessionsCache"/> has already been disposed, or is
+    /// concurrently being disposed by another thread -- in which case the caller retains ownership of
+    /// <paramref name="value"/> (and remains responsible for disposing it, if applicable) instead of
+    /// assuming the cache accepted it and will eventually evict and dispose it via a post-eviction
+    /// callback. Synchronized with <see cref="Dispose"/> so there is no window in which an entry can be
+    /// inserted after disposal has begun tearing the cache down (e.g. after <c>Clear()</c> has already
+    /// run but before the underlying <see cref="MemoryCache"/> itself has been disposed) -- an insertion
+    /// that would otherwise never be evicted or disposed again.
+    /// </summary>
+    /// <typeparam name="T">The type of the value to cache.</typeparam>
+    /// <param name="key">The cache key.</param>
+    /// <param name="value">The value to cache.</param>
+    /// <param name="options">The cache entry options (e.g. sliding expiration, eviction callback).</param>
+    /// <returns><c>true</c> if the value was inserted; <c>false</c> if rejected because this cache is disposed.</returns>
+    internal bool TrySetCachedValue<T>(string key, T value, MemoryCacheEntryOptions options)
+    {
+        lock (this.syncRoot)
+        {
+            if (this.disposed || this.extendedSessions is null)
+            {
+                return false;
+            }
+
+            this.extendedSessions.Set(key, value, options);
+            return true;
+        }
+    }
 }

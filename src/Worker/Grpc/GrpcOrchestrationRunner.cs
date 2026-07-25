@@ -144,9 +144,14 @@ public static class GrpcOrchestrationRunner
 
         if (isExtendedSession && extendedSessions != null)
         {
+            // extendedSessions is only non-null when extendedSessionsCache is also non-null. All reads,
+            // removals, and (later) insertions are routed through extendedSessionsCache's synchronized
+            // wrapper methods rather than operating on the raw MemoryCache directly, so every operation
+            // is atomic with respect to a concurrent Dispose() of the cache (see round-9 fix below).
+            //
             // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
             // session based on the provided history
-            if (!pastEventsIncluded && extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
+            if (!pastEventsIncluded && extendedSessionsCache!.TryGetCachedValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
                 runtimeState.NewEvents.Clear();
@@ -158,12 +163,12 @@ public static class GrpcOrchestrationRunner
                 result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
                 if (extendedSessionState.OrchestrationExecutor.IsCompleted)
                 {
-                    extendedSessions.Remove(request.InstanceId);
+                    extendedSessionsCache.RemoveCachedValue(request.InstanceId);
                 }
             }
             else
             {
-                extendedSessions.Remove(request.InstanceId);
+                extendedSessionsCache!.RemoveCachedValue(request.InstanceId);
                 addToExtendedSessions = true;
             }
         }
@@ -214,26 +219,34 @@ public static class GrpcOrchestrationRunner
 
                     if (addToExtendedSessions && !executor.IsCompleted)
                     {
-                        // addToExtendedSessions can only be set to true if extendedSessions is not null.
-                        // The shim is now owned by the cache; it must not be disposed here since the
-                        // orchestration may resume via ExecuteNewEvents() on a future call. Instead, register
-                        // an eviction callback so it's disposed exactly once, whenever this entry is removed
-                        // for any reason (explicit Remove, sliding-expiration timeout, capacity eviction, or
-                        // cache disposal).
+                        // addToExtendedSessions can only be set to true if extendedSessionsCache is not
+                        // null. The shim is now (attempted to be) owned by the cache; it must not be
+                        // disposed here since the orchestration may resume via ExecuteNewEvents() on a
+                        // future call. Register an eviction callback so it's disposed exactly once,
+                        // whenever this entry is removed for any reason (explicit Remove,
+                        // sliding-expiration timeout, capacity eviction, or cache disposal).
                         MemoryCacheEntryOptions cacheEntryOptions = new()
                         {
                             SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds),
                         };
                         cacheEntryOptions.RegisterPostEvictionCallback(DisposeEvictedExtendedSession);
-                        extendedSessions!.Set<ExtendedSessionState>(
+
+                        // TrySetCachedValue is synchronized with a concurrent ExtendedSessionsCache.Dispose()
+                        // (e.g. during a graceful worker shutdown that races with this in-flight execution).
+                        // It returns false -- without inserting anything -- if the cache has already been (or
+                        // is concurrently being) disposed, so there is no window in which an entry can be
+                        // silently added after the cache has begun tearing down and would then never be
+                        // evicted or disposed again. transferredShimToCache reflects the actual outcome, so
+                        // the finally block below correctly retains and disposes the shim itself when the
+                        // hand-off is rejected.
+                        transferredShimToCache = extendedSessionsCache!.TrySetCachedValue(
                             request.InstanceId,
-                            new(runtimeState, shim, executor),
+                            new ExtendedSessionState(runtimeState, shim, executor),
                             cacheEntryOptions);
-                        transferredShimToCache = true;
                     }
                     else
                     {
-                        extendedSessions?.Remove(request.InstanceId);
+                        extendedSessionsCache?.RemoveCachedValue(request.InstanceId);
                     }
                 }
                 finally

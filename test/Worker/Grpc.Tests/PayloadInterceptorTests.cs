@@ -41,19 +41,31 @@ public class PayloadInterceptorTests
             });
         ClientInterceptorContext<string, string> context = CreateContext();
 
-        // Act
-        using AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
-            "request",
-            context,
-            (req, ctx) =>
-            {
-                continuationThreadId = Environment.CurrentManagedThreadId;
-                return CreateFakeCall("response");
-            });
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        AsyncUnaryCall<string> call;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(null);
+
+            // Act
+            call = interceptor.AsyncUnaryCall(
+                "request",
+                context,
+                (req, ctx) =>
+                {
+                    continuationThreadId = Environment.CurrentManagedThreadId;
+                    return CreateFakeCall("response");
+                });
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
 
         // Assert: both callbacks already ran, synchronously, on the calling thread.
         externalizeThreadId.Should().Be(callingThreadId);
         continuationThreadId.Should().Be(callingThreadId);
+        call.Dispose();
     }
 
     [Fact]
@@ -222,6 +234,62 @@ public class PayloadInterceptorTests
         disposeInvoked.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AsyncUnaryCall_IncompleteInterceptorAwait_DoesNotRequireCallerContextPump(bool resolve)
+    {
+        // Arrange
+        TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        QueuedSynchronizationContext blockedContext = new();
+        Func<object?, CancellationToken, Task> asynchronousStep = async (_, _) =>
+        {
+            entered.SetResult();
+            await gate.Task;
+        };
+        TestPayloadInterceptor interceptor = resolve
+            ? CreateInterceptor(onResolve: asynchronousStep)
+            : CreateInterceptor(onExternalize: asynchronousStep);
+        ClientInterceptorContext<string, string> context = CreateContext();
+
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        AsyncUnaryCall<string> call;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(blockedContext);
+
+            // Act
+            call = interceptor.AsyncUnaryCall(
+                "request",
+                context,
+                (_, _) => CreateFakeCall("response"));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            gate.SetResult();
+
+            Task winner = await Task.WhenAny(call.ResponseAsync, blockedContext.CallbackPosted)
+                .WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            winner.Should().Be(call.ResponseAsync, "the response must complete without pumping the caller's context");
+            await call.ResponseAsync;
+        }
+        finally
+        {
+            gate.TrySetResult();
+            blockedContext.Drain();
+            call.Dispose();
+        }
+    }
+
     static TestPayloadInterceptor CreateInterceptor(
         Func<object?, CancellationToken, Task>? onExternalize = null,
         Func<object?, CancellationToken, Task>? onResolve = null)
@@ -237,7 +305,7 @@ public class PayloadInterceptorTests
     static ClientInterceptorContext<string, string> CreateContext(CancellationToken cancellationToken = default)
     {
         CallOptions options = new(cancellationToken: cancellationToken);
-        return new ClientInterceptorContext<string, string>(TestMethod, null, options);
+        return new ClientInterceptorContext<string, string>(TestMethod, "localhost", options);
     }
 
     static AsyncUnaryCall<string> CreateFakeCall(string response, Action? disposeAction = null)
@@ -262,5 +330,52 @@ public class PayloadInterceptorTests
 
         protected override Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
             => this.OnResolve?.Invoke(response, cancellation) ?? Task.CompletedTask;
+    }
+
+    sealed class QueuedSynchronizationContext : SynchronizationContext
+    {
+        readonly Queue<(SendOrPostCallback Callback, object? State)> callbacks = [];
+        readonly TaskCompletionSource callbackPosted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task CallbackPosted => this.callbackPosted.Task;
+
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            lock (this.callbacks)
+            {
+                this.callbacks.Enqueue((callback, state));
+            }
+
+            this.callbackPosted.TrySetResult();
+        }
+
+        public void Drain()
+        {
+            SynchronizationContext? previous = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                while (true)
+                {
+                    (SendOrPostCallback Callback, object? State) work;
+                    lock (this.callbacks)
+                    {
+                        if (this.callbacks.Count == 0)
+                        {
+                            return;
+                        }
+
+                        work = this.callbacks.Dequeue();
+                    }
+
+                    work.Callback(work.State);
+                }
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
     }
 }

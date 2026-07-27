@@ -35,16 +35,19 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         ClientInterceptorContext<TRequest, TResponse> context,
         AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
     {
-        // Build the underlying call lazily after async externalization. This runs inline (no
-        // thread-pool hop); the continuation typically starts synchronously anyway once invoked.
-        Task<AsyncUnaryCall<TResponse>> startCallTask = StartCallAsync();
+        // Build the underlying call lazily after async externalization. Avoid a thread-pool hop in
+        // the normal server path, but preserve isolation for callers with a custom context/scheduler:
+        // public interceptor and payload-store implementations may capture either before returning.
+        Task<AsyncUnaryCall<TResponse>> startCallTask = RequiresSchedulerIsolation()
+            ? Task.Run(StartCallAsync)
+            : StartCallAsync();
+
+        static bool RequiresSchedulerIsolation()
+            => SynchronizationContext.Current is not null || TaskScheduler.Current != TaskScheduler.Default;
 
         async Task<AsyncUnaryCall<TResponse>> StartCallAsync()
         {
-            // Externalize first; if this fails, do not proceed to send the gRPC call. This now runs
-            // inline on the caller's thread rather than on a dedicated thread-pool thread (via
-            // Task.Run), so ConfigureAwait(false) is required here to avoid capturing and resuming
-            // on the caller's SynchronizationContext/TaskScheduler, matching library-safe behavior.
+            // Externalize first; if this fails, do not proceed to send the gRPC call.
             await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken)
                 .ConfigureAwait(false);
 
@@ -56,7 +59,10 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         {
             AsyncUnaryCall<TResponse> innerCall = await startCallTask.ConfigureAwait(false);
             TResponse response = await innerCall.ResponseAsync.ConfigureAwait(false);
-            await this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken).ConfigureAwait(false);
+            Task resolveTask = RequiresSchedulerIsolation()
+                ? Task.Run(() => this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken))
+                : this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken);
+            await resolveTask.ConfigureAwait(false);
             return response;
         }
 

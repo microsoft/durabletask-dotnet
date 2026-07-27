@@ -14,12 +14,21 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
 /// <summary>
+/// Serializes tests that use the Processor's static sizing-observability hooks.
+/// </summary>
+[CollectionDefinition(nameof(CompleteOrchestratorTaskWithChunkingCollection), DisableParallelization = true)]
+public sealed class CompleteOrchestratorTaskWithChunkingCollection
+{
+}
+
+/// <summary>
 /// Focused unit tests for <c>Processor.CompleteOrchestratorTaskWithChunkingAsync</c>, covering the
 /// size-boundary decisions, the <see cref="P.WorkerCapability.LargePayloads"/> capability combinations,
 /// oversized-single-action failure behavior, chunk wire-compatibility, and retry behavior. These tests
 /// guard against regressions in the optimization that avoids recalculating protobuf action sizes
 /// (see https://github.com/microsoft/durabletask-dotnet/issues/773).
 /// </summary>
+[Collection(nameof(CompleteOrchestratorTaskWithChunkingCollection))]
 public class CompleteOrchestratorTaskWithChunkingTests
 {
     [Fact]

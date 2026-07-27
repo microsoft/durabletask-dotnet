@@ -1122,7 +1122,7 @@ sealed partial class GrpcDurableTaskWorker
             CancellationToken cancellationToken)
         {
             // Helper to add an action to the current chunk if it fits, using a precomputed action size
-            // so we never need to call CalculateSize() on the same action more than once.
+            // so validation and chunk packing do not need to recalculate its serialized size.
             static bool TryAddAction(
                 Google.Protobuf.Collections.RepeatedField<P.OrchestratorAction> dest,
                 P.OrchestratorAction action,
@@ -1218,13 +1218,12 @@ sealed partial class GrpcDurableTaskWorker
             // above during validation if we have them (LargePayloads not present); otherwise (no
             // validation was needed) compute each action's serialized size exactly once here. Either
             // way, the cached sizes are reused for chunk packing below instead of being recalculated.
-            List<P.OrchestratorAction> allActions = response.Actions.ToList();
             if (actionSizes == null)
             {
-                actionSizes = new int[allActions.Count];
-                for (int i = 0; i < allActions.Count; i++)
+                actionSizes = new int[response.Actions.Count];
+                for (int i = 0; i < response.Actions.Count; i++)
                 {
-                    actionSizes[i] = allActions[i].CalculateSize();
+                    actionSizes[i] = response.Actions[i].CalculateSize();
                 }
             }
 
@@ -1247,15 +1246,15 @@ sealed partial class GrpcDurableTaskWorker
                 int chunkPayloadSize = 0;
 
                 // Fill the chunk with actions until we reach the size limit
-                while (actionsCompletedSoFar < allActions.Count &&
-                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], actionSizes[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
+                while (actionsCompletedSoFar < response.Actions.Count &&
+                       TryAddAction(chunkedResponse.Actions, response.Actions[actionsCompletedSoFar], actionSizes[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
                 {
                     actionsCompletedSoFar++;
                 }
 
                 // Determine if this is a partial chunk (more actions remaining)
 #pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
-                isPartial = actionsCompletedSoFar < allActions.Count;
+                isPartial = actionsCompletedSoFar < response.Actions.Count;
                 chunkedResponse.IsPartial = isPartial;
 
                 // Only activate chunked mode when we actually need multiple chunks.

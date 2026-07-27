@@ -96,6 +96,80 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task ResolveResponsePayloadsAsync_GetInstanceResponse_SerializesSharedStateMutationsAfterConcurrentDownloads()
+    {
+        // Arrange: all three fields belong to the same OrchestrationState message. The test holds
+        // that message's monitor while allowing the downloads to finish, so only the assignments
+        // (not the independent Blob I/O) should wait for the shared-message lock.
+        TaskCompletionSource<bool> allDownloadsStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseDownloads = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int downloadsStarted = 0;
+        TrackingPayloadStore store = new(downloadAsync: async (token, cancellationToken) =>
+        {
+            if (Interlocked.Increment(ref downloadsStarted) == 3)
+            {
+                allDownloadsStarted.TrySetResult(true);
+            }
+
+            await releaseDownloads.Task.WaitAsync(cancellationToken);
+            return token switch
+            {
+                "test-blob://input" => "input",
+                "test-blob://output" => "output",
+                "test-blob://status" => "status",
+                _ => throw new InvalidOperationException($"Unexpected token: {token}"),
+            };
+        });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.OrchestrationState state = new()
+        {
+            Input = "test-blob://input",
+            Output = "test-blob://output",
+            CustomStatus = "test-blob://status",
+        };
+        P.GetInstanceResponse response = new() { OrchestrationState = state };
+        TaskCompletionSource<bool> stateLockAcquired = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseStateLock = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task holdStateLock = Task.Run(() =>
+        {
+            lock (state)
+            {
+                stateLockAcquired.SetResult(true);
+                releaseStateLock.Task.GetAwaiter().GetResult();
+            }
+        });
+
+        try
+        {
+            await stateLockAcquired.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            // Act
+            Task resolveTask = ResolveAsync(interceptor, response, CancellationToken.None);
+            await allDownloadsStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            releaseDownloads.SetResult(true);
+
+            // Assert: Blob reads overlap, but their shared protobuf-message assignments wait for
+            // the synchronization boundary rather than mutating state concurrently.
+            await Task.Delay(100);
+            resolveTask.IsCompleted.Should().BeFalse("the three assignments target the same protobuf message and must wait for its lock");
+            store.MaxObservedConcurrency.Should().BeGreaterThan(1, "independent Blob reads should still overlap");
+
+            releaseStateLock.SetResult(true);
+            await resolveTask.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            releaseDownloads.TrySetResult(true);
+            releaseStateLock.TrySetResult(true);
+            await holdStateLock;
+        }
+
+        state.Input.Should().Be("input");
+        state.Output.Should().Be("output");
+        state.CustomStatus.Should().Be("status");
+    }
+
+    [Fact]
     public async Task ResolveResponsePayloadsAsync_WorkItemOrchestratorRequest_ResolvesPastAndNewEventsInOrder()
     {
         // Arrange
@@ -549,7 +623,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     /// </summary>
     sealed class TrackingPayloadStore(
         TimeSpan delay = default,
-        Func<string, CancellationToken, Task<string>>? uploadAsync = null) : PayloadStore
+        Func<string, CancellationToken, Task<string>>? uploadAsync = null,
+        Func<string, CancellationToken, Task<string>>? downloadAsync = null) : PayloadStore
     {
         const string TokenPrefix = "test-blob://";
 
@@ -622,12 +697,18 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             this.EnterCall();
             try
             {
+                Interlocked.Increment(ref this.downloadCount);
+
+                if (downloadAsync != null)
+                {
+                    return await downloadAsync(token, cancellationToken);
+                }
+
                 if (delay > TimeSpan.Zero)
                 {
                     await Task.Delay(delay, cancellationToken);
                 }
 
-                Interlocked.Increment(ref this.downloadCount);
                 lock (this.gate)
                 {
                     return this.tokenToValue[token];

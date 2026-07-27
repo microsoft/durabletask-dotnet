@@ -122,9 +122,30 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             case P.GetInstanceResponse r when r.OrchestrationState is { } s:
                 await RunWithBoundedConcurrencyAsync(
                     [
-                        async () => s.Input = await this.MaybeResolveAsync(s.Input, cancellation),
-                        async () => s.Output = await this.MaybeResolveAsync(s.Output, cancellation),
-                        async () => s.CustomStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation),
+                        async () =>
+                        {
+                            string? input = await this.MaybeResolveAsync(s.Input, cancellation);
+                            lock (s)
+                            {
+                                s.Input = input;
+                            }
+                        },
+                        async () =>
+                        {
+                            string? output = await this.MaybeResolveAsync(s.Output, cancellation);
+                            lock (s)
+                            {
+                                s.Output = output;
+                            }
+                        },
+                        async () =>
+                        {
+                            string? customStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
+                            lock (s)
+                            {
+                                s.CustomStatus = customStatus;
+                            }
+                        },
                     ],
                     cancellation);
                 break;
@@ -145,9 +166,30 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     List<Func<Task>> operations = [];
                     foreach (P.OrchestrationState s in r.OrchestrationState)
                     {
-                        operations.Add(async () => s.Input = await this.MaybeResolveAsync(s.Input, cancellation));
-                        operations.Add(async () => s.Output = await this.MaybeResolveAsync(s.Output, cancellation));
-                        operations.Add(async () => s.CustomStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation));
+                        operations.Add(async () =>
+                        {
+                            string? input = await this.MaybeResolveAsync(s.Input, cancellation);
+                            lock (s)
+                            {
+                                s.Input = input;
+                            }
+                        });
+                        operations.Add(async () =>
+                        {
+                            string? output = await this.MaybeResolveAsync(s.Output, cancellation);
+                            lock (s)
+                            {
+                                s.Output = output;
+                            }
+                        });
+                        operations.Add(async () =>
+                        {
+                            string? customStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
+                            lock (s)
+                            {
+                                s.CustomStatus = customStatus;
+                            }
+                        });
                     }
 
                     await RunWithBoundedConcurrencyAsync(operations, cancellation);
@@ -234,8 +276,22 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         {
             if (a.CompleteOrchestration is { } complete)
             {
-                operations.Add(async () => complete.Result = await this.MaybeExternalizeAsync(complete.Result, cancellation));
-                operations.Add(async () => complete.Details = await this.MaybeExternalizeAsync(complete.Details, cancellation));
+                operations.Add(async () =>
+                {
+                    string? result = await this.MaybeExternalizeAsync(complete.Result, cancellation);
+                    lock (complete)
+                    {
+                        complete.Result = result;
+                    }
+                });
+                operations.Add(async () =>
+                {
+                    string? details = await this.MaybeExternalizeAsync(complete.Details, cancellation);
+                    lock (complete)
+                    {
+                        complete.Details = details;
+                    }
+                });
             }
 
             if (a.TerminateOrchestration is { } term)
@@ -458,8 +514,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// firing them all at once via an unbounded <see cref="Task.WhenAll(IEnumerable{Task})"/>
     /// (risking Azure Storage throttling for messages with many payloads). Each delegate is
     /// expected to assign its result to a distinct protobuf field/element, so the relative
-    /// completion order between operations does not affect correctness -- only the resulting
-    /// number of simultaneously in-flight requests is bounded.
+    /// completion order between operations does not affect correctness. Blob I/O is concurrent,
+    /// but assignments targeting fields on the same protobuf message are serialized because
+    /// Google.Protobuf messages do not support concurrent mutation.
     /// </summary>
     /// <remarks>
     /// Cancellation is honored before starting any operation not already in flight. If any

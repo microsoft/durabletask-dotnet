@@ -271,9 +271,9 @@ sealed partial class GrpcDurableTaskWorker
                     this.client.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
                 // Materialize each chunk's events directly into the accumulating list as they arrive,
-                // rather than lazily chaining Concat/Select over the chunks. The lazy chain would be
-                // re-enumerated (and re-converted) from scratch every time it is chained onto, making
-                // history reconstruction quadratic in the number of chunks for long-running orchestrations.
+                // rather than building a deeply nested Concat/Select iterator chain. Enumerating that
+                // chain dispatches through the preceding Concat nodes for each event, so with many small
+                // chunks the iterator work grows quadratically in the number of chunks.
                 //
                 // Note: intentionally do NOT set List<T>.Capacity to an exact per-chunk running total here.
                 // The Capacity setter reallocates to precisely the requested size, so with many small

@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Security.Cryptography;
 using DurableTask.Core;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
@@ -27,6 +28,16 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <param name="options">The client options.</param>
 class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)
 {
+    // Polling parameters for WaitForInstanceStartAsync. PollingInterval matches the historical fixed
+    // 1-second polling cadence and is used, unjittered, for every steady-state delay -- so long-run
+    // polling volume never exceeds the historical rate. To desynchronize concurrent callers (avoiding
+    // synchronized polling bursts against the backend) without inflating that steady-state volume, a
+    // randomized *initial phase offset* -- uniformly distributed in [0, PollingInterval) -- is applied
+    // exactly once, before the first delay of a given WaitForInstanceStartAsync call. This is a one-time
+    // cost per call (not repeated per iteration), so it does not change the long-run polling rate, and
+    // it still never exceeds the historical 1-second worst-case detection latency.
+    static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(1);
+
     readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
     ShimDurableEntityClient? entities;
 
@@ -270,6 +281,10 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     {
         Check.NotNullOrEmpty(instanceId);
 
+        // A one-time randomized phase offset (see ComputeNextPollingDelay) is applied only to the first
+        // delay of this call so concurrent waiters desynchronize without increasing steady-state
+        // polling volume beyond the historical fixed 1-second cadence.
+        bool isInitialDelay = true;
         while (true)
         {
             OrchestrationMetadata? metadata = await this.GetInstancesAsync(
@@ -285,7 +300,14 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 return metadata;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
+            // The first delay is a randomized phase offset (bounded by the historical 1-second
+            // cadence) that desynchronizes concurrent waiters; every delay after that is the fixed
+            // historical 1-second interval, unjittered, so steady-state polling volume never exceeds
+            // the historical rate. Either way, the delay never exceeds 1 second, preserving prompt-start
+            // observation.
+            TimeSpan delay = ComputeNextPollingDelay(isInitialDelay);
+            isInitialDelay = false;
+            await this.DelayAsync(delay, cancellation);
         }
     }
 
@@ -343,6 +365,46 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses: null);
         return newInstanceId;
     }
+
+    /// <summary>
+    /// Computes the delay to wait before the next <see cref="WaitForInstanceStartAsync"/> polling attempt.
+    /// </summary>
+    /// <param name="isInitialDelay">
+    /// <see langword="true"/> if this is the first delay computed for a given <see
+    /// cref="WaitForInstanceStartAsync"/> call; <see langword="false"/> for every subsequent delay in
+    /// that call.
+    /// </param>
+    /// <returns>
+    /// When <paramref name="isInitialDelay"/> is <see langword="true"/>, a one-time randomized phase
+    /// offset uniformly distributed in [<see cref="TimeSpan.Zero"/>, <see cref="PollingInterval"/>) that
+    /// desynchronizes concurrent callers. Otherwise, the fixed <see cref="PollingInterval"/> (1 second),
+    /// unjittered, so steady-state polling volume never exceeds the historical rate. In both cases the
+    /// returned delay never exceeds <see cref="PollingInterval"/>, preserving the historical worst-case
+    /// detection latency for <see cref="WaitForInstanceStartAsync"/>.
+    /// </returns>
+    internal static TimeSpan ComputeNextPollingDelay(bool isInitialDelay)
+    {
+        if (isInitialDelay)
+        {
+            return TimeSpan.FromMilliseconds(PollingInterval.TotalMilliseconds * PollingJitter.NextDouble());
+        }
+
+        return PollingInterval;
+    }
+
+    /// <summary>
+    /// Awaits the delay between <see cref="WaitForInstanceStartAsync"/> polling attempts.
+    /// </summary>
+    /// <remarks>
+    /// This is factored out from a direct <see cref="Task.Delay(TimeSpan, CancellationToken)"/> call
+    /// purely as an internal seam: it lets tests deterministically observe (and coordinate around) the
+    /// moment a polling delay begins -- e.g. to cancel only once the delay is genuinely in progress --
+    /// without relying on wall-clock timing assumptions. It does not change production behavior.
+    /// </remarks>
+    /// <param name="delay">The delay to await.</param>
+    /// <param name="cancellation">The cancellation token to honor while awaiting the delay.</param>
+    /// <returns>A task that completes after the delay elapses, or is cancelled via <paramref name="cancellation"/>.</returns>
+    internal virtual Task DelayAsync(TimeSpan delay, CancellationToken cancellation) => Task.Delay(delay, cancellation);
 
     [return: NotNullIfNotNull("state")]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)
@@ -447,6 +509,39 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                     await this.WaitForInstanceCompletionAsync(instanceId, cancellation: cancellation);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// A minimal thread-safe random source used to jitter <see cref="WaitForInstanceStartAsync"/> polling
+    /// delays across concurrent callers. <see cref="System.Random"/> is not thread-safe, and its
+    /// parameterless constructor can produce correlated sequences when many instances are created around
+    /// the same tick -- which is exactly the kind of synchronized behavior this jitter is meant to avoid.
+    /// A single, securely-seeded instance guarded by a lock avoids both issues.
+    /// </summary>
+    static class PollingJitter
+    {
+        static readonly object SyncRoot = new();
+        static readonly Random Shared = CreateSeededRandom();
+
+        /// <summary>
+        /// Returns a thread-safe random double in the range [0.0, 1.0).
+        /// </summary>
+        /// <returns>A random double in the range [0.0, 1.0).</returns>
+        public static double NextDouble()
+        {
+            lock (SyncRoot)
+            {
+                return Shared.NextDouble();
+            }
+        }
+
+        static Random CreateSeededRandom()
+        {
+            byte[] seedBytes = new byte[sizeof(int)];
+            using RandomNumberGenerator rng = RandomNumberGenerator.Create();
+            rng.GetBytes(seedBytes);
+            return new Random(BitConverter.ToInt32(seedBytes, 0));
         }
     }
 }

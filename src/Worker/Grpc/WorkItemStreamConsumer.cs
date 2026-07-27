@@ -60,13 +60,22 @@ internal static class WorkItemStreamConsumer
     /// reset retry counters that should only count consecutive transport failures.
     /// </param>
     /// <param name="cancellation">Outer worker cancellation token.</param>
+    /// <param name="onSilentDisconnectTimerArmed">
+    /// Test-only observability hook invoked synchronously every time the silent-disconnect timer is
+    /// (re-)armed -- once before the read loop starts, and once per item, immediately before that
+    /// item is dispatched. Always <see langword="null"/> in production; lets tests prove the
+    /// per-item reset actually happens (and in what order relative to dispatch) without depending on
+    /// real elapsed time. Never invoked when <paramref name="silentDisconnectTimeout"/> disables
+    /// detection.
+    /// </param>
     /// <returns>The classified outcome plus whether any message was observed.</returns>
     public static async Task<WorkItemStreamResult> ConsumeAsync(
         Func<CancellationToken, IAsyncEnumerable<P.WorkItem>> openStream,
         TimeSpan silentDisconnectTimeout,
         Action<P.WorkItem> onItem,
         Action? onFirstMessage,
-        CancellationToken cancellation)
+        CancellationToken cancellation,
+        Action? onSilentDisconnectTimerArmed = null)
     {
         bool silentDisconnectEnabled = silentDisconnectTimeout > TimeSpan.Zero;
 
@@ -79,6 +88,7 @@ internal static class WorkItemStreamConsumer
             if (silentDisconnectEnabled)
             {
                 timeoutSource.CancelAfter(effectiveTimeout);
+                onSilentDisconnectTimerArmed?.Invoke();
             }
         }
 

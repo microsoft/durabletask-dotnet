@@ -753,9 +753,6 @@ public class GrpcDurableTaskWorkerTests
         // Warm up once (JIT/type initialization) before measuring allocations for the real run.
         await RunAsync();
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
 
         // Act

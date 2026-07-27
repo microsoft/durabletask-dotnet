@@ -151,51 +151,61 @@ public sealed class BlobPayloadStore : PayloadStore
 
         // Ensure container exists. Cached/single-flight after the first successful call so we
         // don't pay for an extra CreateIfNotExistsAsync request/transaction on every upload.
-        // Keep the specific initializer instance this upload used so the ContainerNotFound
-        // recovery below can invalidate it precisely (see the catch block).
-        Lazy<Task> containerInitializer = await this.EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
-
-        try
+        // Retry one write after an out-of-band container deletion so the cached path preserves
+        // the recovery behavior that an unconditional CreateIfNotExistsAsync provided before
+        // initialization was cached.
+        bool retryAfterContainerNotFound = true;
+        while (true)
         {
-            if (this.options.CompressionEnabled)
+            // Keep the specific initializer instance this upload used so ContainerNotFound
+            // recovery below can invalidate it precisely (see the catch block).
+            Lazy<Task> containerInitializer = await this.EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
+
+            try
             {
-                BlobOpenWriteOptions writeOptions = new()
+                if (this.options.CompressionEnabled)
                 {
-                    HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
-                };
-                using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
-                using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
+                    BlobOpenWriteOptions writeOptions = new()
+                    {
+                        HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
+                    };
+                    using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
+                    using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
 
-                // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                    // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-                // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-                await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
-                await compressedBlobStream.FlushAsync(cancellationToken);
-                await blobStream.FlushAsync(cancellationToken);
+                    // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+                    await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
+                    await compressedBlobStream.FlushAsync(cancellationToken);
+                    await blobStream.FlushAsync(cancellationToken);
+                }
+                else
+                {
+                    using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+
+                    // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                    // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+                    await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
+                    await blobStream.FlushAsync(cancellationToken);
+                }
             }
-            else
+            catch (RequestFailedException ex) when (
+                retryAfterContainerNotFound &&
+                ex.ErrorCode == BlobErrorCode.ContainerNotFound)
             {
-                using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
-
-                // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
-                // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-                await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
-                await blobStream.FlushAsync(cancellationToken);
+                // The container existed when we last verified/created it but has since been deleted
+                // (e.g. by an operator). Clear the cached initializer so this same upload can recreate
+                // the container and retry once. CompareExchange against the specific initializer this
+                // attempt used ensures a stale failure can never clobber a newer initializer already
+                // published by another, faster-recovering concurrent upload that detected the same
+                // deletion.
+                _ = Interlocked.CompareExchange(ref this.containerInitializer, null, containerInitializer);
+                retryAfterContainerNotFound = false;
+                continue;
             }
-        }
-        catch (RequestFailedException ex) when (ex.ErrorCode == BlobErrorCode.ContainerNotFound)
-        {
-            // The container existed when we last verified/created it but has since been deleted
-            // (e.g. by an operator). Clear the cached initializer so the next upload attempts to
-            // recreate the container, keeping deliberate deletion recoverable. CompareExchange
-            // against the specific initializer this upload used ensures a stale failure can
-            // never clobber a newer initializer already published by another, faster-recovering
-            // concurrent upload that detected and recovered from the same deletion.
-            _ = Interlocked.CompareExchange(ref this.containerInitializer, null, containerInitializer);
-            throw;
-        }
 
-        return EncodeToken(this.containerClient.Name, blobName);
+            return EncodeToken(this.containerClient.Name, blobName);
+        }
     }
 
     /// <inheritdoc/>

@@ -155,23 +155,21 @@ public class BlobPayloadStoreTests
             .ReturnsAsync((Response<BlobContainerInfo>)null!);
 
         Mock<BlobClient> blobClientMock = new();
+        using MemoryStream successfulWriteStream = new();
         blobClientMock
             .SetupSequence(b => b.OpenWriteAsync(It.IsAny<bool>(), It.IsAny<BlobOpenWriteOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new RequestFailedException(404, "The specified container does not exist.", BlobErrorCode.ContainerNotFound.ToString(), null))
-            .ReturnsAsync(new MemoryStream());
+            .ReturnsAsync(successfulWriteStream);
         containerClientMock.Setup(c => c.GetBlobClient(It.IsAny<string>())).Returns(blobClientMock.Object);
 
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), containerClientMock.Object);
 
         // Act
-        Func<Task> firstUpload = () => store.UploadAsync("payload", CancellationToken.None);
-        await firstUpload.Should().ThrowAsync<RequestFailedException>();
+        string token = await store.UploadAsync("payload", CancellationToken.None);
 
-        string secondToken = await store.UploadAsync("payload", CancellationToken.None);
-
-        // Assert: the container-not-found failure reset the cache, so the second upload
-        // recreated the container instead of assuming it still existed.
-        secondToken.Should().NotBeNullOrEmpty();
+        // Assert: the container-not-found failure reset the cache and this same upload recreated
+        // the container instead of exposing a transient recovery detail to the caller.
+        token.Should().NotBeNullOrEmpty();
         containerClientMock.Verify(
             c => c.CreateIfNotExistsAsync(
                 It.IsAny<PublicAccessType>(),
@@ -196,10 +194,11 @@ public class BlobPayloadStoreTests
             .ReturnsAsync((Response<BlobContainerInfo>)null!);
 
         Mock<BlobClient> blobClientMock = new();
+        using MemoryStream retryWriteStream = new();
         blobClientMock
             .SetupSequence(b => b.OpenWriteAsync(It.IsAny<bool>(), It.IsAny<BlobOpenWriteOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new RequestFailedException(500, "Internal server error"))
-            .ReturnsAsync(new MemoryStream());
+            .ReturnsAsync(retryWriteStream);
         containerClientMock.Setup(c => c.GetBlobClient(It.IsAny<string>())).Returns(blobClientMock.Object);
 
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), containerClientMock.Object);

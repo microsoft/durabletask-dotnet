@@ -41,7 +41,8 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     // Cached once per invoker instance (instead of once per RPC) so ObserveOutcome's ContinueWith call
     // does not allocate a new delegate for every unary call. The method-name diagnostic is threaded
     // through as the ContinueWith `state` argument (a string, already a reference type) instead of a
-    // boxed (self, methodName) tuple, eliminating the per-call heap allocation entirely.
+    // boxed (self, methodName) tuple, eliminating that per-call delegate and boxed-tuple allocation
+    // (Task.ContinueWith's own internal continuation/Task bookkeeping is unaffected).
     readonly Action<Task, object?> onUnaryCallCompleted;
 
     // Cancelled in DisposeAsync so an in-flight RecreateAsync stops promptly and does not leak the
@@ -206,8 +207,8 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     {
         // Use ContinueWith with TaskScheduler.Default so we don't capture sync context. Both the
         // continuation delegate (this.onUnaryCallCompleted, cached once per invoker instance) and the
-        // state (methodFullName, already a reference-typed string) are allocation-free per call: no
-        // boxed tuple and no per-call delegate closure.
+        // continuation state (methodFullName, already a reference-typed string) are allocation-free
+        // per call: no boxed tuple and no per-call delegate closure.
         responseAsync.ContinueWith(
             this.onUnaryCallCompleted,
             methodFullName,
@@ -216,9 +217,9 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
             TaskScheduler.Default);
     }
 
-    void OnUnaryCallCompleted(Task task, object? state)
+    void OnUnaryCallCompleted(Task task, object? continuationState)
     {
-        string methodFullName = (string)state!;
+        string methodFullName = (string)continuationState!;
         if (task.Status == TaskStatus.RanToCompletion)
         {
             this.RecordSuccess();

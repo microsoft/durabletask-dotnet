@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Grpc;
 using P = Microsoft.DurableTask.Protobuf;
@@ -139,40 +138,55 @@ public class WorkItemStreamConsumerTests
     [Fact]
     public async Task PerItem_HeartbeatReset_KeepsTimerAlive()
     {
-        // Feed one item, wait long enough that the original timer would have expired, then complete.
-        // Synchronize on the first item actually being processed so the second delay is measured from
-        // the consumer's timer reset instead of from the test thread's write timing.
-        Channel<P.WorkItem> channel = Channel.CreateUnbounded<P.WorkItem>();
-        TimeSpan timeout = TimeSpan.FromMilliseconds(500);
-        TaskCompletionSource firstItemProcessed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        int itemCount = 0;
+        // Proves the per-item timer reset -- not just a single arm at loop start -- is what keeps the
+        // stream alive. Earlier versions of this test tried to prove the reset by racing real per-item
+        // delays (each comfortably under the timeout) against the real silent-disconnect timeout (so
+        // their sum comfortably exceeded it). That was still flaky under CI scheduling pressure: any
+        // continuation between the "item processed" signal and the next write could be delayed by the
+        // thread pool/scheduler, silently inflating an intended-short gap past the timeout even though
+        // production was correct.
+        //
+        // This version removes wall-clock timing from the assertion entirely. ConsumeAsync exposes a
+        // test-only observability hook that fires every time the silent-disconnect timer is (re-)armed:
+        // once before the read loop starts, and once per item, immediately before that item is
+        // dispatched to onItem. By recording the exact interleaving of "armed" and "item" events, the
+        // test proves the structural guarantee directly -- an arm precedes every item, and the total arm
+        // count is itemCount + 1 -- instead of inferring it from elapsed real time. A regression that
+        // only arms the timer once at loop start (and never re-arms it per item) fails this assertion
+        // deterministically, with no dependency on scheduler timing.
+        const int itemCount = 5;
+        List<string> events = new();
+        int itemIndex = 0;
 
-        Task<WorkItemStreamResult> consumeTask = WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => channel.Reader.ReadAllAsync(ct),
-            silentDisconnectTimeout: timeout,
-            onItem: _ =>
-            {
-                if (Interlocked.Increment(ref itemCount) == 1)
-                {
-                    firstItemProcessed.TrySetResult();
-                }
-            },
+        P.WorkItem[] items = new P.WorkItem[itemCount];
+        for (int i = 0; i < itemCount; i++)
+        {
+            items[i] = new P.WorkItem { HealthPing = new P.HealthPing() };
+        }
+
+        WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+            openStream: _ => StreamOf(items),
+            silentDisconnectTimeout: TimeSpan.FromMilliseconds(500),
+            onItem: _ => events.Add($"item{itemIndex++}"),
             onFirstMessage: null,
-            cancellation: CancellationToken.None);
-
-        await Task.Delay(TimeSpan.FromMilliseconds(150));
-        await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
-        await firstItemProcessed.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        // Without the per-item reset, the original timer would fire before this second item arrives.
-        await Task.Delay(TimeSpan.FromMilliseconds(400));
-        await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
-        channel.Writer.Complete();
-
-        WorkItemStreamResult result = await consumeTask;
+            cancellation: CancellationToken.None,
+            onSilentDisconnectTimerArmed: () => events.Add("armed"));
 
         result.Outcome.Should().Be(WorkItemStreamOutcome.GracefulDrain);
         result.FirstMessageObserved.Should().BeTrue();
+
+        // 1 initial arm (before the loop starts) + 1 re-arm per item.
+        events.Count(e => e == "armed").Should().Be(itemCount + 1);
+
+        // Every item must be immediately preceded by its own re-arm, and the very first event overall
+        // is the initial pre-loop arm.
+        events[0].Should().Be("armed");
+        for (int i = 0; i < itemCount; i++)
+        {
+            int armedIndex = 1 + (i * 2);
+            events[armedIndex].Should().Be("armed", "item {0} must be preceded by a timer re-arm", i);
+            events[armedIndex + 1].Should().Be($"item{i}");
+        }
     }
 
     [Fact]

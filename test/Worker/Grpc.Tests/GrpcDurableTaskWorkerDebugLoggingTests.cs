@@ -35,7 +35,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
         // Arrange
         TestLogProvider logProvider = new(new NullOutput());
         DurableTaskWorkerOptions workerOptions = new() { Logging = { UseLegacyCategories = false } };
-        GrpcDurableTaskWorker worker = CreateActivityWorker(
+        GrpcDurableTaskWorker worker = CreateWorker(
             new GrpcDurableTaskWorkerOptions(), workerOptions, new MinLevelLoggerFactory(logProvider, LogLevel.Information));
 
         P.WorkItem activityWorkItem = CreateActivityWorkItem(input: "42");
@@ -60,7 +60,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
         // Arrange
         TestLogProvider logProvider = new(new NullOutput());
         DurableTaskWorkerOptions workerOptions = new() { Logging = { UseLegacyCategories = false } };
-        GrpcDurableTaskWorker worker = CreateActivityWorker(
+        GrpcDurableTaskWorker worker = CreateWorker(
             new GrpcDurableTaskWorkerOptions(), workerOptions, new MinLevelLoggerFactory(logProvider, LogLevel.Debug));
 
         const string input = "42";
@@ -94,7 +94,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
         // Arrange
         TestLogProvider logProvider = new(new NullOutput());
         DurableTaskWorkerOptions workerOptions = new() { Logging = { UseLegacyCategories = false } };
-        GrpcDurableTaskWorker worker = CreateActivityWorker(
+        GrpcDurableTaskWorker worker = CreateWorker(
             new GrpcDurableTaskWorkerOptions(), workerOptions, new MinLevelLoggerFactory(logProvider, LogLevel.Information));
 
         P.WorkItem orchestratorWorkItem = CreateOrchestratorNotFoundWorkItem();
@@ -118,7 +118,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
         // Arrange
         TestLogProvider logProvider = new(new NullOutput());
         DurableTaskWorkerOptions workerOptions = new() { Logging = { UseLegacyCategories = false } };
-        GrpcDurableTaskWorker worker = CreateActivityWorker(
+        GrpcDurableTaskWorker worker = CreateWorker(
             new GrpcDurableTaskWorkerOptions(), workerOptions, new MinLevelLoggerFactory(logProvider, LogLevel.Debug));
 
         P.WorkItem orchestratorWorkItem = CreateOrchestratorNotFoundWorkItem();
@@ -192,7 +192,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
         };
     }
 
-    static GrpcDurableTaskWorker CreateActivityWorker(
+    static GrpcDurableTaskWorker CreateWorker(
         GrpcDurableTaskWorkerOptions grpcOptions,
         DurableTaskWorkerOptions workerOptions,
         ILoggerFactory loggerFactory)
@@ -336,9 +336,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
 
         public ILogger CreateLogger(string categoryName) => new MinLevelLogger(this.provider.CreateLogger(categoryName), this.minLevel);
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() => this.provider.Dispose();
 
         sealed class MinLevelLogger : ILogger
         {

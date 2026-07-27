@@ -41,8 +41,12 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
         async Task<AsyncUnaryCall<TResponse>> StartCallAsync()
         {
-            // Externalize first; if this fails, do not proceed to send the gRPC call
-            await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken);
+            // Externalize first; if this fails, do not proceed to send the gRPC call. This now runs
+            // inline on the caller's thread rather than on a dedicated thread-pool thread (via
+            // Task.Run), so ConfigureAwait(false) is required here to avoid capturing and resuming
+            // on the caller's SynchronizationContext/TaskScheduler, matching library-safe behavior.
+            await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken)
+                .ConfigureAwait(false);
 
             // Only if externalization succeeds, proceed with the continuation
             return continuation(request, context);
@@ -50,16 +54,16 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
         async Task<TResponse> ResponseAsync()
         {
-            AsyncUnaryCall<TResponse> innerCall = await startCallTask;
-            TResponse response = await innerCall.ResponseAsync;
-            await this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken);
+            AsyncUnaryCall<TResponse> innerCall = await startCallTask.ConfigureAwait(false);
+            TResponse response = await innerCall.ResponseAsync.ConfigureAwait(false);
+            await this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken).ConfigureAwait(false);
             return response;
         }
 
         async Task<Metadata> ResponseHeadersAsync()
         {
-            AsyncUnaryCall<TResponse> innerCall = await startCallTask;
-            return await innerCall.ResponseHeadersAsync;
+            AsyncUnaryCall<TResponse> innerCall = await startCallTask.ConfigureAwait(false);
+            return await innerCall.ResponseHeadersAsync.ConfigureAwait(false);
         }
 
         Status GetStatus()

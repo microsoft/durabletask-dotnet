@@ -75,8 +75,9 @@ public class PayloadInterceptorTests
             });
         ClientInterceptorContext<string, string> context = CreateContext();
 
-        // Act
-        using AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+        // Act: no using declaration here — Dispose() is called explicitly exactly once below so
+        // the disposal assertion isn't muddied by a second, implicit Dispose() at scope exit.
+        AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
             "request",
             context,
             (req, ctx) =>

@@ -461,7 +461,14 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext,
         hashAlgorithm.Initialize();
         hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
         hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
-        byte[] hashByteArray = hashAlgorithm.Hash;
+
+        // HashAlgorithm.Hash is nullable in its API surface (it is null before any hash has been
+        // computed, or after Dispose()), but is guaranteed to be populated immediately after
+        // TransformFinalBlock completes successfully above. Guard explicitly instead of silently
+        // trusting that contract, so a future behavioral change surfaces a clear, actionable exception
+        // rather than an unexplained NullReferenceException.
+        byte[] hashByteArray = hashAlgorithm.Hash
+            ?? throw new InvalidOperationException("SHA1.Hash was unexpectedly null after TransformFinalBlock.");
 #pragma warning restore CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
 
         byte[] newGuidByteArray = new byte[16];

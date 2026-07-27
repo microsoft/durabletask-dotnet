@@ -144,10 +144,13 @@ public static class GrpcOrchestrationRunner
 
         if (isExtendedSession && extendedSessions != null)
         {
-            // extendedSessions is only non-null when extendedSessionsCache is also non-null. All reads,
-            // removals, and (later) insertions are routed through extendedSessionsCache's synchronized
-            // wrapper methods rather than operating on the raw MemoryCache directly, so every operation
-            // is atomic with respect to a concurrent Dispose() of the cache (see round-9 fix below).
+            // extendedSessions is only non-null when extendedSessionsCache is also non-null (the null-
+            // forgiving operator below reflects that established invariant explicitly, rather than
+            // relying on the compiler's flow analysis of the check above). All reads, removals, and
+            // (later) insertions are routed through extendedSessionsCache's synchronized wrapper methods
+            // rather than operating on the raw MemoryCache directly, so every operation is atomic with
+            // respect to a concurrent Dispose() of the cache (see ExtendedSessionsCache.TrySetCachedValue
+            // for the full rationale).
             //
             // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
             // session based on the provided history
@@ -163,7 +166,7 @@ public static class GrpcOrchestrationRunner
                 result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
                 if (extendedSessionState.OrchestrationExecutor.IsCompleted)
                 {
-                    extendedSessionsCache.RemoveCachedValue(request.InstanceId);
+                    extendedSessionsCache!.RemoveCachedValue(request.InstanceId);
                 }
             }
             else
@@ -278,9 +281,13 @@ public static class GrpcOrchestrationRunner
     }
 
     // Invoked by the extended-sessions MemoryCache whenever a cached ExtendedSessionState entry is
-    // evicted, for any reason (explicit Remove, sliding-expiration timeout, capacity eviction, or the
-    // cache itself being disposed). Disposes the cached shim's resources (e.g. the SHA1 instance used by
-    // NewGuid) exactly once, at the point where the orchestration can no longer resume via this entry.
+    // evicted, for any reason: explicit Remove, sliding-expiration timeout, capacity eviction, or worker
+    // shutdown. Note that MemoryCache.Dispose() itself does NOT invoke post-eviction callbacks for
+    // entries still present at teardown -- during shutdown, ExtendedSessionsCache.Dispose() calls
+    // Clear() on the underlying MemoryCache before disposing it, and it is that Clear() call which
+    // forces eviction (and this callback) for every remaining entry. Disposes the cached shim's
+    // resources (e.g. the SHA1 instance used by NewGuid) exactly once, at the point where the
+    // orchestration can no longer resume via this entry.
     static void DisposeEvictedExtendedSession(object key, object? value, EvictionReason reason, object? state)
     {
         if (value is ExtendedSessionState sessionState && sessionState.TaskOrchestration is IDisposable disposable)

@@ -56,7 +56,22 @@ static class GrpcInstanceRunnerUtils
         {
             extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
             isExtendedSession = extendedSession;
-            extendedSessions = extendedSessionsCache?.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
+
+            try
+            {
+                extendedSessions = extendedSessionsCache?.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
+            }
+            catch (ObjectDisposedException)
+            {
+                // The extended sessions cache has already been disposed -- e.g. a request raced with the
+                // final stage of a graceful worker shutdown. This is not a caller error: fall back to the
+                // same "no cache available" behavior already used when extendedSessionsCache is null to
+                // begin with (extendedSessions stays null; isExtendedSession is left as parsed above), so
+                // the caller degrades to requesting full history instead of failing the call outright.
+                // Do not widen this catch beyond ObjectDisposedException -- any other failure here is
+                // unexpected and should propagate.
+                extendedSessions = null;
+            }
         }
 
         if (properties.TryGetValue("IncludeState", out object? includeStateObj)

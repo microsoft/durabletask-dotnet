@@ -842,16 +842,17 @@ public class GrpcOrchestrationRunnerTests
     [Fact]
     public void LoadAndRun_ExtendedSession_CacheDisposedDuringExecution_ShimIsDisposedImmediatelyNotLeaked()
     {
-        // Regression test for the round-9 shutdown/hand-off race, exercised through the full
-        // GrpcOrchestrationRunner.LoadAndRun pipeline. The orchestrator disposes the extended-sessions
+        // Regression test for the extended-sessions cache shutdown/hand-off race, exercised through the
+        // full GrpcOrchestrationRunner.LoadAndRun pipeline. The orchestrator disposes the extended-sessions
         // cache itself partway through its own execution -- simulating a graceful
         // worker shutdown completing while this orchestration is still in flight, holding a MemoryCache
         // reference that GrpcOrchestrationRunner obtained before the shutdown began. Because the
         // orchestration does not complete on this execution (it awaits a sub-orchestration call),
-        // GrpcOrchestrationRunner attempts to hand its shim off to the cache afterward; with the round-9
-        // fix, that hand-off is rejected (the cache is disposed), so the shim's wrapper is disposed
-        // immediately and synchronously in the `finally` block, rather than being silently leaked in a
-        // cache that will never evict or dispose it again.
+        // GrpcOrchestrationRunner attempts to hand its shim off to the cache afterward; per
+        // ExtendedSessionsCache.TrySetCachedValue's disposal invariant, that hand-off is rejected (the
+        // cache is disposed), so the shim's wrapper is disposed immediately and synchronously in the
+        // `finally` block, rather than being silently leaked in a cache that will never evict or dispose
+        // it again.
         var extendedSessions = new ExtendedSessionsCache();
 
         // Obtain the cache reference before "shutdown" -- exactly as GrpcOrchestrationRunner does at the
@@ -932,6 +933,47 @@ public class GrpcOrchestrationRunnerTests
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
     }
 
+    [Fact]
+    public void AlreadyDisposedExtendedSessionsCache_IsOkay()
+    {
+        // A non-null ExtendedSessionsCache that has already been disposed models a request that raced
+        // with the tail end of a graceful worker shutdown: GrpcOrchestrationRunner obtained a reference
+        // to the cache before shutdown began, but by the time it calls GetOrInitializeCache, the cache
+        // has already been disposed. This should degrade the same way a null cache does (see
+        // Null_ExtendedSessionsCache_IsOkay above) -- falling back to non-extended-session behavior --
+        // rather than letting an unhandled ObjectDisposedException fail the call outright.
+        var extendedSessions = new ExtendedSessionsCache();
+        extendedSessions.Dispose();
+
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        Assert.Single(response.Actions);
+        Assert.NotNull(response.Actions[0].CompleteOrchestration);
+        Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
+    }
+
     // TaskOrchestrationShim and TaskOrchestrationContextWrapper are internal to the Worker.Core assembly
     // and not visible to this test assembly via InternalsVisibleTo, so reflection is used to reach into
     // the cached shim (exposed only as the public ExtendedSessionState.TaskOrchestration property, typed
@@ -940,37 +982,42 @@ public class GrpcOrchestrationRunnerTests
     {
         PropertyInfo taskOrchestrationProperty = extendedSessionState.GetType()
             .GetProperty("TaskOrchestration", BindingFlags.Instance | BindingFlags.Public)
-            ?? throw new InvalidOperationException("ExtendedSessionState.TaskOrchestration was not found.");
+            ?? throw new InvalidOperationException(
+                $"{extendedSessionState.GetType().FullName}.TaskOrchestration was not found.");
         object shim = taskOrchestrationProperty.GetValue(extendedSessionState)
-            ?? throw new InvalidOperationException("ExtendedSessionState.TaskOrchestration was null.");
+            ?? throw new InvalidOperationException(
+                $"{extendedSessionState.GetType().FullName}.TaskOrchestration was null.");
 
         FieldInfo wrapperContextField = shim.GetType()
             .GetField("wrapperContext", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("TaskOrchestrationShim.wrapperContext was not found.");
+            ?? throw new InvalidOperationException($"{shim.GetType().FullName}.wrapperContext was not found.");
         object wrapperContext = wrapperContextField.GetValue(shim)
-            ?? throw new InvalidOperationException("TaskOrchestrationShim.wrapperContext was null.");
+            ?? throw new InvalidOperationException($"{shim.GetType().FullName}.wrapperContext was null.");
 
         FieldInfo cachedHashAlgorithmField = wrapperContext.GetType()
             .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException(
-                "TaskOrchestrationContextWrapper.cachedHashAlgorithm was not found.");
+                $"{wrapperContext.GetType().FullName}.cachedHashAlgorithm was not found.");
         return (SHA1)(cachedHashAlgorithmField.GetValue(wrapperContext)
-            ?? throw new InvalidOperationException("cachedHashAlgorithm was null; NewGuid() may not have run."));
+            ?? throw new InvalidOperationException(
+                $"{wrapperContext.GetType().FullName}.cachedHashAlgorithm was null; NewGuid() may not have run."));
     }
 
     // Like GetCachedHashAlgorithm above, but reaches directly into the TaskOrchestrationContext
     // instance passed to an orchestrator's RunAsync -- which, per TaskOrchestrationShim, is exactly
     // the shim's wrapperContext instance -- instead of going through a cached ExtendedSessionState.
-    // Used by DisposeCacheDuringExecutionOrchestrator, whose cache hand-off is rejected (round-9 fix),
-    // so its shim is never cached and thus unreachable via ExtendedSessionState afterward.
+    // Used by DisposeCacheDuringExecutionOrchestrator, whose cache hand-off is rejected per
+    // ExtendedSessionsCache.TrySetCachedValue's disposal invariant, so its shim is never cached and
+    // thus unreachable via ExtendedSessionState afterward.
     static SHA1 GetCachedHashAlgorithmFromContext(TaskOrchestrationContext context)
     {
         FieldInfo cachedHashAlgorithmField = context.GetType()
             .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException(
-                "TaskOrchestrationContextWrapper.cachedHashAlgorithm was not found.");
+                $"{context.GetType().FullName}.cachedHashAlgorithm was not found.");
         return (SHA1)(cachedHashAlgorithmField.GetValue(context)
-            ?? throw new InvalidOperationException("cachedHashAlgorithm was null; NewGuid() may not have run."));
+            ?? throw new InvalidOperationException(
+                $"{context.GetType().FullName}.cachedHashAlgorithm was null; NewGuid() may not have run."));
     }
 
     // Eviction callbacks on the extended-sessions MemoryCache are dispatched via
@@ -1036,7 +1083,7 @@ public class GrpcOrchestrationRunnerTests
         return orchestratorRequest;
     }
 
-    class SimpleOrchestrator : TaskOrchestrator<string, string>
+    sealed class SimpleOrchestrator : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
@@ -1044,7 +1091,7 @@ public class GrpcOrchestrationRunnerTests
         }
     }
 
-    class CallSubOrchestrationOrchestrator : TaskOrchestrator<string, string>
+    sealed class CallSubOrchestrationOrchestrator : TaskOrchestrator<string, string>
     {
         public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
@@ -1056,7 +1103,7 @@ public class GrpcOrchestrationRunnerTests
     // Same shape as CallSubOrchestrationOrchestrator (so the orchestration is left pending in the
     // extended-session cache) but also calls NewGuid() before awaiting, so the cached shim's wrapper
     // has a live SHA1 instance whose disposal we can observe once the extended session is evicted.
-    class NewGuidThenCallSubOrchestrationOrchestrator : TaskOrchestrator<string, string>
+    sealed class NewGuidThenCallSubOrchestrationOrchestrator : TaskOrchestrator<string, string>
     {
         public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
@@ -1066,14 +1113,15 @@ public class GrpcOrchestrationRunnerTests
         }
     }
 
-    // Regression orchestrator for the round-9 shutdown/hand-off race: disposes the extended-sessions
-    // cache passed to its constructor partway through its own execution -- after calling NewGuid() so
-    // there is a live cached SHA1 to observe -- simulating a graceful worker shutdown completing while
-    // this orchestration is still in flight and holds a MemoryCache reference obtained before the
-    // shutdown began. It then awaits a sub-orchestration call (like CallSubOrchestrationOrchestrator)
-    // so the orchestration does not complete on this execution, forcing GrpcOrchestrationRunner to
-    // attempt a hand-off of its shim to the now-disposed cache afterward.
-    class DisposeCacheDuringExecutionOrchestrator : TaskOrchestrator<string, string>
+    // Regression orchestrator for the extended-sessions cache shutdown/hand-off race: disposes the
+    // extended-sessions cache passed to its constructor partway through its own execution -- after
+    // calling NewGuid() so there is a live cached SHA1 to observe -- simulating a graceful worker
+    // shutdown completing while this orchestration is still in flight and holds a MemoryCache reference
+    // obtained before the shutdown began. It then awaits a sub-orchestration call (like
+    // CallSubOrchestrationOrchestrator) so the orchestration does not complete on this execution,
+    // forcing GrpcOrchestrationRunner to attempt a hand-off of its shim to the now-disposed cache
+    // afterward.
+    sealed class DisposeCacheDuringExecutionOrchestrator : TaskOrchestrator<string, string>
     {
         readonly ExtendedSessionsCache cacheToDisposeDuringExecution;
 

@@ -25,9 +25,8 @@ public class ExtendedSessionsCache : IDisposable
     bool disposed;
 
     /// <summary>
-    /// Gets a value indicating whether returns whether or not the cache has been initialized.
+    /// Gets a value indicating whether the cache has been initialized.
     /// </summary>
-    /// <returns>True if the cache has been initialized, false otherwise.</returns>
     public bool IsInitialized => this.extendedSessions is not null;
 
     /// <summary>

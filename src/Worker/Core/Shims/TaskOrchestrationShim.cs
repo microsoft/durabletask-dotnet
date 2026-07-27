@@ -76,9 +76,11 @@ partial class TaskOrchestrationShim : TaskOrchestration, IDisposable
         // Defensively dispose any previous wrapper before replacing it, in case this shim instance is
         // ever reused across more than one Execute call. Current callers construct a fresh shim per
         // execution and call Execute exactly once, so the actual resource cleanup for this shim's wrapper
-        // happens via Dispose() (see the class remarks); this is still safe to do if it ever runs, since
-        // orchestrator code always runs synchronously within a single Execute call, so a previous wrapper
-        // is guaranteed to no longer be in use once we reach this point.
+        // happens via Dispose() (see the class remarks); this is still safe to do if it ever runs.
+        // Execute itself is async (it awaits orchestrator code across yield points), but callers never
+        // invoke it again -- concurrently or otherwise -- until a previous Execute call on this shim has
+        // fully completed (returned or thrown). That sequential lifecycle guarantee, not synchronous
+        // execution, is what ensures a previous wrapper is no longer in use once we reach this point.
         this.wrapperContext?.Dispose();
         this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 

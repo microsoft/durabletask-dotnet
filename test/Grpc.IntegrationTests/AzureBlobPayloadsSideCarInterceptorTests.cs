@@ -102,7 +102,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         // that message's monitor while allowing the downloads to finish, so only the assignments
         // (not the independent Blob I/O) should wait for the shared-message lock.
         TaskCompletionSource<bool> allDownloadsStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        TaskCompletionSource<bool> releaseDownloads = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseDownloads = new();
         int downloadsStarted = 0;
         TrackingPayloadStore store = new(downloadAsync: async (token, cancellationToken) =>
         {
@@ -111,7 +111,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
                 allDownloadsStarted.TrySetResult(true);
             }
 
-            await releaseDownloads.Task.WaitAsync(cancellationToken);
+            await releaseDownloads.Task;
             return token switch
             {
                 "test-blob://input" => "input",
@@ -146,15 +146,24 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             // Act
             Task resolveTask = ResolveAsync(interceptor, response, CancellationToken.None);
             await allDownloadsStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            releaseDownloads.SetResult(true);
+            TaskCompletionSource<bool> releaseStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task releaseTask = Task.Run(() =>
+            {
+                releaseStarted.SetResult(true);
+                releaseDownloads.SetResult(true);
+            });
+            await releaseStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
             // Assert: Blob reads overlap, but their shared protobuf-message assignments wait for
-            // the synchronization boundary rather than mutating state concurrently.
-            await Task.Delay(100);
-            resolveTask.IsCompleted.Should().BeFalse("the three assignments target the same protobuf message and must wait for its lock");
+            // the synchronization boundary rather than mutating state concurrently. Releasing the
+            // non-asynchronous completion source resumes the download and assignment continuations
+            // on releaseTask; with the shared-message lock in place, it remains blocked until that
+            // lock is released rather than requiring a wall-clock delay to observe the condition.
+            releaseTask.IsCompleted.Should().BeFalse("the three assignments target the same protobuf message and must wait for its lock");
             store.MaxObservedConcurrency.Should().BeGreaterThan(1, "independent Blob reads should still overlap");
 
             releaseStateLock.SetResult(true);
+            await releaseTask.WaitAsync(TimeSpan.FromSeconds(10));
             await resolveTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally

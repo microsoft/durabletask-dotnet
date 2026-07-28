@@ -654,7 +654,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         {
             // Wait for every started operation to finish -- regardless of outcome -- before this
             // method returns or throws. TrackAsync below never lets an exception fault this
-            // Task.WhenAll; it only records it in `firstFailure`, so draining always completes.
+            // Task.WhenAll; it only records it in `lowestOrdinalFailure`, so draining always completes.
             await Task.WhenAll(inFlight);
         }
         finally

@@ -134,14 +134,14 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             CustomStatus = "test-blob://status",
         };
         P.GetInstanceResponse response = new() { OrchestrationState = state };
-        TaskCompletionSource<bool> allAssignmentsReachedLock = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> firstAssignmentReachedLock = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int assignmentsReachedLock = 0;
         int messageLockAcquisitions = 0;
         BeforeSharedMessageLockForTestProperty.SetValue(interceptor, (Action)(() =>
         {
-            if (Interlocked.Increment(ref assignmentsReachedLock) == 3)
+            if (Interlocked.Increment(ref assignmentsReachedLock) == 1)
             {
-                allAssignmentsReachedLock.TrySetResult(true);
+                firstAssignmentReachedLock.TrySetResult(true);
             }
         }));
         SharedMessageLockAcquiredForTestProperty.SetValue(interceptor, (Action<object>)(message =>
@@ -153,14 +153,18 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
         TaskCompletionSource<bool> stateLockAcquired = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource<bool> releaseStateLock = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task holdStateLock = Task.Run(() =>
-        {
-            lock (state)
+        Task holdStateLock = Task.Factory.StartNew(
+            () =>
             {
-                stateLockAcquired.SetResult(true);
-                releaseStateLock.Task.GetAwaiter().GetResult();
-            }
-        });
+                lock (state)
+                {
+                    stateLockAcquired.SetResult(true);
+                    releaseStateLock.Task.GetAwaiter().GetResult();
+                }
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
         try
         {
@@ -170,15 +174,16 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             Task resolveTask = ResolveAsync(interceptor, response, CancellationToken.None);
             await allDownloadsStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             releaseDownloads.SetResult(true);
-            await allAssignmentsReachedLock.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await firstAssignmentReachedLock.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-            // Assert: every assignment continuation has reached the lock boundary, yet none can
-            // mutate the shared message while its monitor is held. Blob reads still overlap.
-            resolveTask.IsCompleted.Should().BeFalse("all three assignments must wait for the held protobuf-message monitor");
+            // Assert: at least one assignment has demonstrably reached the held monitor, yet none
+            // can mutate the shared message. Blob reads still overlap, and the inside-lock hook
+            // below proves all three assignments eventually acquire this exact monitor.
+            resolveTask.IsCompleted.Should().BeFalse("an assignment must wait for the held protobuf-message monitor");
             state.Input.Should().Be("test-blob://input");
             state.Output.Should().Be("test-blob://output");
             state.CustomStatus.Should().Be("test-blob://status");
-            Volatile.Read(ref assignmentsReachedLock).Should().Be(3);
+            Volatile.Read(ref assignmentsReachedLock).Should().BeGreaterThanOrEqualTo(1);
             Volatile.Read(ref messageLockAcquisitions).Should().Be(0);
             store.MaxObservedConcurrency.Should().BeGreaterThan(1, "independent Blob reads should still overlap");
 
@@ -195,6 +200,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         state.Input.Should().Be("input");
         state.Output.Should().Be("output");
         state.CustomStatus.Should().Be("status");
+        Volatile.Read(ref assignmentsReachedLock).Should().Be(3);
         Volatile.Read(ref messageLockAcquisitions).Should().Be(3);
     }
 

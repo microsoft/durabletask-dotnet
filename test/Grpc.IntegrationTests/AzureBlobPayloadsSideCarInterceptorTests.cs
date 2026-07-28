@@ -766,7 +766,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         => (Task)ResolveMethodDefinition.MakeGenericMethod(typeof(TResponse)).Invoke(interceptor, [response, cancellation])!;
 
     static Task RunWithBoundedConcurrencyAsync(
-        IReadOnlyList<Func<Task>> operations,
+        List<Func<Task>> operations,
         CancellationToken cancellation,
         Action<int>? afterAdvisoryDispatchCheckForTest = null,
         Action<int>? failureRecordedForTest = null)

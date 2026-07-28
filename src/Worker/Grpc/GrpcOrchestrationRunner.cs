@@ -144,29 +144,43 @@ public static class GrpcOrchestrationRunner
 
         if (isExtendedSession && extendedSessions != null)
         {
-            // extendedSessions is only non-null when extendedSessionsCache is also non-null (the null-
-            // forgiving operator below reflects that established invariant explicitly, rather than
-            // relying on the compiler's flow analysis of the check above). All reads, removals, and
-            // (later) insertions are routed through extendedSessionsCache's synchronized wrapper methods
-            // rather than operating on the raw MemoryCache directly, so every operation is atomic with
-            // respect to a concurrent Dispose() of the cache (see ExtendedSessionsCache.TrySetCachedValue
-            // for the full rationale).
+            // extendedSessions is only non-null when extendedSessionsCache is also non-null. All reads,
+            // removals, and insertions are routed through the synchronized cache wrapper so ownership
+            // transfers are atomic with respect to expiration, removal, and concurrent disposal.
             //
             // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
             // session based on the provided history
-            if (!pastEventsIncluded && extendedSessionsCache!.TryGetCachedValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
+            if (!pastEventsIncluded
+                && extendedSessionsCache!.TryTakeExtendedSession(
+                    request.InstanceId,
+                    out ExtendedSessionState? extendedSessionState)
+                && extendedSessionState is not null)
             {
-                OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
-                runtimeState.NewEvents.Clear();
-                foreach (HistoryEvent newEvent in newEvents)
+                ExtendedSessionState? runnerOwnedSession = extendedSessionState;
+                try
                 {
-                    runtimeState.AddEvent(newEvent);
-                }
+                    OrchestrationRuntimeState runtimeState = extendedSessionState.RuntimeState;
+                    runtimeState.NewEvents.Clear();
+                    foreach (HistoryEvent newEvent in newEvents)
+                    {
+                        runtimeState.AddEvent(newEvent);
+                    }
 
-                result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
-                if (extendedSessionState.OrchestrationExecutor.IsCompleted)
+                    result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
+                    if (!extendedSessionState.OrchestrationExecutor.IsCompleted
+                        && extendedSessionsCache.TryStoreExtendedSession(
+                            request.InstanceId,
+                            extendedSessionState,
+                            TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds)))
+                    {
+                        runnerOwnedSession = null;
+                    }
+                }
+                finally
                 {
-                    extendedSessionsCache!.RemoveCachedValue(request.InstanceId);
+                    // Completion, execution failure, or a rejected cache hand-off all leave the
+                    // runner owning the session and therefore responsible for disposing its shim.
+                    runnerOwnedSession?.DisposeRunnerOwned();
                 }
             }
             else
@@ -203,13 +217,14 @@ public static class GrpcOrchestrationRunner
                 DurableTaskShimFactory factory = services is null
                     ? DurableTaskShimFactory.Default
                     : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
-                TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
+                TaskOrchestration shim = factory.CreateOrchestrationWithManagedLifetime(
+                    orchestratorName,
+                    implementation,
+                    properties,
+                    parent);
 
-                // Tracks whether ownership of the shim has been successfully transferred to the
-                // extended-sessions cache. Execute() (or the subsequent cache Set() call) could throw;
-                // in that case ownership is never transferred, and the finally block below must dispose
-                // the shim itself rather than leaking it.
-                bool transferredShimToCache = false;
+                ExtendedSessionState? runnerOwnedSession = null;
+                bool transferredSessionToCache = false;
                 try
                 {
                     TaskOrchestrationExecutor executor = new(
@@ -218,34 +233,19 @@ public static class GrpcOrchestrationRunner
                         BehaviorOnContinueAsNew.Carryover,
                         request.EntityParameters.ToCore(),
                         ErrorPropagationMode.UseFailureDetails);
+                    runnerOwnedSession = new ExtendedSessionState(runtimeState, shim, executor);
                     result = executor.Execute();
 
                     if (addToExtendedSessions && !executor.IsCompleted)
                     {
-                        // addToExtendedSessions can only be set to true if extendedSessionsCache is not
-                        // null. The shim is now (attempted to be) owned by the cache; it must not be
-                        // disposed here since the orchestration may resume via ExecuteNewEvents() on a
-                        // future call. Register an eviction callback so it's disposed exactly once,
-                        // whenever this entry is removed for any reason (explicit Remove,
-                        // sliding-expiration timeout, capacity eviction, or cache disposal).
-                        MemoryCacheEntryOptions cacheEntryOptions = new()
-                        {
-                            SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds),
-                        };
-                        cacheEntryOptions.RegisterPostEvictionCallback(DisposeEvictedExtendedSession);
-
-                        // TrySetCachedValue is synchronized with a concurrent ExtendedSessionsCache.Dispose()
-                        // (e.g. during a graceful worker shutdown that races with this in-flight execution).
-                        // It returns false -- without inserting anything -- if the cache has already been (or
-                        // is concurrently being) disposed, so there is no window in which an entry can be
-                        // silently added after the cache has begun tearing down and would then never be
-                        // evicted or disposed again. transferredShimToCache reflects the actual outcome, so
-                        // the finally block below correctly retains and disposes the shim itself when the
-                        // hand-off is rejected.
-                        transferredShimToCache = extendedSessionsCache!.TrySetCachedValue(
+                        transferredSessionToCache = extendedSessionsCache!.TryStoreExtendedSession(
                             request.InstanceId,
-                            new ExtendedSessionState(runtimeState, shim, executor),
-                            cacheEntryOptions);
+                            runnerOwnedSession,
+                            TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds));
+                        if (transferredSessionToCache)
+                        {
+                            runnerOwnedSession = null;
+                        }
                     }
                     else
                     {
@@ -254,13 +254,13 @@ public static class GrpcOrchestrationRunner
                 }
                 finally
                 {
-                    if (!transferredShimToCache)
+                    if (runnerOwnedSession is not null)
                     {
-                        // This execution either isn't part of an extended session, it completed on its
-                        // first execution, or an exception was thrown before ownership could be
-                        // transferred to the cache above. In every one of these cases nothing else will
-                        // ever use the shim again, so it must be disposed here to release its resources
-                        // (e.g. the SHA1 instance cached by NewGuid).
+                        runnerOwnedSession.DisposeRunnerOwned();
+                    }
+                    else if (!transferredSessionToCache)
+                    {
+                        // The executor failed before its ExtendedSessionState could assume ownership.
                         (shim as IDisposable)?.Dispose();
                     }
                 }
@@ -278,21 +278,5 @@ public static class GrpcOrchestrationRunner
             requiresHistory: requiresHistory);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
-    }
-
-    // Invoked by the extended-sessions MemoryCache whenever a cached ExtendedSessionState entry is
-    // evicted, for any reason: explicit Remove, sliding-expiration timeout, capacity eviction, or worker
-    // shutdown. Note that MemoryCache.Dispose() itself does NOT invoke post-eviction callbacks for
-    // entries still present at teardown -- during shutdown, ExtendedSessionsCache.Dispose() calls
-    // Clear() on the underlying MemoryCache before disposing it, and it is that Clear() call which
-    // forces eviction (and this callback) for every remaining entry. Disposes the cached shim's
-    // resources (e.g. the SHA1 instance used by NewGuid) exactly once, at the point where the
-    // orchestration can no longer resume via this entry.
-    static void DisposeEvictedExtendedSession(object key, object? value, EvictionReason reason, object? state)
-    {
-        if (value is ExtendedSessionState sessionState && sessionState.TaskOrchestration is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
     }
 }

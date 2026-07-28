@@ -17,6 +17,15 @@ public class GrpcOrchestrationRunnerTests
     const string TestExecutionId = "execution_id";
     const int DefaultExtendedSessionIdleTimeoutInSeconds = 30;
 
+    static readonly FieldInfo ExtendedSessionOwnershipField = typeof(ExtendedSessionState)
+        .GetField("ownership", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException($"{nameof(ExtendedSessionState)}.ownership was not found.");
+
+    static readonly MethodInfo DisposeCacheGenerationMethod = typeof(ExtendedSessionState)
+        .GetMethod("DisposeCacheGeneration", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException(
+            $"{nameof(ExtendedSessionState)}.DisposeCacheGeneration was not found.");
+
     [Fact]
     public void EmptyOrNullParameters_Throw_Exceptions()
     {
@@ -220,10 +229,10 @@ public class GrpcOrchestrationRunnerTests
     }
 
     /// <summary>
-    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to 
-    /// fulfill the orchestration request and not request a history for it. However, it is of course very undesirable that a 
+    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to
+    /// fulfill the orchestration request and not request a history for it. However, it is of course very undesirable that a
     /// history is not attached to the request, but no history is requested by the worker due to a malformed "IncludeState" parameter
-    /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK. 
+    /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK.
     /// </summary>
     [Fact]
     public void MalformedIncludeStateParameter_Means_NoHistoryRequired()
@@ -407,7 +416,7 @@ public class GrpcOrchestrationRunnerTests
         Assert.True(extendedSessions.IsInitialized);
         Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
 
-        // Wait for longer than the timeout to account for finite cache scan for stale items frequency 
+        // Wait for longer than the timeout to account for finite cache scan for stale items frequency
         await Task.Delay(extendedSessionIdleTimeout * 1000 * 2);
         Assert.False(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out extendedSession));
 
@@ -849,7 +858,7 @@ public class GrpcOrchestrationRunnerTests
         // reference that GrpcOrchestrationRunner obtained before the shutdown began. Because the
         // orchestration does not complete on this execution (it awaits a sub-orchestration call),
         // GrpcOrchestrationRunner attempts to hand its shim off to the cache afterward; per
-        // ExtendedSessionsCache.TrySetCachedValue's disposal invariant, that hand-off is rejected (the
+        // ExtendedSessionsCache.TryStoreExtendedSession's disposal invariant, that hand-off is rejected (the
         // cache is disposed), so the shim's wrapper is disposed immediately and synchronously in the
         // `finally` block, rather than being silently leaked in a cache that will never evict or dispose
         // it again.
@@ -888,6 +897,141 @@ public class GrpcOrchestrationRunnerTests
 
         Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.False(response.RequiresHistory);
+    }
+
+    [Fact]
+    public async Task LoadAndRun_ResumedExtendedSession_CacheDisposedWhileExecutionBlocked_DisposesAfterRejectedReinsert()
+    {
+        // Arrange
+        var extendedSessions = new ExtendedSessionsCache();
+        var orchestrator = new BlockingResumedOrchestrator();
+        Protobuf.HistoryEvent executionStarted = CreateExecutionStartedEvent();
+        Protobuf.OrchestratorRequest initialRequest = CreateExtendedSessionRequest(
+            [executionStarted],
+            includeState: true);
+
+        GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(initialRequest.ToByteArray()),
+            orchestrator,
+            extendedSessions);
+
+        MemoryCache cache = extendedSessions.GetOrInitializeCache(
+            DefaultExtendedSessionIdleTimeoutInSeconds);
+        Assert.True(cache.TryGetValue(TestInstanceId, out object? cachedValue));
+        ExtendedSessionState cachedSession = Assert.IsType<ExtendedSessionState>(cachedValue);
+        long oldGeneration = GetOwnershipGeneration(cachedSession);
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(cachedSession);
+
+        Protobuf.HistoryEvent resumeEvent = CreateEventRaisedEvent("Resume");
+        Protobuf.OrchestratorRequest resumedRequest = CreateExtendedSessionRequest(
+            [resumeEvent],
+            includeState: false);
+        Task<string> resumedExecution = Task.Run(() => GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(resumedRequest.ToByteArray()),
+            orchestrator,
+            extendedSessions));
+
+        try
+        {
+            Assert.True(
+                orchestrator.WaitUntilResumedExecutionIsBlocked(TimeSpan.FromSeconds(10)),
+                "the resumed ExecuteNewEvents call did not reach its deterministic blocking point");
+
+            // Act
+            extendedSessions.Dispose();
+
+            // MemoryCache dispatches the old entry's callback asynchronously. Invoke the exact
+            // generation check directly as well so this assertion never depends on callback timing.
+            InvokeDisposeCacheGeneration(cachedSession, oldGeneration);
+
+            // Assert
+            Action useWhileRunnerOwned = () => cachedHashAlgorithm.ComputeHash([1, 2, 3]);
+            useWhileRunnerOwned.Should().NotThrow();
+        }
+        finally
+        {
+            orchestrator.ReleaseResumedExecution();
+        }
+
+        string responseString = await resumedExecution.WaitAsync(TimeSpan.FromSeconds(10));
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(
+            Convert.FromBase64String(responseString));
+
+        response.RequiresHistory.Should().BeFalse();
+        Action useAfterRejectedReinsert = () => cachedHashAlgorithm.ComputeHash([1, 2, 3]);
+        useAfterRejectedReinsert.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public void LoadAndRun_ResumedExtendedSession_StaleGenerationCannotDisposeReinsertedSession()
+    {
+        // Arrange
+        using var extendedSessions = new ExtendedSessionsCache();
+        var orchestrator = new BlockingResumedOrchestrator();
+        Protobuf.OrchestratorRequest initialRequest = CreateExtendedSessionRequest(
+            [CreateExecutionStartedEvent()],
+            includeState: true);
+        GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(initialRequest.ToByteArray()),
+            orchestrator,
+            extendedSessions);
+
+        MemoryCache cache = extendedSessions.GetOrInitializeCache(
+            DefaultExtendedSessionIdleTimeoutInSeconds);
+        Assert.True(cache.TryGetValue(TestInstanceId, out object? cachedValue));
+        ExtendedSessionState cachedSession = Assert.IsType<ExtendedSessionState>(cachedValue);
+        long oldGeneration = GetOwnershipGeneration(cachedSession);
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(cachedSession);
+
+        orchestrator.ReleaseResumedExecution();
+        Protobuf.OrchestratorRequest resumedRequest = CreateExtendedSessionRequest(
+            [CreateEventRaisedEvent("Resume")],
+            includeState: false);
+
+        // Act
+        GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(resumedRequest.ToByteArray()),
+            orchestrator,
+            extendedSessions);
+
+        // Assert
+        Assert.True(cache.TryGetValue(TestInstanceId, out object? reinsertedValue));
+        reinsertedValue.Should().BeSameAs(cachedSession);
+        long freshGeneration = GetOwnershipGeneration(cachedSession);
+        freshGeneration.Should().BeGreaterThan(oldGeneration);
+
+        InvokeDisposeCacheGeneration(cachedSession, oldGeneration);
+        Action useAfterStaleCallback = () => cachedHashAlgorithm.ComputeHash([1, 2, 3]);
+        useAfterStaleCallback.Should().NotThrow();
+
+        cache.Remove(TestInstanceId);
+        InvokeDisposeCacheGeneration(cachedSession, freshGeneration);
+        Action useAfterCurrentCallback = () => cachedHashAlgorithm.ComputeHash([1, 2, 3]);
+        useAfterCurrentCallback.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public void LoadAndRun_ExtendedSession_SubTickTimeoutRejected_DisposesRunnerOwnedShim()
+    {
+        // Arrange
+        using var extendedSessions = new ExtendedSessionsCache();
+        var orchestrator = new CaptureHashThenCallSubOrchestrationOrchestrator();
+        Protobuf.OrchestratorRequest request = CreateExtendedSessionRequest(
+            [CreateExecutionStartedEvent()],
+            includeState: true);
+        request.Properties["ExtendedSessionIdleTimeoutInSeconds"] = Value.ForNumber(double.Epsilon);
+
+        // Act
+        Action run = () => GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(request.ToByteArray()),
+            orchestrator,
+            extendedSessions);
+
+        // Assert
+        run.Should().Throw<ArgumentOutOfRangeException>();
+        orchestrator.CapturedHashAlgorithm.Should().NotBeNull();
+        Action useAfterRejectedStore = () => orchestrator.CapturedHashAlgorithm!.ComputeHash([1, 2, 3]);
+        useAfterRejectedStore.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]
@@ -1007,7 +1151,7 @@ public class GrpcOrchestrationRunnerTests
     // instance passed to an orchestrator's RunAsync -- which, per TaskOrchestrationShim, is exactly
     // the shim's wrapperContext instance -- instead of going through a cached ExtendedSessionState.
     // Used by DisposeCacheDuringExecutionOrchestrator, whose cache hand-off is rejected per
-    // ExtendedSessionsCache.TrySetCachedValue's disposal invariant, so its shim is never cached and
+    // ExtendedSessionsCache.TryStoreExtendedSession's disposal invariant, so its shim is never cached and
     // thus unreachable via ExtendedSessionState afterward.
     static SHA1 GetCachedHashAlgorithmFromContext(TaskOrchestrationContext context)
     {
@@ -1018,6 +1162,19 @@ public class GrpcOrchestrationRunnerTests
         return (SHA1)(cachedHashAlgorithmField.GetValue(context)
             ?? throw new InvalidOperationException(
                 $"{context.GetType().FullName}.cachedHashAlgorithm was null; NewGuid() may not have run."));
+    }
+
+    static long GetOwnershipGeneration(ExtendedSessionState sessionState)
+    {
+        return ExtendedSessionOwnershipField.GetValue(sessionState) is long generation
+            ? generation
+            : throw new InvalidOperationException(
+                $"{nameof(ExtendedSessionState)}.ownership was null or had an unexpected type.");
+    }
+
+    static void InvokeDisposeCacheGeneration(ExtendedSessionState sessionState, long generation)
+    {
+        DisposeCacheGenerationMethod.Invoke(sessionState, [generation]);
     }
 
     // Eviction callbacks on the extended-sessions MemoryCache are dispatched via
@@ -1083,6 +1240,54 @@ public class GrpcOrchestrationRunnerTests
         return orchestratorRequest;
     }
 
+    static Protobuf.OrchestratorRequest CreateExtendedSessionRequest(
+        IEnumerable<Protobuf.HistoryEvent> newEvents,
+        bool includeState)
+    {
+        Protobuf.OrchestratorRequest request = CreateOrchestratorRequest(newEvents);
+        request.Properties.Add(new MapField<string, Value>()
+        {
+            { "IncludeState", Value.ForBool(includeState) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            {
+                "ExtendedSessionIdleTimeoutInSeconds",
+                Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds)
+            },
+        });
+        return request;
+    }
+
+    static Protobuf.HistoryEvent CreateExecutionStartedEvent()
+    {
+        return new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+    }
+
+    static Protobuf.HistoryEvent CreateEventRaisedEvent(string name)
+    {
+        return new Protobuf.HistoryEvent
+        {
+            EventId = 0,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            EventRaised = new Protobuf.EventRaisedEvent
+            {
+                Name = name,
+                Input = "\"resume\"",
+            },
+        };
+    }
+
     sealed class SimpleOrchestrator : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
@@ -1108,6 +1313,19 @@ public class GrpcOrchestrationRunnerTests
         public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
             context.NewGuid();
+            await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
+            return input;
+        }
+    }
+
+    sealed class CaptureHashThenCallSubOrchestrationOrchestrator : TaskOrchestrator<string, string>
+    {
+        public SHA1? CapturedHashAlgorithm { get; private set; }
+
+        public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            context.NewGuid();
+            this.CapturedHashAlgorithm = GetCachedHashAlgorithmFromContext(context);
             await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
             return input;
         }
@@ -1142,6 +1360,32 @@ public class GrpcOrchestrationRunnerTests
             await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
             return input;
         }
+    }
+
+    sealed class BlockingResumedOrchestrator : TaskOrchestrator<string, string>
+    {
+        readonly ManualResetEventSlim resumedExecutionBlocked = new();
+        readonly ManualResetEventSlim releaseResumedExecution = new();
+
+        public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            context.NewGuid();
+            await context.WaitForExternalEvent<string>("Resume");
+
+            this.resumedExecutionBlocked.Set();
+            if (!this.releaseResumedExecution.Wait(TimeSpan.FromSeconds(10)))
+            {
+                throw new TimeoutException("Timed out waiting for the test to release resumed execution.");
+            }
+
+            await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
+            return input;
+        }
+
+        public bool WaitUntilResumedExecutionIsBlocked(TimeSpan timeout)
+            => this.resumedExecutionBlocked.Wait(timeout);
+
+        public void ReleaseResumedExecution() => this.releaseResumedExecution.Set();
     }
 
     // Minimal disposable spy used by the Dispose()/GetOrInitializeCache() race test to verify

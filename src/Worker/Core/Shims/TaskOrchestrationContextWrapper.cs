@@ -33,13 +33,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext,
     bool preserveUnprocessedEventsOnContinueAsNew;
     TaskOrchestrationEntityContext? entityFeature;
 
-    // Cached and reused across NewGuid() calls (instead of creating and disposing a new SHA1 instance
-    // per call) to reduce per-call allocation overhead. A single TaskOrchestrationContextWrapper is used
-    // for the duration of a single orchestration execution, and orchestrator code executes sequentially
-    // (never concurrently) within that execution, so reusing this instance is safe. HashAlgorithm.Initialize()
-    // resets all internal state before each use, so the computed hash is identical to using a fresh instance.
-    // This instance is disposed via Dispose() (see TaskOrchestrationShim, which disposes the previous
-    // wrapper before replacing it with a new one on the next replay/decision task).
+    // Internal worker paths with complete shim-lifetime ownership cache and reuse this instance across
+    // NewGuid() calls. Public factory paths use a fresh, per-call SHA1 instead because TaskOrchestration
+    // has no disposal hook through which those callers could release a cached instance.
     //
     // Note: on .NET Framework, the underlying SHA1CryptoServiceProvider.Initialize() disposes and
     // recreates its native CAPI hash handle on every call, so the native-handle churn is not eliminated
@@ -451,24 +447,34 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext,
         SwapByteArrayValues(namespaceValueByteArray);
 
 #pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
-        SHA1 hashAlgorithm = this.cachedHashAlgorithm ??= SHA1.Create(); /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
-                                                               and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
-                                                               customers' inflight orchestrations. */
+        bool reuseHashAlgorithm = this.invocationContext.ReuseNewGuidHashAlgorithm;
+        SHA1 hashAlgorithm = reuseHashAlgorithm
+            ? this.cachedHashAlgorithm ??= SHA1.Create()
+            : SHA1.Create(); /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
+                                and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
+                                customers' inflight orchestrations. */
 
-        // Reset internal state before each use since this instance is cached and reused across calls
-        // rather than being created and disposed per call. This produces byte-for-byte identical hashes
-        // to constructing a new SHA1 instance for every call.
-        hashAlgorithm.Initialize();
-        hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
-        hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
+        byte[] hashByteArray;
+        try
+        {
+            // Resetting before every use makes the reusable and per-call modes byte-for-byte identical.
+            hashAlgorithm.Initialize();
+            hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
+            hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
 
-        // HashAlgorithm.Hash is nullable in its API surface (it is null before any hash has been
-        // computed, or after Dispose()), but is guaranteed to be populated immediately after
-        // TransformFinalBlock completes successfully above. Guard explicitly instead of silently
-        // trusting that contract, so a future behavioral change surfaces a clear, actionable exception
-        // rather than an unexplained NullReferenceException.
-        byte[] hashByteArray = hashAlgorithm.Hash
-            ?? throw new InvalidOperationException("SHA1.Hash was unexpectedly null after TransformFinalBlock.");
+            // HashAlgorithm.Hash is nullable in its API surface, but is guaranteed to be populated
+            // immediately after TransformFinalBlock completes successfully.
+            hashByteArray = hashAlgorithm.Hash
+                ?? throw new InvalidOperationException(
+                    "SHA1.Hash was unexpectedly null after TransformFinalBlock.");
+        }
+        finally
+        {
+            if (!reuseHashAlgorithm)
+            {
+                hashAlgorithm.Dispose();
+            }
+        }
 #pragma warning restore CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
 
         byte[] newGuidByteArray = new byte[16];

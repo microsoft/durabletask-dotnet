@@ -31,7 +31,8 @@ public class TaskOrchestrationShimTests
         wrapperContext.NewGuid(); // Populate the cached SHA1 instance.
         ShimWrapperContextField.SetValue(shim, wrapperContext);
 
-        SHA1 cachedInstance = (SHA1)CachedHashAlgorithmField.GetValue(wrapperContext)!;
+        SHA1 cachedInstance = (SHA1)(CachedHashAlgorithmField.GetValue(wrapperContext)
+            ?? throw new InvalidOperationException("NewGuid() did not populate cachedHashAlgorithm."));
 
         // Act
         shim.Dispose();
@@ -39,6 +40,47 @@ public class TaskOrchestrationShimTests
         // Assert
         CachedHashAlgorithmField.GetValue(wrapperContext).Should().BeNull();
         Action useAfterDispose = () => cachedInstance.ComputeHash(new byte[] { 1, 2, 3 });
+        useAfterDispose.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task PublicFactory_CreateOrchestration_DoesNotCacheHashAlgorithm()
+    {
+        // Arrange
+        DurableTaskShimFactory factory = new();
+        CapturingNewGuidOrchestrator orchestrator = new();
+        TaskOrchestration shim = factory.CreateOrchestration("Test", orchestrator);
+        TestOrchestrationContext innerContext = new();
+
+        // Act
+        await shim.Execute(innerContext, "null");
+
+        // Assert
+        orchestrator.AfterFirstCall.Should().BeNull();
+        orchestrator.AfterSecondCall.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task InternalFactory_CreateOrchestration_ReusesHashAlgorithmUntilDisposed()
+    {
+        // Arrange
+        DurableTaskShimFactory factory = new();
+        CapturingNewGuidOrchestrator orchestrator = new();
+        TaskOrchestration shim = factory.CreateOrchestrationWithManagedLifetime(
+            "Test",
+            orchestrator,
+            parent: null);
+        TestOrchestrationContext innerContext = new();
+
+        // Act
+        await shim.Execute(innerContext, "null");
+
+        // Assert
+        SHA1 cachedHashAlgorithm = orchestrator.AfterFirstCall.Should().BeAssignableTo<SHA1>().Which;
+        orchestrator.AfterSecondCall.Should().BeSameAs(cachedHashAlgorithm);
+
+        ((IDisposable)shim).Dispose();
+        Action useAfterDispose = () => cachedHashAlgorithm.ComputeHash([1, 2, 3]);
         useAfterDispose.Should().Throw<ObjectDisposedException>();
     }
 
@@ -85,9 +127,34 @@ public class TaskOrchestrationShimTests
 
     static TaskOrchestrationContextWrapper CreateWrapperContext()
     {
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            ReuseNewGuidHashAlgorithm: true);
         TestOrchestrationContext innerContext = new();
         return new TaskOrchestrationContextWrapper(innerContext, invocationContext, deserializedInput: null);
+    }
+
+    sealed class CapturingNewGuidOrchestrator : ITaskOrchestrator
+    {
+        public Type InputType => typeof(object);
+
+        public Type OutputType => typeof(object);
+
+        public object? AfterFirstCall { get; private set; }
+
+        public object? AfterSecondCall { get; private set; }
+
+        public Task<object?> RunAsync(TaskOrchestrationContext context, object? input)
+        {
+            context.NewGuid();
+            this.AfterFirstCall = CachedHashAlgorithmField.GetValue(context);
+            context.NewGuid();
+            this.AfterSecondCall = CachedHashAlgorithmField.GetValue(context);
+            return Task.FromResult(input);
+        }
     }
 
     sealed class NoOpOrchestrator : ITaskOrchestrator

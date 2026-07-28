@@ -70,11 +70,12 @@ public class ExtendedSessionsCache : IDisposable
     }
 
     /// <summary>
-    /// Gets the cache for extended sessions if it has already been initialized, or otherwise initializes it with the given expiration scan frequency.
+    /// Gets the cache for extended sessions if it has already been initialized, or otherwise initializes it
+    /// with an expiration scan frequency derived from the supplied duration.
     /// </summary>
     /// <param name="expirationScanFrequencyInSeconds">
-    /// The expiration scan frequency of the cache, in seconds.
-    /// This specifies how often the cache checks for stale items, and evicts them.
+    /// The duration, in seconds, used to derive the expiration scan frequency. The cache checks for stale
+    /// items every one-fifth of this duration.
     /// </param>
     /// <returns>The IMemoryCache that holds the cached <see cref="ExtendedSessionState"/>.</returns>
     /// <exception cref="ObjectDisposedException">The cache has already been disposed.</exception>
@@ -119,6 +120,50 @@ public class ExtendedSessionsCache : IDisposable
             }
 
             return this.extendedSessions.TryGetValue(key, out value);
+        }
+    }
+
+    /// <summary>
+    /// Atomically removes an extended session from the cache and transfers ownership to the caller.
+    /// </summary>
+    /// <param name="key">The cache key.</param>
+    /// <param name="value">When this method returns, contains the runner-owned session, if found.</param>
+    /// <returns><c>true</c> if ownership was transferred; otherwise, <c>false</c>.</returns>
+    internal bool TryTakeExtendedSession(string key, out ExtendedSessionState? value)
+    {
+        lock (this.syncRoot)
+        {
+            if (this.disposed
+                || this.extendedSessions is null
+                || !this.extendedSessions.TryGetValue(key, out value)
+                || value is null)
+            {
+                value = null;
+                return false;
+            }
+
+            if (!value.TryTakeFromCache(out _))
+            {
+                this.extendedSessions.Remove(key);
+                value = null;
+                return false;
+            }
+
+            try
+            {
+                // Transfer ownership before removing the entry. MemoryCache queues callbacks
+                // asynchronously, so the callback for the old generation will now be harmless.
+                this.extendedSessions.Remove(key);
+                return true;
+            }
+            catch
+            {
+                // The session is no longer safely cache-owned. Dispose the runner lease rather than
+                // risk either leaking it or returning a state that may still be reachable from the cache.
+                value.DisposeRunnerOwned();
+                value = null;
+                throw;
+            }
         }
     }
 
@@ -168,6 +213,78 @@ public class ExtendedSessionsCache : IDisposable
 
             this.extendedSessions.Set(key, value, options);
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Atomically transfers a runner-owned extended session into the cache using a fresh ownership generation.
+    /// </summary>
+    /// <param name="key">The cache key.</param>
+    /// <param name="value">The runner-owned extended session.</param>
+    /// <param name="slidingExpiration">The sliding expiration for the cache entry.</param>
+    /// <returns>
+    /// <c>true</c> if ownership was transferred; <c>false</c> if the cache rejected the transfer.
+    /// </returns>
+    internal bool TryStoreExtendedSession(
+        string key,
+        ExtendedSessionState value,
+        TimeSpan slidingExpiration)
+    {
+        lock (this.syncRoot)
+        {
+            if (this.disposed || this.extendedSessions is null)
+            {
+                return false;
+            }
+
+            // Validate all caller-controlled options before transferring ownership. In particular,
+            // a sub-tick positive timeout rounds to TimeSpan.Zero, which SlidingExpiration rejects.
+            MemoryCacheEntryOptions options = new()
+            {
+                SlidingExpiration = slidingExpiration,
+            };
+
+            if (!value.TryTransferToCache(out long generation))
+            {
+                return false;
+            }
+
+            try
+            {
+                options.RegisterPostEvictionCallback(DisposeEvictedExtendedSession, generation);
+                this.extendedSessions.Set(key, value, options);
+                return true;
+            }
+            catch
+            {
+                // Set normally either commits or throws before insertion. Defensively handle an
+                // implementation that commits and then throws by removing this exact value first.
+                // Its queued callback and the ownership transfer below race safely on the generation.
+                try
+                {
+                    if (this.extendedSessions.TryGetValue(key, out object? cachedValue)
+                        && ReferenceEquals(cachedValue, value))
+                    {
+                        this.extendedSessions.Remove(key);
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                    // The publicly exposed MemoryCache may have been disposed directly. It no longer
+                    // owns a usable entry, so ownership can still be returned to the runner below.
+                }
+
+                value.TryTakeCacheGeneration(generation);
+                throw;
+            }
+        }
+    }
+
+    static void DisposeEvictedExtendedSession(object key, object? value, EvictionReason reason, object? state)
+    {
+        if (value is ExtendedSessionState sessionState && state is long generation)
+        {
+            sessionState.DisposeCacheGeneration(generation);
         }
     }
 }

@@ -773,7 +773,10 @@ sealed partial class GrpcDurableTaskWorker
                             _ => null,
                         };
 
-                        TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
+                        TaskOrchestration shim = this.shimFactory.CreateOrchestrationWithManagedLifetime(
+                            name,
+                            orchestrator!,
+                            parent);
                         try
                         {
                             TaskOrchestrationExecutor executor = new(

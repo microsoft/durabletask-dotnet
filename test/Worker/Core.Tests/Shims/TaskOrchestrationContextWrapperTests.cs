@@ -17,6 +17,11 @@ public class TaskOrchestrationContextWrapperTests
         .GetMethod(nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent), BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException($"{nameof(TaskOrchestrationContextWrapper)}.{nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent)} was not found.");
 
+    static readonly FieldInfo CachedHashAlgorithmField = typeof(TaskOrchestrationContextWrapper)
+        .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException(
+            $"{nameof(TaskOrchestrationContextWrapper)}.cachedHashAlgorithm was not found.");
+
     [Fact]
     public void Ctor_NullParent_Populates()
     {
@@ -393,8 +398,10 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastSubOrchestrationVersion.Should().Be(string.Empty);
     }
 
-    [Fact]
-    public void NewGuid_FixedInputs_ProducesStableDeterministicValue()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewGuid_FixedInputs_ProducesStableDeterministicValue(bool reuseNewGuidHashAlgorithm)
     {
         // Arrange — these golden values were computed independently (offline, using the documented
         // algorithm: SHA1("9e952958-5e33-4daf-827f-2fa12937b875" bytes + name bytes), with the RFC 4122
@@ -403,7 +410,12 @@ public class TaskOrchestrationContextWrapperTests
         TestOrchestrationContext innerContext = new(
             "fixed-instance-id",
             DateTime.Parse("2023-05-06T07:08:09.1234567Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            reuseNewGuidHashAlgorithm);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
@@ -490,16 +502,19 @@ public class TaskOrchestrationContextWrapperTests
         // NewGuid() is created once and reused across calls, rather than being constructed and
         // disposed on every call.
         TestOrchestrationContext innerContext = new();
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            ReuseNewGuidHashAlgorithm: true);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
-        FieldInfo cachedHashAlgorithmField = typeof(TaskOrchestrationContextWrapper)
-            .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         // Act
         wrapper.NewGuid();
-        object? afterFirstCall = cachedHashAlgorithmField.GetValue(wrapper);
+        object? afterFirstCall = CachedHashAlgorithmField.GetValue(wrapper);
         wrapper.NewGuid();
-        object? afterSecondCall = cachedHashAlgorithmField.GetValue(wrapper);
+        object? afterSecondCall = CachedHashAlgorithmField.GetValue(wrapper);
 
         // Assert — the same underlying instance is reused rather than a new one being allocated.
         afterFirstCall.Should().NotBeNull();
@@ -507,24 +522,51 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
+    public void NewGuid_DefaultMode_DoesNotCacheHashAlgorithmInstance()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        wrapper.NewGuid();
+        object? afterFirstCall = CachedHashAlgorithmField.GetValue(wrapper);
+        wrapper.NewGuid();
+        object? afterSecondCall = CachedHashAlgorithmField.GetValue(wrapper);
+
+        // Assert
+        afterFirstCall.Should().BeNull();
+        afterSecondCall.Should().BeNull();
+    }
+
+    [Fact]
     public void Dispose_ReleasesCachedHashAlgorithm()
     {
         // Arrange
         TestOrchestrationContext innerContext = new();
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            ReuseNewGuidHashAlgorithm: true);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
-        FieldInfo cachedHashAlgorithmField = typeof(TaskOrchestrationContextWrapper)
-            .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         wrapper.NewGuid();
-        SHA1 cachedInstance = (SHA1)cachedHashAlgorithmField.GetValue(wrapper)!;
+        SHA1 cachedInstance = (SHA1)(CachedHashAlgorithmField.GetValue(wrapper)
+            ?? throw new InvalidOperationException("NewGuid() did not populate cachedHashAlgorithm."));
 
         // Act
         wrapper.Dispose();
 
         // Assert — the field is cleared, and the underlying instance was actually disposed (not merely
         // dereferenced), confirmed by it throwing when used afterwards.
-        cachedHashAlgorithmField.GetValue(wrapper).Should().BeNull();
+        CachedHashAlgorithmField.GetValue(wrapper).Should().BeNull();
         Action useAfterDispose = () => cachedInstance.ComputeHash([1, 2, 3]);
         useAfterDispose.Should().Throw<ObjectDisposedException>();
     }
@@ -534,7 +576,12 @@ public class TaskOrchestrationContextWrapperTests
     {
         // Arrange
         TestOrchestrationContext innerContext = new();
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            ReuseNewGuidHashAlgorithm: true);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
         wrapper.NewGuid();
 
@@ -555,7 +602,12 @@ public class TaskOrchestrationContextWrapperTests
         // Arrange — the cached SHA1 instance is lazily created, so Dispose() must tolerate the case
         // where NewGuid() was never called.
         TestOrchestrationContext innerContext = new();
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            ReuseNewGuidHashAlgorithm: true);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
@@ -574,7 +626,12 @@ public class TaskOrchestrationContextWrapperTests
         TestOrchestrationContext innerContext = new(
             "fixed-instance-id",
             DateTime.Parse("2023-05-06T07:08:09.1234567Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new(),
+            NullLoggerFactory.Instance,
+            null,
+            ReuseNewGuidHashAlgorithm: true);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
@@ -592,8 +649,12 @@ public class TaskOrchestrationContextWrapperTests
 
     static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)
     {
-        PropertyInfo tagsProperty = innerContext.LastScheduledTaskOptions!.GetType().GetProperty("Tags")!;
-        return (IReadOnlyDictionary<string, string>)tagsProperty.GetValue(innerContext.LastScheduledTaskOptions)!;
+        ScheduleTaskOptions options = innerContext.LastScheduledTaskOptions
+            ?? throw new InvalidOperationException("No scheduled-task options were captured.");
+        PropertyInfo tagsProperty = options.GetType().GetProperty("Tags")
+            ?? throw new InvalidOperationException($"{options.GetType().FullName}.Tags was not found.");
+        return tagsProperty.GetValue(options) as IReadOnlyDictionary<string, string>
+            ?? throw new InvalidOperationException($"{options.GetType().FullName}.Tags was null or had an unexpected type.");
     }
 
     static void InvokeCompleteExternalEvent(TaskOrchestrationContextWrapper wrapper, string eventName, string rawEventPayload)
@@ -705,7 +766,7 @@ public class TaskOrchestrationContextWrapperTests
         }
     }
 
-    class TestOrchestrationContext : OrchestrationContext
+    sealed class TestOrchestrationContext : OrchestrationContext
     {
         // Only set when a fixed value is supplied via the constructor overload below; otherwise the
         // base class's (internally-set) value is used, preserving prior behavior for existing callers.

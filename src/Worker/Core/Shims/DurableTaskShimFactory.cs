@@ -85,8 +85,12 @@ public class DurableTaskShimFactory
     {
         Check.NotDefault(name);
         Check.NotNull(orchestrator);
-        OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
-        return new TaskOrchestrationShim(context, orchestrator);
+        return this.CreateOrchestrationCore(
+            name,
+            orchestrator,
+            properties: null,
+            parent,
+            reuseNewGuidHashAlgorithm: false);
     }
 
     /// <summary>
@@ -108,8 +112,12 @@ public class DurableTaskShimFactory
         Check.NotDefault(name);
         Check.NotNull(orchestrator);
         Check.NotNull(properties);
-        OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
-        return new TaskOrchestrationShim(context, orchestrator, properties);
+        return this.CreateOrchestrationCore(
+            name,
+            orchestrator,
+            properties,
+            parent,
+            reuseNewGuidHashAlgorithm: false);
     }
 
     /// <summary>
@@ -152,5 +160,72 @@ public class DurableTaskShimFactory
         // deserialization and allocation overheads.
         ILogger logger = this.loggerFactory.CreateLogger(entity.GetType());
         return new TaskEntityShim(this.options.DataConverter, entity, entityId, logger);
+    }
+
+    /// <summary>
+    /// Creates an orchestration shim whose deterministic-GUID hash algorithm may be reused.
+    /// The caller must dispose the returned shim or transfer it to an owner that will.
+    /// </summary>
+    /// <param name="name">The invoked orchestration name.</param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name="parent">The orchestration parent details, if any.</param>
+    /// <returns>A new orchestration shim with managed lifetime.</returns>
+    internal TaskOrchestration CreateOrchestrationWithManagedLifetime(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        ParentOrchestrationInstance? parent)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(orchestrator);
+        return this.CreateOrchestrationCore(
+            name,
+            orchestrator,
+            properties: null,
+            parent,
+            reuseNewGuidHashAlgorithm: true);
+    }
+
+    /// <summary>
+    /// Creates an orchestration shim whose deterministic-GUID hash algorithm may be reused.
+    /// The caller must dispose the returned shim or transfer it to an owner that will.
+    /// </summary>
+    /// <param name="name">The invoked orchestration name.</param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name="properties">Configuration for the orchestration.</param>
+    /// <param name="parent">The orchestration parent details, if any.</param>
+    /// <returns>A new orchestration shim with managed lifetime.</returns>
+    internal TaskOrchestration CreateOrchestrationWithManagedLifetime(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        IReadOnlyDictionary<string, object?> properties,
+        ParentOrchestrationInstance? parent)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(orchestrator);
+        Check.NotNull(properties);
+        return this.CreateOrchestrationCore(
+            name,
+            orchestrator,
+            properties,
+            parent,
+            reuseNewGuidHashAlgorithm: true);
+    }
+
+    TaskOrchestrationShim CreateOrchestrationCore(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        IReadOnlyDictionary<string, object?>? properties,
+        ParentOrchestrationInstance? parent,
+        bool reuseNewGuidHashAlgorithm)
+    {
+        OrchestrationInvocationContext context = new(
+            name,
+            this.options,
+            this.loggerFactory,
+            parent,
+            reuseNewGuidHashAlgorithm);
+        return properties is null
+            ? new TaskOrchestrationShim(context, orchestrator)
+            : new TaskOrchestrationShim(context, orchestrator, properties);
     }
 }

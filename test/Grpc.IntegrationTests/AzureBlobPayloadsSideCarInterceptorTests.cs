@@ -27,6 +27,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     static readonly MethodInfo RunWithBoundedConcurrencyMethodDefinition = typeof(AzureBlobPayloadsSideCarInterceptor)
         .GetMethod("RunWithBoundedConcurrencyAsync", BindingFlags.Static | BindingFlags.NonPublic)!;
 
+    static readonly PropertyInfo BeforeSharedMessageLockForTestProperty = typeof(AzureBlobPayloadsSideCarInterceptor)
+        .GetProperty("BeforeSharedMessageLockForTest", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    static readonly PropertyInfo SharedMessageLockAcquiredForTestProperty = typeof(AzureBlobPayloadsSideCarInterceptor)
+        .GetProperty("SharedMessageLockAcquiredForTest", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
     [Fact]
     public async Task ResolveResponsePayloadsAsync_HistoryChunk_ResolvesEventsInOrderWithBoundedConcurrency()
     {
@@ -99,10 +105,10 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     public async Task ResolveResponsePayloadsAsync_GetInstanceResponse_SerializesSharedStateMutationsAfterConcurrentDownloads()
     {
         // Arrange: all three fields belong to the same OrchestrationState message. The test holds
-        // that message's monitor while allowing the downloads to finish, so only the assignments
-        // (not the independent Blob I/O) should wait for the shared-message lock.
+        // that message's monitor while allowing the downloads to finish. A test-only callback
+        // synchronously signals immediately before each assignment attempts that monitor.
         TaskCompletionSource<bool> allDownloadsStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        TaskCompletionSource<bool> releaseDownloads = new();
+        TaskCompletionSource<bool> releaseDownloads = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int downloadsStarted = 0;
         TrackingPayloadStore store = new(downloadAsync: async (token, cancellationToken) =>
         {
@@ -128,6 +134,23 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             CustomStatus = "test-blob://status",
         };
         P.GetInstanceResponse response = new() { OrchestrationState = state };
+        TaskCompletionSource<bool> allAssignmentsReachedLock = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int assignmentsReachedLock = 0;
+        int messageLockAcquisitions = 0;
+        BeforeSharedMessageLockForTestProperty.SetValue(interceptor, (Action)(() =>
+        {
+            if (Interlocked.Increment(ref assignmentsReachedLock) == 3)
+            {
+                allAssignmentsReachedLock.TrySetResult(true);
+            }
+        }));
+        SharedMessageLockAcquiredForTestProperty.SetValue(interceptor, (Action<object>)(message =>
+        {
+            message.Should().BeSameAs(state);
+            Monitor.IsEntered(message).Should().BeTrue();
+            Interlocked.Increment(ref messageLockAcquisitions);
+        }));
+
         TaskCompletionSource<bool> stateLockAcquired = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource<bool> releaseStateLock = new(TaskCreationOptions.RunContinuationsAsynchronously);
         Task holdStateLock = Task.Run(() =>
@@ -146,24 +169,20 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             // Act
             Task resolveTask = ResolveAsync(interceptor, response, CancellationToken.None);
             await allDownloadsStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            TaskCompletionSource<bool> releaseStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            Task releaseTask = Task.Run(() =>
-            {
-                releaseStarted.SetResult(true);
-                releaseDownloads.SetResult(true);
-            });
-            await releaseStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            releaseDownloads.SetResult(true);
+            await allAssignmentsReachedLock.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-            // Assert: Blob reads overlap, but their shared protobuf-message assignments wait for
-            // the synchronization boundary rather than mutating state concurrently. Releasing the
-            // non-asynchronous completion source resumes the download and assignment continuations
-            // on releaseTask; with the shared-message lock in place, it remains blocked until that
-            // lock is released rather than requiring a wall-clock delay to observe the condition.
-            releaseTask.IsCompleted.Should().BeFalse("the three assignments target the same protobuf message and must wait for its lock");
+            // Assert: every assignment continuation has reached the lock boundary, yet none can
+            // mutate the shared message while its monitor is held. Blob reads still overlap.
+            resolveTask.IsCompleted.Should().BeFalse("all three assignments must wait for the held protobuf-message monitor");
+            state.Input.Should().Be("test-blob://input");
+            state.Output.Should().Be("test-blob://output");
+            state.CustomStatus.Should().Be("test-blob://status");
+            Volatile.Read(ref assignmentsReachedLock).Should().Be(3);
+            Volatile.Read(ref messageLockAcquisitions).Should().Be(0);
             store.MaxObservedConcurrency.Should().BeGreaterThan(1, "independent Blob reads should still overlap");
 
             releaseStateLock.SetResult(true);
-            await releaseTask.WaitAsync(TimeSpan.FromSeconds(10));
             await resolveTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
@@ -176,6 +195,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         state.Input.Should().Be("input");
         state.Output.Should().Be("output");
         state.CustomStatus.Should().Be("status");
+        Volatile.Read(ref messageLockAcquisitions).Should().Be(3);
     }
 
     [Fact]
@@ -614,6 +634,129 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         ninthOperationDispatched.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task RunWithBoundedConcurrencyAsync_FailureRecordedBeforePendingDispatchClaim_DoesNotStartPendingOperation()
+    {
+        // Arrange: eight operations occupy the concurrency limit. Operation 0 succeeds to release
+        // a slot. Operation 8 passes the advisory stop check, then a test seam pauses it immediately
+        // before its authoritative dispatch claim.
+        TaskCompletionSource<bool> releaseFirstSuccess = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseFailure = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseRemaining = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> pendingDispatchReached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> failureRecorded = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using ManualResetEventSlim continueDispatchClaim = new(initialState: false);
+        int operationsStarted = 0;
+        int pendingOperationStarted = 0;
+
+        List<Func<Task>> operations =
+        [
+            async () =>
+            {
+                Interlocked.Increment(ref operationsStarted);
+                await releaseFirstSuccess.Task;
+            },
+            async () =>
+            {
+                Interlocked.Increment(ref operationsStarted);
+                await releaseFailure.Task;
+                throw new InvalidOperationException("Lower-ordinal operation failed.");
+            },
+        ];
+        for (int i = 2; i < 8; i++)
+        {
+            operations.Add(async () =>
+            {
+                Interlocked.Increment(ref operationsStarted);
+                await releaseRemaining.Task;
+            });
+        }
+
+        operations.Add(() =>
+        {
+            Interlocked.Exchange(ref pendingOperationStarted, 1);
+            return Task.CompletedTask;
+        });
+
+        Action<int> afterAdvisoryDispatchCheck = operationOrdinal =>
+        {
+            if (operationOrdinal == 8)
+            {
+                pendingDispatchReached.TrySetResult(true);
+                continueDispatchClaim.Wait();
+            }
+        };
+        Action<int> onFailureRecorded = operationOrdinal =>
+        {
+            if (operationOrdinal == 1)
+            {
+                failureRecorded.TrySetResult(true);
+            }
+        };
+
+        Task runTask = RunWithBoundedConcurrencyAsync(
+            operations,
+            CancellationToken.None,
+            afterAdvisoryDispatchCheck,
+            onFailureRecorded);
+        operationsStarted.Should().Be(8);
+
+        try
+        {
+            // Act: let operation 8 pass advisory eligibility, then record operation 1's failure
+            // before allowing the authoritative claim to continue.
+            releaseFirstSuccess.SetResult(true);
+            await pendingDispatchReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            releaseFailure.SetResult(true);
+            await failureRecorded.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            continueDispatchClaim.Set();
+            releaseRemaining.SetResult(true);
+
+            // Assert: the recorded failure wins the atomic claim and operation 8 never begins.
+            Func<Task> act = () => runTask.WaitAsync(TimeSpan.FromSeconds(10));
+            (await act.Should().ThrowExactlyAsync<InvalidOperationException>())
+                .WithMessage("Lower-ordinal operation failed.");
+            Volatile.Read(ref pendingOperationStarted).Should().Be(0);
+        }
+        finally
+        {
+            releaseFirstSuccess.TrySetResult(true);
+            releaseFailure.TrySetResult(true);
+            releaseRemaining.TrySetResult(true);
+            continueDispatchClaim.Set();
+        }
+    }
+
+    [Fact]
+    public async Task RunWithBoundedConcurrencyAsync_CancellationAfterAllOperationsComplete_ReturnsSuccessfully()
+    {
+        // Arrange: the final operation requests cancellation only after it has already claimed
+        // dispatch; both operations complete successfully.
+        using CancellationTokenSource cts = new();
+        int completedOperations = 0;
+        List<Func<Task>> operations =
+        [
+            () =>
+            {
+                Interlocked.Increment(ref completedOperations);
+                return Task.CompletedTask;
+            },
+            () =>
+            {
+                Interlocked.Increment(ref completedOperations);
+                cts.Cancel();
+                return Task.CompletedTask;
+            },
+        ];
+
+        // Act
+        Func<Task> act = () => RunWithBoundedConcurrencyAsync(operations, cts.Token);
+
+        // Assert: cancellation did not prevent a dispatch, so successful work remains successful.
+        await act.Should().NotThrowAsync();
+        completedOperations.Should().Be(2);
+    }
+
     static LargePayloadStorageOptions CreateOptions() => new() { ThresholdBytes = 1 };
 
     static Task ExternalizeAsync<TRequest>(AzureBlobPayloadsSideCarInterceptor interceptor, TRequest request, CancellationToken cancellation)
@@ -622,8 +765,14 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     static Task ResolveAsync<TResponse>(AzureBlobPayloadsSideCarInterceptor interceptor, TResponse response, CancellationToken cancellation)
         => (Task)ResolveMethodDefinition.MakeGenericMethod(typeof(TResponse)).Invoke(interceptor, [response, cancellation])!;
 
-    static Task RunWithBoundedConcurrencyAsync(IReadOnlyList<Func<Task>> operations, CancellationToken cancellation)
-        => (Task)RunWithBoundedConcurrencyMethodDefinition.Invoke(null, [operations, cancellation])!;
+    static Task RunWithBoundedConcurrencyAsync(
+        IReadOnlyList<Func<Task>> operations,
+        CancellationToken cancellation,
+        Action<int>? afterAdvisoryDispatchCheckForTest = null,
+        Action<int>? failureRecordedForTest = null)
+        => (Task)RunWithBoundedConcurrencyMethodDefinition.Invoke(
+            null,
+            [operations, cancellation, afterAdvisoryDispatchCheckForTest, failureRecordedForTest])!;
 
     /// <summary>
     /// In-memory <see cref="PayloadStore"/> test double that tracks upload/download counts and the

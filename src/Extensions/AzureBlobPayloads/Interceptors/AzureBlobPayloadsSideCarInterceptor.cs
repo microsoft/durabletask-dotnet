@@ -23,6 +23,10 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     // account-level throttling (see https://aka.ms/azure-storage-scalability-targets).
     const int MaxConcurrentPayloadOperations = 8;
 
+    Action? BeforeSharedMessageLockForTest { get; set; }
+
+    Action<object>? SharedMessageLockAcquiredForTest { get; set; }
+
     /// <inheritdoc/>
     protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
@@ -125,24 +129,30 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         async () =>
                         {
                             string? input = await this.MaybeResolveAsync(s.Input, cancellation);
+                            this.BeforeSharedMessageLockForTest?.Invoke();
                             lock (s)
                             {
+                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
                                 s.Input = input;
                             }
                         },
                         async () =>
                         {
                             string? output = await this.MaybeResolveAsync(s.Output, cancellation);
+                            this.BeforeSharedMessageLockForTest?.Invoke();
                             lock (s)
                             {
+                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
                                 s.Output = output;
                             }
                         },
                         async () =>
                         {
                             string? customStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
+                            this.BeforeSharedMessageLockForTest?.Invoke();
                             lock (s)
                             {
+                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
                                 s.CustomStatus = customStatus;
                             }
                         },
@@ -169,24 +179,30 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         operations.Add(async () =>
                         {
                             string? input = await this.MaybeResolveAsync(s.Input, cancellation);
+                            this.BeforeSharedMessageLockForTest?.Invoke();
                             lock (s)
                             {
+                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
                                 s.Input = input;
                             }
                         });
                         operations.Add(async () =>
                         {
                             string? output = await this.MaybeResolveAsync(s.Output, cancellation);
+                            this.BeforeSharedMessageLockForTest?.Invoke();
                             lock (s)
                             {
+                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
                                 s.Output = output;
                             }
                         });
                         operations.Add(async () =>
                         {
                             string? customStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
+                            this.BeforeSharedMessageLockForTest?.Invoke();
                             lock (s)
                             {
+                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
                                 s.CustomStatus = customStatus;
                             }
                         });
@@ -279,16 +295,20 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 operations.Add(async () =>
                 {
                     string? result = await this.MaybeExternalizeAsync(complete.Result, cancellation);
+                    this.BeforeSharedMessageLockForTest?.Invoke();
                     lock (complete)
                     {
+                        this.SharedMessageLockAcquiredForTest?.Invoke(complete);
                         complete.Result = result;
                     }
                 });
                 operations.Add(async () =>
                 {
                     string? details = await this.MaybeExternalizeAsync(complete.Details, cancellation);
+                    this.BeforeSharedMessageLockForTest?.Invoke();
                     lock (complete)
                     {
+                        this.SharedMessageLockAcquiredForTest?.Invoke(complete);
                         complete.Details = details;
                     }
                 });
@@ -536,7 +556,13 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// </remarks>
     /// <param name="operations">The independent operations to run.</param>
     /// <param name="cancellation">Cancellation token.</param>
-    static async Task RunWithBoundedConcurrencyAsync(List<Func<Task>> operations, CancellationToken cancellation)
+    /// <param name="afterAdvisoryDispatchCheckForTest">Optional test callback after advisory eligibility but before dispatch claim.</param>
+    /// <param name="failureRecordedForTest">Optional test callback after an operation's failure is recorded.</param>
+    static async Task RunWithBoundedConcurrencyAsync(
+        List<Func<Task>> operations,
+        CancellationToken cancellation,
+        Action<int>? afterAdvisoryDispatchCheckForTest = null,
+        Action<int>? failureRecordedForTest = null)
     {
         if (operations.Count == 0)
         {
@@ -556,6 +582,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         object failureLock = new();
         Exception? lowestOrdinalFailure = null;
         int lowestFailureOrdinal = int.MaxValue;
+        int failureRecorded = 0;
+        bool cancellationPreventedDispatch = false;
 
         for (int operationOrdinal = 0; operationOrdinal < operations.Count; operationOrdinal++)
         {
@@ -566,7 +594,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             // -- they are drained below -- since they may already have side effects (e.g. an
             // in-flight upload) and must not touch the semaphore, or mutate their target field,
             // after this method has returned control to the caller.
-            if (HasFailure() || cancellation.IsCancellationRequested)
+            if (AdvisoryShouldStopDispatch())
             {
                 break;
             }
@@ -578,12 +606,42 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             // operation.
             await throttle.WaitAsync(CancellationToken.None);
 
-            // Re-check immediately after acquiring the slot: cancellation or a failure may have
-            // occurred while this operation was queued waiting for a slot to free up. If so,
-            // release the slot back (this operation never started, so there is nothing to drain
-            // for it) and stop dispatching -- otherwise a newly-freed slot could let a new
-            // operation start after cancellation/failure was already observed.
-            if (HasFailure() || cancellation.IsCancellationRequested)
+            // Avoid taking the claim lock when a failure or cancellation is already visible. This
+            // check is advisory: the authoritative decision remains the locked claim below.
+            if (AdvisoryShouldStopDispatch())
+            {
+                throttle.Release();
+                break;
+            }
+
+            // A test can pause after advisory eligibility passed to deterministically exercise a
+            // failure racing with the authoritative dispatch claim.
+            afterAdvisoryDispatchCheckForTest?.Invoke(operationOrdinal);
+
+            // Atomically claim this operation under the same lock used to record failures. The
+            // successful claim is the operation's dispatch linearization point: a failure recorded
+            // afterward does not revoke it, but no operation can claim dispatch after a failure is
+            // recorded. Invoke the delegate outside the lock so arbitrary operation code never
+            // runs while holding shared helper state.
+            bool dispatchClaimed;
+            lock (failureLock)
+            {
+                if (lowestOrdinalFailure != null)
+                {
+                    dispatchClaimed = false;
+                }
+                else if (cancellation.IsCancellationRequested)
+                {
+                    cancellationPreventedDispatch = true;
+                    dispatchClaimed = false;
+                }
+                else
+                {
+                    dispatchClaimed = true;
+                }
+            }
+
+            if (!dispatchClaimed)
             {
                 throttle.Release();
                 break;
@@ -608,9 +666,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         }
 
         Exception? failureToThrow;
+        bool throwCancellation;
         lock (failureLock)
         {
             failureToThrow = lowestOrdinalFailure;
+            throwCancellation = cancellationPreventedDispatch;
         }
 
         if (failureToThrow != null)
@@ -621,16 +681,28 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             ExceptionDispatchInfo.Capture(failureToThrow).Throw();
         }
 
-        // No operation failed, but cancellation may still have cut dispatch short before every
-        // operation was started; surface that the same way a sequential await chain would have.
-        cancellation.ThrowIfCancellationRequested();
-
-        bool HasFailure()
+        if (throwCancellation)
         {
-            lock (failureLock)
+            // Synthesize cancellation only when it actually prevented a pending operation from
+            // claiming dispatch. Cancellation observed after every operation was already claimed
+            // must not convert otherwise successful completed work into cancellation.
+            cancellation.ThrowIfCancellationRequested();
+        }
+
+        bool AdvisoryShouldStopDispatch()
+        {
+            if (Volatile.Read(ref failureRecorded) != 0)
             {
-                return lowestOrdinalFailure != null;
+                return true;
             }
+
+            if (cancellation.IsCancellationRequested)
+            {
+                cancellationPreventedDispatch = true;
+                return true;
+            }
+
+            return false;
         }
 
         async Task TrackAsync(Func<Task> operation, int operationOrdinal)
@@ -652,7 +724,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         lowestFailureOrdinal = operationOrdinal;
                         lowestOrdinalFailure = ex;
                     }
+
+                    Volatile.Write(ref failureRecorded, 1);
                 }
+
+                failureRecordedForTest?.Invoke(operationOrdinal);
             }
             finally
             {

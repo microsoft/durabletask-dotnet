@@ -641,6 +641,59 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task RunWithBoundedConcurrencyAsync_DispatchCallbackThrows_DrainsClaimedOperationBeforeRethrow()
+    {
+        // Arrange: operation 0 is already claimed and blocked when the test-only callback throws
+        // before operation 1 can claim its slot.
+        TaskCompletionSource<bool> releaseClaimedOperation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int claimedOperationCompleted = 0;
+        int pendingOperationStarted = 0;
+        List<Func<Task>> operations =
+        [
+            async () =>
+            {
+                await releaseClaimedOperation.Task;
+                Interlocked.Exchange(ref claimedOperationCompleted, 1);
+            },
+            () =>
+            {
+                Interlocked.Exchange(ref pendingOperationStarted, 1);
+                return Task.CompletedTask;
+            },
+        ];
+        Action<int> afterAdvisoryDispatchCheck = operationOrdinal =>
+        {
+            if (operationOrdinal == 1)
+            {
+                throw new InvalidOperationException("Test dispatch callback failed.");
+            }
+        };
+
+        // Act
+        Task runTask = RunWithBoundedConcurrencyAsync(
+            operations,
+            CancellationToken.None,
+            afterAdvisoryDispatchCheck);
+
+        // Assert: the callback failure stops the pending operation but does not abandon work that
+        // was already claimed. The original callback exception is rethrown only after that work drains.
+        try
+        {
+            runTask.IsCompleted.Should().BeFalse();
+            Volatile.Read(ref pendingOperationStarted).Should().Be(0);
+        }
+        finally
+        {
+            releaseClaimedOperation.TrySetResult(true);
+        }
+
+        Func<Task> act = () => runTask.WaitAsync(TimeSpan.FromSeconds(10));
+        (await act.Should().ThrowExactlyAsync<InvalidOperationException>())
+            .WithMessage("Test dispatch callback failed.");
+        Volatile.Read(ref claimedOperationCompleted).Should().Be(1);
+    }
+
+    [Fact]
     public async Task RunWithBoundedConcurrencyAsync_FailureRecordedBeforePendingDispatchClaim_DoesNotStartPendingOperation()
     {
         // Arrange: eight operations occupy the concurrency limit. Operation 0 succeeds to release

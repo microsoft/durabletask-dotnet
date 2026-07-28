@@ -616,7 +616,18 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
             // A test can pause after advisory eligibility passed to deterministically exercise a
             // failure racing with the authoritative dispatch claim.
-            afterAdvisoryDispatchCheckForTest?.Invoke(operationOrdinal);
+            try
+            {
+                afterAdvisoryDispatchCheckForTest?.Invoke(operationOrdinal);
+            }
+            catch (Exception ex)
+            {
+                // The callback runs after acquiring a slot but before claiming the operation. Route
+                // test failures through the normal drain path and release the unclaimed slot.
+                RecordFailure(ex, operationOrdinal);
+                throttle.Release();
+                break;
+            }
 
             // Atomically claim this operation under the same lock used to record failures. The
             // successful claim is the operation's dispatch linearization point: a failure recorded
@@ -705,6 +716,20 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             return false;
         }
 
+        void RecordFailure(Exception ex, int operationOrdinal)
+        {
+            lock (failureLock)
+            {
+                if (operationOrdinal < lowestFailureOrdinal)
+                {
+                    lowestFailureOrdinal = operationOrdinal;
+                    lowestOrdinalFailure = ex;
+                }
+
+                Volatile.Write(ref failureRecorded, 1);
+            }
+        }
+
         async Task TrackAsync(Func<Task> operation, int operationOrdinal)
         {
             try
@@ -717,17 +742,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 // operation happened to finish first. The exception is captured -- not rethrown --
                 // so Task.WhenAll above never faults, guaranteeing every operation, including
                 // this finally block, runs to completion before the semaphore is disposed.
-                lock (failureLock)
-                {
-                    if (operationOrdinal < lowestFailureOrdinal)
-                    {
-                        lowestFailureOrdinal = operationOrdinal;
-                        lowestOrdinalFailure = ex;
-                    }
-
-                    Volatile.Write(ref failureRecorded, 1);
-                }
-
+                RecordFailure(ex, operationOrdinal);
                 failureRecordedForTest?.Invoke(operationOrdinal);
             }
             finally

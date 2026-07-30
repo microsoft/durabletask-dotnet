@@ -59,4 +59,25 @@ public class UseExternalizedPayloadsTests
         // Assert
         services.Should().NotContain(d => d.ServiceType == typeof(IHostedService));
     }
+
+    [Fact]
+    public void UseExternalizedPayloads_ClientOnly_RegistersResolvablePayloadStore()
+    {
+        // Arrange - a client-only host with no worker and no explicit AddExternalizedPayloadStore. This is the
+        // exact shape that previously failed: the core method declared a PostConfigure dependency on
+        // PayloadStore without ever registering it, so options resolution threw at runtime.
+        ServiceCollection services = new();
+        Mock<IDurableTaskClientBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(string.Empty);
+
+        // Act - UseDevelopmentStorage=true is a valid connection string that BlobServiceClient accepts with no
+        // network I/O, so the store constructs offline. Build the provider and actually resolve PayloadStore.
+        builder.Object.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true");
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Assert - the store resolves without throwing and is the blob-backed implementation.
+        PayloadStore store = provider.GetRequiredService<PayloadStore>();
+        store.Should().BeOfType<BlobPayloadStore>();
+    }
 }

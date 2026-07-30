@@ -1101,10 +1101,6 @@ namespace {targetNamespace}
             string inputType = activity.GetInputTypeForNamespace(targetNamespace);
             string outputType = activity.GetOutputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
-            if (inputType.EndsWith("?", StringComparison.Ordinal))
-            {
-                inputParameter += " = default";
-            }
 
             string simplifiedActivityTypeName = SimplifyTypeName(activity.TypeName, targetNamespace);
             // GeneratedActivityContext is a generated class that we use for each generated activity trigger definition.

@@ -90,6 +90,16 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                     await context.Entities.CallEntityAsync(
                         input.JobEntityId, nameof(BlobPurgeJob.RecordPurged), (long)acks.Count);
                 }
+                else
+                {
+                    // Nothing in this batch could be acknowledged: every delete returned Retry (e.g. a storage
+                    // outage or throttling). Deletes report failure as a return value rather than an exception,
+                    // so no retry policy or backoff applies on that path. The backend serves tombstones with an
+                    // uncursored TOP(N) query, so continuing immediately would refetch the identical rows and
+                    // re-attempt the identical deletes in a tight loop for as long as the outage lasts. Back off
+                    // before trying again.
+                    await context.CreateTimer(ErrorBackoff, default);
+                }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {

@@ -23,6 +23,10 @@ namespace Microsoft.DurableTask;
     Justification = "SemaphoreSlim does not allocate a disposable resource unless AvailableWaitHandle is accessed.")]
 public sealed class BlobPayloadStore : PayloadStore
 {
+    /// <summary>
+    /// The prefix of legacy v1 payload tokens, which identify the container by name only and not the storage
+    /// account. Auto-purge uses this to detect and skip v1 tokens.
+    /// </summary>
     internal const string TokenPrefixV1 = "blob:v1:";
     const string TokenPrefixV2 = "blob:v2:";
     const string ContentEncodingGzip = "gzip";

@@ -38,6 +38,22 @@ public class DeleteExternalBlobActivityTests
         result.Should().Be(BlobDeleteResult.Retry);
     }
 
+    [Fact]
+    public async Task RunAsync_WhenDeleteThrowsPayloadStorageException_DiscardsToUnblockPipeline()
+    {
+        // Arrange - the payload lives in a storage account the configured credential cannot reach. Retrying can
+        // never succeed and the backend batch is cursor-less, so a permanently unreachable row would re-stream
+        // every cycle and block later rows; it must be discarded (acked), not retried.
+        StubPayloadStore store = new(new PayloadStorageException("cross-account delete requires identity auth"));
+        DeleteExternalBlobActivity activity = new(store, new TestLogger<DeleteExternalBlobActivity>());
+
+        // Act
+        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v2:https://other.blob.core.windows.net/c/abc123");
+
+        // Assert - discarded so the pipeline head-of-line is not blocked by an undeletable payload.
+        result.Should().Be(BlobDeleteResult.Discarded);
+    }
+
     sealed class StubPayloadStore : PayloadStore
     {
         readonly Exception? deleteError;

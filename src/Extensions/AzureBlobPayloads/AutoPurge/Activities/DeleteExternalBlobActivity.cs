@@ -20,11 +20,16 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// <see cref="PayloadStore.DeleteAsync"/> means those built-in retries were already exhausted.
 /// </item>
 /// <item>
-/// Permanent failures are discarded (acked so the backend clears the row): an <see cref="ArgumentException"/>
-/// from the store's own token decode / container-mismatch check (thrown client-side before any network call),
-/// and a <see cref="RequestFailedException"/> with <see cref="RequestFailedException.Status"/> 400 (for
-/// example InvalidUri / InvalidResourceName when the decoded blob name violates Azure naming rules). Retrying
-/// either can never succeed.
+/// Permanent failures are discarded (acked so the backend clears the row) because retrying can never succeed:
+/// an <see cref="ArgumentException"/> from the store's token decode - a genuinely malformed token, or a legacy
+/// v1 token whose container does not match the configured store (self-describing v2 tokens are not conflated
+/// into this: a different account/container is either handled or surfaced as the store exception below); a
+/// <see cref="RequestFailedException"/> with <see cref="RequestFailedException.Status"/> 400 (for example
+/// InvalidUri / InvalidResourceName when the decoded blob name violates Azure naming rules); and a
+/// <see cref="PayloadStorageException"/> when a v2 token points at a storage account the configured credential
+/// cannot reach (connection-string / account-key auth is account-specific). The backend batch is cursor-less,
+/// so an undroppable row would otherwise re-stream every cycle and block the pipeline head-of-line; the
+/// account-unreachable case is logged at error level so an operator can reconcile it.
 /// </item>
 /// <item>
 /// Everything else is treated as transient and leaves the payload tombstoned to retry on a later cycle:
@@ -68,6 +73,15 @@ public class DeleteExternalBlobActivity(
             // decoded blob name violates Azure naming rules). Retrying can never succeed, so discard it like a
             // poison token: ack so the backend clears the row instead of re-streaming it forever.
             this.logger.BlobPurgeDeleteDiscarded(ex, input);
+            return BlobDeleteResult.Discarded;
+        }
+        catch (PayloadStorageException ex)
+        {
+            // The payload lives in a storage account this worker's credential cannot reach (connection-string /
+            // account-key auth is account-specific). Retrying can never succeed and the batch is cursor-less, so a
+            // permanently unreachable row would re-stream every cycle and block later rows. Discard it and log
+            // loudly so an operator can reconfigure identity auth and delete the blob out of band.
+            this.logger.BlobPurgeDeleteOrphanedUnreachableAccount(ex, input);
             return BlobDeleteResult.Discarded;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)

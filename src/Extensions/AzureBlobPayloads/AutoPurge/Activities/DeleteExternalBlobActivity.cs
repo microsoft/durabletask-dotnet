@@ -77,11 +77,12 @@ public class DeleteExternalBlobActivity(
         }
         catch (PayloadStorageException ex)
         {
-            // The payload lives in a storage account this worker's credential cannot reach (connection-string /
-            // account-key auth is account-specific). Retrying can never succeed and the batch is cursor-less, so a
-            // permanently unreachable row would re-stream every cycle and block later rows. Discard it and log
-            // loudly so an operator can reconfigure identity auth and delete the blob out of band.
-            this.logger.BlobPurgeDeleteOrphanedUnreachableAccount(ex, input);
+            // The token is well-formed but points at a storage account this worker's credential cannot reach
+            // (cross-account without AAD). Retrying can never succeed from this process, and because the backend
+            // streams tombstones with an uncursored TOP(N) query, leaving it un-acked would re-serve the same
+            // token every cycle and permanently block the purge pipeline. Discard it so the row is cleared, and
+            // log at Error so an operator can reclaim the orphaned blob out-of-band.
+            this.logger.BlobPurgeDeleteUnreachable(ex, input);
             return BlobDeleteResult.Discarded;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)

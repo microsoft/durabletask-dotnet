@@ -105,7 +105,7 @@ public class BlobPayloadStoreDeleteTests
     }
 
     [Fact]
-    public async Task DeleteAsync_V2TokenSameAccountAndContainer_DeletesViaConfiguredContainerClient()
+    public async Task DeleteAsync_V2TokenSameContainer_DeletesViaConfiguredClient()
     {
         // Arrange - a self-describing v2 token whose account+container match the configured store. The store
         // recognizes it via IsConfiguredContainer and deletes through the existing container client (which works
@@ -125,7 +125,7 @@ public class BlobPayloadStoreDeleteTests
     }
 
     [Fact]
-    public async Task DeleteAsync_V2TokenDifferentAccountWithCredential_UsesCrossAccountClientNotConfiguredContainer()
+    public async Task DeleteAsync_V2TokenDifferentAccountWithCredential_DoesNotUseConfiguredContainer()
     {
         // Arrange - a v2 token pointing at a DIFFERENT account than the configured store, with identity auth
         // available. The store must build a BlobClient bound to the token's own account using the credential and
@@ -151,7 +151,7 @@ public class BlobPayloadStoreDeleteTests
     }
 
     [Fact]
-    public async Task DeleteAsync_V2TokenDifferentAccountWithoutCredential_ThrowsPayloadStorageException()
+    public async Task DeleteAsync_V2TokenDifferentAccountWithoutCredential_ThrowsPayloadStorageExceptionAndDoesNotDelete()
     {
         // Arrange - the configured store uses a connection string (account-key auth, no TokenCredential) and the
         // token points at a different account. Account keys are account-specific, so the delete cannot cross

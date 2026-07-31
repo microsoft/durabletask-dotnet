@@ -231,7 +231,7 @@ public sealed class BlobPayloadStore : PayloadStore
                 $"The externalized payload lives in a different storage account ('{decoded.ContainerUri}') than the " +
                 $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload deletes " +
                 "require identity (AAD) authentication with access to both accounts; connection-string / " +
-                "account-key credentials are account-specific and cannot delete from another account.");
+                "account-key credentials are account-specific and cannot delete in another account.");
         }
 
         // Idempotent by design: DeleteIfExistsAsync returns false (rather than throwing) when the blob is

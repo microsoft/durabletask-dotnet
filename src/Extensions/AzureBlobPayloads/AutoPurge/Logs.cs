@@ -40,6 +40,6 @@ static partial class Logs
     [LoggerMessage(EventId = 820, Level = LogLevel.Warning, Message = "Blob payload auto-purge cycle for job '{jobId}' failed; backing off before retrying so the job keeps running.")]
     public static partial void BlobPurgeCycleFailed(this ILogger logger, Exception exception, string? jobId);
 
-    [LoggerMessage(EventId = 821, Level = LogLevel.Error, Message = "Externalized payload token '{token}' was orphaned: its blob lives in a storage account the configured credential cannot reach (cross-account deletes require identity/AAD auth; connection-string / account-key auth is account-specific). Discarding it so the purge pipeline is not blocked; reconfigure identity auth with access to that account and delete the blob out of band.")]
-    public static partial void BlobPurgeDeleteOrphanedUnreachableAccount(this ILogger logger, Exception exception, string token);
+    [LoggerMessage(EventId = 821, Level = LogLevel.Error, Message = "Externalized payload token '{token}' points at a storage account the configured credential cannot reach; the blob cannot be deleted by this worker and will be orphaned. Acknowledging it so the backend can clear the row - reclaim the blob manually or reconfigure the payload store with identity (AAD) authentication that can access both accounts.")]
+    public static partial void BlobPurgeDeleteUnreachable(this ILogger logger, Exception exception, string token);
 }

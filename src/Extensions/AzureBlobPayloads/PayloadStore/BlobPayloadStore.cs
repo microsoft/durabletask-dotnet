@@ -17,6 +17,10 @@ namespace Microsoft.DurableTask;
 /// <c>blob:v2:{fullBlobUrl}</c>, where the URL is the blob's absolute URI including the storage account.
 /// Legacy <c>blob:v1:{container}:{blobName}</c> tokens are still recognized for read back-compatibility.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1001:Types that own disposable fields should be disposable",
+    Justification = "SemaphoreSlim does not allocate a disposable resource unless AvailableWaitHandle is accessed.")]
 public sealed class BlobPayloadStore : PayloadStore
 {
     const string TokenPrefixV1 = "blob:v1:";
@@ -26,9 +30,15 @@ public sealed class BlobPayloadStore : PayloadStore
     const int BaseDelayMs = 250;
     const int MaxDelayMs = 10_000;
     const int NetworkTimeoutMinutes = 2;
+
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
     readonly BlobClientOptions clientOptions;
+    readonly SemaphoreSlim containerInitializationLock = new(initialCount: 1, maxCount: 1);
+
+    // Each successful initialization publishes a unique token. The token lets a stale
+    // ContainerNotFound failure invalidate only the initialization generation it used.
+    object? containerGeneration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class.
@@ -71,6 +81,19 @@ public sealed class BlobPayloadStore : PayloadStore
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class using an existing
+    /// container client. Intended for unit testing only.
+    /// </summary>
+    /// <param name="options">The options for the blob payload store.</param>
+    /// <param name="containerClient">The blob container client to use.</param>
+    internal BlobPayloadStore(LargePayloadStorageOptions options, BlobContainerClient containerClient)
+    {
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        this.containerClient = containerClient ?? throw new ArgumentNullException(nameof(containerClient));
+        this.clientOptions = new BlobClientOptions();
+    }
+
     /// <inheritdoc/>
     public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
     {
@@ -80,36 +103,58 @@ public sealed class BlobPayloadStore : PayloadStore
 
         byte[] payloadBuffer = Encoding.UTF8.GetBytes(payLoad);
 
-        // Ensure container exists (idempotent)
-        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, cancellationToken);
-
-        if (this.options.CompressionEnabled)
+        // Ensure container exists. Cached/single-flight after the first successful call so we
+        // don't pay for an extra CreateIfNotExistsAsync request/transaction on every upload.
+        // Retry one write after an out-of-band container deletion so the cached path preserves
+        // the recovery behavior that an unconditional CreateIfNotExistsAsync provided before
+        // initialization was cached.
+        bool retryAfterContainerNotFound = true;
+        while (true)
         {
-            BlobOpenWriteOptions writeOptions = new()
+            object generation = await this.EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
+
+            try
             {
-                HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
-            };
-            using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
-            using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
+                if (this.options.CompressionEnabled)
+                {
+                    BlobOpenWriteOptions writeOptions = new()
+                    {
+                        HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
+                    };
+                    using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
+                    using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
 
-            // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                    // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-            // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-            await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
-            await compressedBlobStream.FlushAsync(cancellationToken);
-            await blobStream.FlushAsync(cancellationToken);
+                    // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+                    await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
+                    await compressedBlobStream.FlushAsync(cancellationToken);
+                    await blobStream.FlushAsync(cancellationToken);
+                }
+                else
+                {
+                    using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+
+                    // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                    // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+                    await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
+                    await blobStream.FlushAsync(cancellationToken);
+                }
+            }
+            catch (RequestFailedException ex) when (
+                retryAfterContainerNotFound &&
+                ex.ErrorCode == BlobErrorCode.ContainerNotFound)
+            {
+                // Clear only the generation used by this upload, then retry once. If Azure is still
+                // deleting the container, CreateIfNotExistsAsync can surface ContainerBeingDeleted,
+                // matching the behavior before initialization was cached.
+                _ = Interlocked.CompareExchange(ref this.containerGeneration, null, generation);
+                retryAfterContainerNotFound = false;
+                continue;
+            }
+
+            return EncodeToken(blob.Uri);
         }
-        else
-        {
-            using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
-
-            // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
-            // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-            await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
-            await blobStream.FlushAsync(cancellationToken);
-        }
-
-        return EncodeToken(blob.Uri);
     }
 
     /// <inheritdoc/>
@@ -275,6 +320,39 @@ public sealed class BlobPayloadStore : PayloadStore
                 tokenContainerUri.AbsolutePath.TrimEnd('/'),
                 configured.AbsolutePath.TrimEnd('/'),
                 StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ensures the container exists and returns the initialization generation used by the caller.
+    /// </summary>
+    async Task<object> EnsureContainerExistsAsync(CancellationToken cancellationToken)
+    {
+        object? generation = Volatile.Read(ref this.containerGeneration);
+        if (generation is not null)
+        {
+            return generation;
+        }
+
+        await this.containerInitializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            generation = Volatile.Read(ref this.containerGeneration);
+            if (generation is not null)
+            {
+                return generation;
+            }
+
+            await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            generation = new object();
+            Volatile.Write(ref this.containerGeneration, generation);
+            return generation;
+        }
+        finally
+        {
+            this.containerInitializationLock.Release();
+        }
     }
 
     /// <summary>

@@ -20,10 +20,16 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// <see cref="PayloadStore.DeleteAsync"/> means those built-in retries were already exhausted.
 /// </item>
 /// <item>
+/// Legacy <c>blob:v1:</c> tokens are discarded without a delete attempt: a v1 token carries only a container
+/// name, not the storage account, so a delete against the currently-configured account cannot be verified - if
+/// the store has been repointed the delete would report success while the real blob survives elsewhere. The
+/// backend ack protocol has no "skip" status (an un-acked row is re-served every cycle), so the token is acked
+/// to keep the pipeline moving and logged at error level as the operator's recovery pointer.
+/// </item>
+/// <item>
 /// Permanent failures are discarded (acked so the backend clears the row) because retrying can never succeed:
-/// an <see cref="ArgumentException"/> from the store's token decode - a genuinely malformed token, or a legacy
-/// v1 token whose container does not match the configured store (self-describing v2 tokens are not conflated
-/// into this: a different account/container is either handled or surfaced as the store exception below); a
+/// an <see cref="ArgumentException"/> from the store's token decode - a genuinely malformed or unrecognized
+/// token (v1 tokens are gated out above and never reach the store); a
 /// <see cref="RequestFailedException"/> with <see cref="RequestFailedException.Status"/> 400 (for example
 /// InvalidUri / InvalidResourceName when the decoded blob name violates Azure naming rules); and a
 /// <see cref="PayloadStorageException"/> when a v2 token points at a storage account the configured credential
@@ -34,8 +40,10 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// <item>
 /// Everything else is treated as transient and leaves the payload tombstoned to retry on a later cycle:
 /// throttling / 5xx that outlived the SDK's retries, 403 authorization failures (which need an operator
-/// credential fix rather than dropping data), and timeouts / cancellation. A blob is never dropped on an
-/// uncertain error, and a single bad token never fails the whole batch.
+/// credential fix rather than dropping data), timeouts / cancellation, and a <see cref="NotSupportedException"/>
+/// from a misconfigured store that cannot delete at all (retried, not dropped, so the work is recoverable once
+/// a deleting store is registered). A blob is never dropped on an uncertain error, and a single bad token never
+/// fails the whole batch.
 /// </item>
 /// </list>
 /// </remarks>
@@ -54,6 +62,20 @@ public class DeleteExternalBlobActivity(
     public override async Task<BlobDeleteResult> RunAsync(TaskActivityContext context, string input)
     {
         Check.NotNullOrEmpty(input, nameof(input));
+
+        if (input.StartsWith(BlobPayloadStore.TokenPrefixV1, StringComparison.Ordinal))
+        {
+            // Auto-purge deliberately does not act on legacy v1 tokens. A v1 token carries only a container
+            // *name* - not the storage account - so a delete against the currently-configured account cannot be
+            // verified: if the store has since been repointed, DeleteIfExistsAsync returns false and the purge
+            // would silently report success while the real blob survives in the old account. Rather than delete
+            // on an unverifiable pointer, the token is discarded. The backend ack protocol carries no "skip"
+            // status (PayloadPurgeAck is just partition/instance/payload id, and an un-acked row is re-served by
+            // an uncursored TOP(N) query every cycle), so declining without acking would permanently block the
+            // pipeline. The full token is logged at error level so it remains a recoverable pointer.
+            this.logger.BlobPurgeDeleteV1TokenUnsupported(input);
+            return BlobDeleteResult.Discarded;
+        }
 
         try
         {
@@ -74,6 +96,16 @@ public class DeleteExternalBlobActivity(
             // poison token: ack so the backend clears the row instead of re-streaming it forever.
             this.logger.BlobPurgeDeleteDiscarded(ex, input);
             return BlobDeleteResult.Discarded;
+        }
+        catch (NotSupportedException ex)
+        {
+            // The registered store does not implement deletion (PayloadStore.DeleteAsync is virtual and its base
+            // implementation throws). This is a misconfiguration, not poison data: every payload would fail the
+            // same way, so acking would hard-delete the backend's entire record of what still needs cleanup while
+            // every blob survives. Keep the payload tombstoned so the work is recoverable once an operator
+            // registers a store that can delete.
+            this.logger.BlobPurgeDeleteNotSupported(ex, input);
+            return BlobDeleteResult.Retry;
         }
         catch (PayloadStorageException ex)
         {

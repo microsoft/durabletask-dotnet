@@ -14,7 +14,7 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// Client-side hosted service that ensures the singleton blob payload auto-purge job exists. It is registered
 /// only when auto-purge is enabled at registration time (see the UseExternalizedPayloads configure overload),
 /// so it does not re-check the flag here. It never blocks host startup: it runs on a background task and
-/// retries until the backend is reachable. The job is a whole-scheduler singleton, so racing client processes
+/// retries until the backend is reachable. The job is a per-task-hub singleton, so racing client processes
 /// simply no-op.
 /// </summary>
 sealed class BlobPurgeJobStarter : IHostedService
@@ -22,6 +22,7 @@ sealed class BlobPurgeJobStarter : IHostedService
     static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(10);
 
     readonly DurableTaskClient client;
+    readonly PayloadStore store;
     readonly IOptionsMonitor<LargePayloadStorageOptions> options;
     readonly string builderName;
     readonly ILogger<BlobPurgeJobStarter> logger;
@@ -32,11 +33,13 @@ sealed class BlobPurgeJobStarter : IHostedService
 
     public BlobPurgeJobStarter(
         DurableTaskClient client,
+        PayloadStore store,
         IOptionsMonitor<LargePayloadStorageOptions> options,
         string builderName,
         ILogger<BlobPurgeJobStarter> logger)
     {
         this.client = Check.NotNull(client);
+        this.store = Check.NotNull(store);
         this.options = Check.NotNull(options);
         this.builderName = Check.NotNull(builderName);
         this.logger = Check.NotNull(logger);
@@ -45,6 +48,17 @@ sealed class BlobPurgeJobStarter : IHostedService
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // Auto-purge deletes blobs through the store, but PayloadStore.DeleteAsync is virtual and its base
+        // implementation throws NotSupportedException. A store that cannot delete would fail every single
+        // payload, so refuse to start the job rather than spin against the backend - and rather than ack rows
+        // whose blobs were never deleted, which would destroy the backend's record of what still needs cleanup.
+        // This is a configuration error and is surfaced at startup, where it is cheapest to notice.
+        if (this.store is not BlobPayloadStore)
+        {
+            this.logger.BlobPurgeStoreCannotDelete(this.store.GetType().FullName);
+            return Task.CompletedTask;
+        }
+
         LargePayloadStorageOptions opts = this.options.Get(this.builderName);
         int batchSize = opts.PayloadPurgeBatchSize;
 

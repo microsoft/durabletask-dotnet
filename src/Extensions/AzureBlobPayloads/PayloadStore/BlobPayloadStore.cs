@@ -23,7 +23,7 @@ namespace Microsoft.DurableTask;
     Justification = "SemaphoreSlim does not allocate a disposable resource unless AvailableWaitHandle is accessed.")]
 public sealed class BlobPayloadStore : PayloadStore
 {
-    const string TokenPrefixV1 = "blob:v1:";
+    internal const string TokenPrefixV1 = "blob:v1:";
     const string TokenPrefixV2 = "blob:v2:";
     const string ContentEncodingGzip = "gzip";
     const int MaxRetryAttempts = 8;

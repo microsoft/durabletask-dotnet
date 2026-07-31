@@ -106,6 +106,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
         string builderName = builder.Name;
         builder.Services.AddSingleton<IHostedService>(sp => new BlobPurgeJobStarter(
             sp.GetRequiredService<DurableTaskClient>(),
+            sp.GetRequiredService<PayloadStore>(),
             sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>(),
             builderName,
             sp.GetRequiredService<ILogger<BlobPurgeJobStarter>>()));

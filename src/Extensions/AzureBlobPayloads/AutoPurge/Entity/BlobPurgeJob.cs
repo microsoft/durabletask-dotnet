@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
 {
     /// <summary>
-    /// Creates (or reactivates) the auto-purge job. Because the job is a whole-scheduler singleton, this is
+    /// Creates (or reactivates) the auto-purge job. Because the job is a per-task-hub singleton, this is
     /// intentionally a no-op when the job is already <see cref="BlobPurgeJobStatus.Active"/> so that extra
     /// client processes racing to create it do not disturb the running job.
     /// </summary>

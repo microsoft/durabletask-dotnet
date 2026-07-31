@@ -124,6 +124,12 @@ public sealed class LargePayloadStorageOptions
     /// the corresponding blobs from customer storage (the backend has no storage credentials of its own).
     /// Defaults to <c>false</c> (opt-in).
     /// </summary>
+    /// <remarks>
+    /// Auto-purge only deletes blobs referenced by self-describing <c>blob:v2:</c> tokens. Payloads that were
+    /// externalized by SDK versions that wrote legacy <c>blob:v1:</c> tokens are acknowledged and logged at
+    /// error level, but their blobs are not deleted: a v1 token does not identify the storage account, so the
+    /// delete cannot be verified.
+    /// </remarks>
     public bool AutoPurge { get; set; }
 
     /// <summary>

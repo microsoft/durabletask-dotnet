@@ -42,4 +42,13 @@ static partial class Logs
 
     [LoggerMessage(EventId = 821, Level = LogLevel.Error, Message = "Externalized payload token '{token}' points at a storage account the configured credential cannot reach; the blob cannot be deleted by this worker and will be orphaned. Acknowledging it so the backend can clear the row - reclaim the blob manually or reconfigure the payload store with identity (AAD) authentication that can access both accounts.")]
     public static partial void BlobPurgeDeleteUnreachable(this ILogger logger, Exception exception, string token);
+
+    [LoggerMessage(EventId = 822, Level = LogLevel.Error, Message = "Externalized payload token '{token}' uses the legacy v1 format, which auto-purge does not delete because it does not identify the storage account. The backing blob will NOT be deleted and is now orphaned; the row is acknowledged so the purge pipeline is not blocked. Reclaim the blob using the container and blob name in the token above, and upgrade to an SDK version that writes self-describing v2 tokens.")]
+    public static partial void BlobPurgeDeleteV1TokenUnsupported(this ILogger logger, string token);
+
+    [LoggerMessage(EventId = 823, Level = LogLevel.Error, Message = "Blob payload auto-purge is enabled but the registered PayloadStore ('{storeType}') is not an Azure Blob payload store and cannot delete payloads. The auto-purge job was not started; externalized payloads will not be reclaimed. Register the Azure Blob payload store, or disable AutoPurge.")]
+    public static partial void BlobPurgeStoreCannotDelete(this ILogger logger, string? storeType);
+
+    [LoggerMessage(EventId = 824, Level = LogLevel.Error, Message = "The registered PayloadStore does not support deleting payloads, so externalized payload token '{token}' cannot be purged. Leaving it tombstoned; register an Azure Blob payload store on the worker or disable AutoPurge.")]
+    public static partial void BlobPurgeDeleteNotSupported(this ILogger logger, Exception exception, string token);
 }

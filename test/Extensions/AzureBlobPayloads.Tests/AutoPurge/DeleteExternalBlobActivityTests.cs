@@ -18,7 +18,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, new TestLogger<DeleteExternalBlobActivity>());
 
         // Act
-        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v1:payloads:bad name");
+        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v2:https://acct.blob.core.windows.net/payloads/bad name");
 
         // Assert - discarded so the backend acks and clears the row instead of re-streaming forever.
         result.Should().Be(BlobDeleteResult.Discarded);
@@ -32,7 +32,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, new TestLogger<DeleteExternalBlobActivity>());
 
         // Act
-        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v1:payloads:abc123");
+        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v2:https://acct.blob.core.windows.net/payloads/abc123");
 
         // Assert - left tombstoned so a later purge cycle can retry; a blob is never dropped on doubt.
         result.Should().Be(BlobDeleteResult.Retry);
@@ -52,6 +52,54 @@ public class DeleteExternalBlobActivityTests
 
         // Assert - discarded so the pipeline head-of-line is not blocked by an undeletable payload.
         result.Should().Be(BlobDeleteResult.Discarded);
+    }
+
+    [Fact]
+    public async Task RunAsync_V1Token_DiscardsWithoutCallingStore()
+    {
+        // Arrange - auto-purge policy: a legacy v1 token identifies no storage account, so it is dropped before
+        // the store is ever consulted.
+        Mock<PayloadStore> store = new();
+        DeleteExternalBlobActivity activity = new(store.Object, new TestLogger<DeleteExternalBlobActivity>());
+
+        // Act
+        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v1:payloads:abc123");
+
+        // Assert - discarded by the gate, and the store's DeleteAsync was never invoked.
+        result.Should().Be(BlobDeleteResult.Discarded);
+        store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RunAsync_V2Token_CallsStore()
+    {
+        // Arrange - a self-describing v2 token is not gated and must reach the store.
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        DeleteExternalBlobActivity activity = new(store.Object, new TestLogger<DeleteExternalBlobActivity>());
+
+        // Act
+        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v2:https://acct.blob.core.windows.net/payloads/abc123");
+
+        // Assert - the store deleted the blob (proves the gate is v1-only and did not break the happy path).
+        result.Should().Be(BlobDeleteResult.Deleted);
+        store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenStoreDoesNotSupportDelete_RetriesToPreserveTombstone()
+    {
+        // Arrange - a store that cannot delete (the base PayloadStore.DeleteAsync throws NotSupportedException).
+        StubPayloadStore store = new(new NotSupportedException());
+        DeleteExternalBlobActivity activity = new(store, new TestLogger<DeleteExternalBlobActivity>());
+
+        // Act
+        BlobDeleteResult result = await activity.RunAsync(null!, "blob:v2:https://acct.blob.core.windows.net/payloads/abc123");
+
+        // Assert - retried (tombstone preserved), never discarded: acking would destroy the backend's cleanup
+        // ledger while the blob survives.
+        result.Should().Be(BlobDeleteResult.Retry);
+        result.Should().NotBe(BlobDeleteResult.Discarded);
     }
 
     sealed class StubPayloadStore : PayloadStore

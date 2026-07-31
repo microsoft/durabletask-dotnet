@@ -11,17 +11,18 @@ using Microsoft.Extensions.Options;
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
-/// Client-side hosted service that ensures the singleton blob payload auto-purge job exists. It is registered
-/// only when auto-purge is enabled at registration time (see the UseExternalizedPayloads configure overload),
-/// so it does not re-check the flag here. It never blocks host startup: it runs on a background task and
-/// retries until the backend is reachable. The job is a per-task-hub singleton, so racing client processes
-/// simply no-op.
+/// Client-side hosted service that ensures the per-task-hub singleton blob payload auto-purge job exists. It is
+/// registered unconditionally by UseExternalizedPayloads and decides what to do at startup, once options are
+/// fully resolved: it no-ops silently when auto-purge is disabled, and no-ops with an error log when the
+/// registered store cannot delete. It never blocks host startup - the ensure work runs on a background task
+/// that retries until the backend is reachable. The job is a per-task-hub singleton, so racing client
+/// processes simply no-op.
 /// </summary>
 sealed class BlobPurgeJobStarter : IHostedService
 {
     static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(10);
 
-    readonly DurableTaskClient client;
+    readonly IDurableTaskClientProvider clientProvider;
     readonly PayloadStore store;
     readonly IOptionsMonitor<LargePayloadStorageOptions> options;
     readonly string builderName;
@@ -32,13 +33,13 @@ sealed class BlobPurgeJobStarter : IHostedService
     Task? ensureTask;
 
     public BlobPurgeJobStarter(
-        DurableTaskClient client,
+        IDurableTaskClientProvider clientProvider,
         PayloadStore store,
         IOptionsMonitor<LargePayloadStorageOptions> options,
         string builderName,
         ILogger<BlobPurgeJobStarter> logger)
     {
-        this.client = Check.NotNull(client);
+        this.clientProvider = Check.NotNull(clientProvider);
         this.store = Check.NotNull(store);
         this.options = Check.NotNull(options);
         this.builderName = Check.NotNull(builderName);
@@ -48,6 +49,19 @@ sealed class BlobPurgeJobStarter : IHostedService
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        LargePayloadStorageOptions opts = this.options.Get(this.builderName);
+
+        // Not opted in. The starter is registered unconditionally by UseExternalizedPayloads because whether
+        // auto-purge is enabled can only be known once options are fully resolved - the flag can be set by the
+        // inline configure delegate, services.Configure, configuration binding or PostConfigure. Deciding at
+        // registration time (by running the delegate against a probe instance) both invoked user code twice and
+        // missed every enable path except the inline delegate. This is the normal path for apps that externalize
+        // payloads without auto-purge, so it returns silently without logging.
+        if (!opts.AutoPurge)
+        {
+            return Task.CompletedTask;
+        }
+
         // Auto-purge deletes blobs through the store, but PayloadStore.DeleteAsync is virtual and its base
         // implementation throws NotSupportedException. A store that cannot delete would fail every single
         // payload, so refuse to start the job rather than spin against the backend - and rather than ack rows
@@ -59,13 +73,17 @@ sealed class BlobPurgeJobStarter : IHostedService
             return Task.CompletedTask;
         }
 
-        LargePayloadStorageOptions opts = this.options.Get(this.builderName);
+        // Resolve the client by builder name rather than by type: a named client builder must get its own
+        // client, and resolving lazily here - after the AutoPurge gate - avoids constructing a DurableTaskClient
+        // at host start for apps that externalize payloads without auto-purge.
+        DurableTaskClient client = this.clientProvider.GetClient(this.builderName);
+
         int batchSize = opts.PayloadPurgeBatchSize;
 
         // Do not block host startup; ensure the job on a background task with basic retry until the backend
         // is reachable.
         this.cts = new CancellationTokenSource();
-        this.ensureTask = Task.Run(() => this.EnsureJobAsync(batchSize, this.cts.Token), CancellationToken.None);
+        this.ensureTask = Task.Run(() => this.EnsureJobAsync(client, batchSize, this.cts.Token), CancellationToken.None);
         return Task.CompletedTask;
     }
 
@@ -82,7 +100,7 @@ sealed class BlobPurgeJobStarter : IHostedService
         }
     }
 
-    async Task EnsureJobAsync(int batchSize, CancellationToken cancellationToken)
+    async Task EnsureJobAsync(DurableTaskClient client, int batchSize, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -96,7 +114,7 @@ sealed class BlobPurgeJobStarter : IHostedService
                 // id and no dedupe policy the backend would purge and replace the terminal instance on every
                 // host restart.) Only (re)schedule when the bridge is absent, or ended in a Failed/Terminated
                 // state that may never have applied Create - which lets a failed setup self-heal.
-                OrchestrationMetadata? existing = await this.client.GetInstanceAsync(
+                OrchestrationMetadata? existing = await client.GetInstanceAsync(
                     BlobPurgeConstants.StarterInstanceId, cancellationToken);
 
                 bool needsSchedule = existing is null
@@ -110,7 +128,7 @@ sealed class BlobPurgeJobStarter : IHostedService
                 BlobPurgeJobOperationRequest request = new(
                     this.entityId, nameof(BlobPurgeJob.Create), batchSize);
 
-                await this.client.ScheduleNewOrchestrationInstanceAsync(
+                await client.ScheduleNewOrchestrationInstanceAsync(
                     new TaskName(nameof(ExecuteBlobPurgeJobOperationOrchestrator)),
                     request,
                     new StartOrchestrationOptions(BlobPurgeConstants.StarterInstanceId),

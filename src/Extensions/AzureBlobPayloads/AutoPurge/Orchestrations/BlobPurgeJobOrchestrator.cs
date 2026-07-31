@@ -145,7 +145,8 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
     {
         BlobDeleteResult result = await context.CallActivityAsync<BlobDeleteResult>(
             nameof(DeleteExternalBlobActivity),
-            tombstone.Token);
+            tombstone.Token,
+            new TaskOptions(PurgeActivityRetryPolicy));
 
         return new DeleteOutcome(
             result != BlobDeleteResult.Retry,

@@ -35,18 +35,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 
         builder.Services.Configure(builder.Name, configure);
 
-        UseExternalizedPayloadsCore(builder);
-
-        // Conditional DI: register the auto-purge starter only when the caller opted into auto-purge. Peek the
-        // flag now by running the configure delegate against a probe (options configurators are pure setters).
-        LargePayloadStorageOptions probe = new();
-        configure(probe);
-        if (probe.AutoPurge)
-        {
-            RegisterBlobPurgeJobStarter(builder);
-        }
-
-        return builder;
+        return UseExternalizedPayloadsCore(builder);
     }
 
     /// <summary>
@@ -98,6 +87,12 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 }
             });
 
+        // Always register the auto-purge starter. Whether auto-purge is actually enabled can only be known once
+        // options are fully resolved - the flag can be set by the inline configure delegate, services.Configure,
+        // configuration binding or PostConfigure, none of which are visible here at registration time - so the
+        // starter is registered unconditionally and no-ops in StartAsync when AutoPurge is disabled.
+        RegisterBlobPurgeJobStarter(builder);
+
         return builder;
     }
 
@@ -105,7 +100,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
     {
         string builderName = builder.Name;
         builder.Services.AddSingleton<IHostedService>(sp => new BlobPurgeJobStarter(
-            sp.GetRequiredService<DurableTaskClient>(),
+            sp.GetRequiredService<IDurableTaskClientProvider>(),
             sp.GetRequiredService<PayloadStore>(),
             sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>(),
             builderName,

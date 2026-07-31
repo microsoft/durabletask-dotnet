@@ -53,7 +53,12 @@ jobs:
       with:
         submodules: true
 
-    - name: Setup .NET
+    - name: Setup .NET 6.0
+      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Setup .NET from global.json
       uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
       with:
         global-json-file: global.json

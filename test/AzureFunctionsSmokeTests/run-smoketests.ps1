@@ -30,7 +30,8 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectDir = $scriptDir
 $publishDir = Join-Path $projectDir "publish"
-$nugetConfig = Join-Path $scriptDir "..\..\nuget.config"
+$repoRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
+$nugetConfig = Join-Path $repoRoot "nuget.config"
 
 Write-Host "=== Azure Functions Smoke Test Runner ===" -ForegroundColor Cyan
 Write-Host ""

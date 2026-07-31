@@ -14,8 +14,8 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Azure Blob Storage implementation of <see cref="PayloadStore"/>.
 /// Stores payloads as blobs and returns self-describing opaque tokens in the form
-/// "blob:v2:&lt;fullBlobUrl&gt;", where the URL is the blob's absolute URI including the storage account.
-/// Legacy "blob:v1:&lt;container&gt;:&lt;blobName&gt;" tokens are still recognized for read back-compatibility.
+/// <c>blob:v2:{fullBlobUrl}</c>, where the URL is the blob's absolute URI including the storage account.
+/// Legacy <c>blob:v1:{container}:{blobName}</c> tokens are still recognized for read back-compatibility.
 /// </summary>
 public sealed class BlobPayloadStore : PayloadStore
 {
@@ -171,20 +171,19 @@ public sealed class BlobPayloadStore : PayloadStore
     /// configured store. <c>BlobClient.Uri</c> contains no SAS or account key and is safe to persist.
     /// </summary>
     /// <param name="blobUri">The absolute URI of the blob holding the payload.</param>
-    /// <returns>An opaque payload token in the form "blob:v2:&lt;fullBlobUrl&gt;".</returns>
+    /// <returns>An opaque payload token in the form <c>blob:v2:{fullBlobUrl}</c>.</returns>
     internal static string EncodeToken(Uri blobUri) => $"{TokenPrefixV2}{blobUri}";
 
     /// <summary>
-    /// Decodes a payload token. Supports self-describing v2 tokens ("blob:v2:&lt;fullBlobUrl&gt;") and legacy v1
-    /// tokens ("blob:v1:&lt;container&gt;:&lt;blobName&gt;"), the latter for read back-compatibility.
+    /// Decodes a payload token. Supports self-describing v2 tokens (<c>blob:v2:{fullBlobUrl}</c>) and legacy v1
+    /// tokens (<c>blob:v1:{container}:{blobName}</c>), the latter for read back-compatibility.
     /// </summary>
     /// <param name="token">The payload token to decode.</param>
     /// <returns>
-    /// A tuple describing the token: whether it is v2, the container and blob names, and (for v2 only) the
-    /// absolute blob URI and its container-level URI.
+    /// A <see cref="DecodeTokenResult"/> describing the token: whether it is v2, the container and blob names,
+    /// and (for v2 only) the absolute blob URI and its container-level URI.
     /// </returns>
-    internal static (bool IsV2, string Container, string Name, Uri? BlobUri, Uri? ContainerUri) DecodeToken(
-        string token)
+    internal static DecodeTokenResult DecodeToken(string token)
     {
         if (token.StartsWith(TokenPrefixV2, StringComparison.Ordinal))
         {
@@ -199,7 +198,7 @@ public sealed class BlobPayloadStore : PayloadStore
             string name = builder.BlobName;
             builder.BlobName = string.Empty;
             Uri containerUri = builder.ToUri();
-            return (true, container, name, blobUri, containerUri);
+            return new(true, container, name, blobUri, containerUri);
         }
 
         if (token.StartsWith(TokenPrefixV1, StringComparison.Ordinal))
@@ -211,7 +210,7 @@ public sealed class BlobPayloadStore : PayloadStore
                 throw new ArgumentException("Invalid external payload token format.", nameof(token));
             }
 
-            return (false, rest.Substring(0, sep), rest.Substring(sep + 1), null, null);
+            return new(false, rest.Substring(0, sep), rest.Substring(sep + 1), null, null);
         }
 
         throw new ArgumentException("Invalid external payload token.", nameof(token));
@@ -277,4 +276,20 @@ public sealed class BlobPayloadStore : PayloadStore
                 configured.AbsolutePath.TrimEnd('/'),
                 StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The result of decoding an externalized payload token.
+    /// </summary>
+    /// <param name="IsV2">Whether the token is a self-describing v2 token.</param>
+    /// <param name="Container">The name of the container holding the payload.</param>
+    /// <param name="Name">The name of the blob holding the payload.</param>
+    /// <param name="BlobUri">
+    /// The absolute URI of the blob holding the payload, or <see langword="null"/> for v1 tokens, which do not
+    /// carry the storage account.
+    /// </param>
+    /// <param name="ContainerUri">
+    /// The container-level URI of <paramref name="BlobUri"/>, or <see langword="null"/> for v1 tokens.
+    /// </param>
+    internal readonly record struct DecodeTokenResult(
+        bool IsV2, string Container, string Name, Uri? BlobUri, Uri? ContainerUri);
 }

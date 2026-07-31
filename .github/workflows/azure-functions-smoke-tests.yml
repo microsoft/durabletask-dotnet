@@ -31,9 +31,6 @@ jobs:
       with:
         global-json-file: global.json
 
-    - name: Restore dependencies
-      run: dotnet restore test/AzureFunctionsSmokeTests/AzureFunctionsSmokeTests.csproj
-
     - name: Run smoke tests
       run: |
         cd test/AzureFunctionsSmokeTests

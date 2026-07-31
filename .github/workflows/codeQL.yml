@@ -59,10 +59,10 @@ jobs:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $solution
+      run: dotnet restore "$env:solution" --configfile "$env:GITHUB_WORKSPACE\nuget.config"
 
     - name: Build
-      run: dotnet build $solution #--configuration $config #--no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
+      run: dotnet build "$env:solution" --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
 
     # Run CodeQL analysis
     - name: Perform CodeQL Analysis

@@ -47,16 +47,16 @@ jobs:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $env:solution
+      run: dotnet restore "$env:solution" --configfile "$env:GITHUB_WORKSPACE\nuget.config"
 
     - name: Build
-      run: dotnet build $env:solution --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
+      run: dotnet build "$env:solution" --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
 
     - name: Test
-      run: dotnet test $env:solution --configuration $env:config --no-build --verbosity normal
+      run: dotnet test "$env:solution" --configuration $env:config --no-build --no-restore --verbosity normal
 
     - name: Pack
-      run: dotnet pack $env:solution --configuration $env:config --no-build
+      run: dotnet pack "$env:solution" --configuration $env:config --no-build --no-restore
 
     - name: Upload
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

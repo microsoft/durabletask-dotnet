@@ -30,6 +30,7 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectDir = $scriptDir
 $publishDir = Join-Path $projectDir "publish"
+$nugetConfig = Join-Path $scriptDir "..\..\nuget.config"
 
 Write-Host "=== Azure Functions Smoke Test Runner ===" -ForegroundColor Cyan
 Write-Host ""
@@ -63,9 +64,27 @@ try {
     Cleanup
     Write-Host ""
     
-    # Step 1: Build the project
-    Write-Host "Step 1: Building the Azure Functions project..." -ForegroundColor Green
-    dotnet build $projectDir -c Release
+    # Step 1: Restore and build the project
+    Write-Host "Step 1: Restoring and building the Azure Functions project..." -ForegroundColor Green
+    $restoreArguments = @(
+        "restore"
+        $projectDir
+        "--configfile"
+        $nugetConfig
+    )
+    dotnet @restoreArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Restore failed with exit code $LASTEXITCODE"
+    }
+
+    $buildArguments = @(
+        "build"
+        $projectDir
+        "-c"
+        "Release"
+        "--no-restore"
+    )
+    dotnet @buildArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed with exit code $LASTEXITCODE"
     }
@@ -77,7 +96,16 @@ try {
     if (Test-Path $publishDir) {
         Remove-Item $publishDir -Recurse -Force
     }
-    dotnet publish $projectDir -c Release -o $publishDir
+    $publishArguments = @(
+        "publish"
+        $projectDir
+        "-c"
+        "Release"
+        "-o"
+        $publishDir
+        "--no-restore"
+    )
+    dotnet @publishArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Publish failed with exit code $LASTEXITCODE"
     }

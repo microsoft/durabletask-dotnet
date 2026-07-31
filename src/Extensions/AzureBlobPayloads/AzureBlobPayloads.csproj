@@ -26,4 +26,8 @@
   <ItemGroup>
     <SharedSection Include="Core" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Grpc.IntegrationTests" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
 </Project>

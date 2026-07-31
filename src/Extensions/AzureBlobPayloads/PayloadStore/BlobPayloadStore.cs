@@ -115,36 +115,36 @@ public sealed class BlobPayloadStore : PayloadStore
     /// <inheritdoc/>
     public override async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
     {
-        (bool isV2, string container, string name, Uri? blobUri, Uri? containerUri) = DecodeToken(token);
+        DecodeTokenResult decoded = DecodeToken(token);
 
-        if (!isV2)
+        if (!decoded.IsV2)
         {
             // v1 tokens do not carry the account, so the payload is assumed to live in the configured container.
-            if (!string.Equals(container, this.containerClient.Name, StringComparison.Ordinal))
+            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
             {
                 throw new ArgumentException("Token container does not match configured container.", nameof(token));
             }
 
-            return await DownloadFromBlobAsync(this.containerClient.GetBlobClient(name), cancellationToken);
+            return await DownloadFromBlobAsync(this.containerClient.GetBlobClient(decoded.Name), cancellationToken);
         }
 
         // v2 tokens are self-describing: honor the account and container encoded in the token.
         BlobClient blob;
-        if (this.IsConfiguredContainer(containerUri!))
+        if (this.IsConfiguredContainer(decoded.ContainerUri!))
         {
             // Same account and container as the configured store: reuse it (works with any auth mode).
-            blob = this.containerClient.GetBlobClient(name);
+            blob = this.containerClient.GetBlobClient(decoded.Name);
         }
         else if (this.options.Credential != null)
         {
             // The payload lives in a different account (e.g. the store was repointed). Identity auth can still
             // read it as long as the credential has RBAC access to that account.
-            blob = new BlobClient(blobUri, this.options.Credential, this.clientOptions);
+            blob = new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
         }
         else
         {
             throw new PayloadStorageException(
-                $"The externalized payload lives in a different storage account ('{containerUri}') than the " +
+                $"The externalized payload lives in a different storage account ('{decoded.ContainerUri}') than the " +
                 $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload reads " +
                 "require identity (AAD) authentication with access to both accounts; connection-string / " +
                 "account-key credentials are account-specific and cannot read another account.");

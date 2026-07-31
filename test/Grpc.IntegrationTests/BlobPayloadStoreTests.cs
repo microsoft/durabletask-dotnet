@@ -20,10 +20,10 @@ public class BlobPayloadStoreTests
         Assert.Contains("abc123def456", token);
 
         // Round-trip: decoding the encoded token yields the original container and blob name.
-        (bool isV2, string container, string name, _, _) = BlobPayloadStore.DecodeToken(token);
-        Assert.True(isV2);
-        Assert.Equal("mycontainer", container);
-        Assert.Equal("abc123def456", name);
+        BlobPayloadStore.DecodeTokenResult decoded = BlobPayloadStore.DecodeToken(token);
+        Assert.True(decoded.IsV2);
+        Assert.Equal("mycontainer", decoded.Container);
+        Assert.Equal("abc123def456", decoded.Name);
     }
 
     [Theory]
@@ -35,16 +35,15 @@ public class BlobPayloadStoreTests
         string token = "blob:v2:" + blobUrl;
 
         // Act
-        (bool isV2, string container, string name, Uri? blobUri, Uri? containerUri) =
-            BlobPayloadStore.DecodeToken(token);
+        BlobPayloadStore.DecodeTokenResult decoded = BlobPayloadStore.DecodeToken(token);
 
         // Assert
-        Assert.True(isV2);
-        Assert.Equal(expectedContainer, container);
-        Assert.Equal(expectedBlob, name);
-        Assert.Equal(new Uri(blobUrl), blobUri);
-        Assert.NotNull(containerUri);
-        Assert.EndsWith(expectedContainer, containerUri!.AbsolutePath);
+        Assert.True(decoded.IsV2);
+        Assert.Equal(expectedContainer, decoded.Container);
+        Assert.Equal(expectedBlob, decoded.Name);
+        Assert.Equal(new Uri(blobUrl), decoded.BlobUri);
+        Assert.NotNull(decoded.ContainerUri);
+        Assert.EndsWith(expectedContainer, decoded.ContainerUri!.AbsolutePath);
     }
 
     [Fact]
@@ -54,15 +53,14 @@ public class BlobPayloadStoreTests
         string token = "blob:v1:mycontainer:abc123def456";
 
         // Act
-        (bool isV2, string container, string name, Uri? blobUri, Uri? containerUri) =
-            BlobPayloadStore.DecodeToken(token);
+        BlobPayloadStore.DecodeTokenResult decoded = BlobPayloadStore.DecodeToken(token);
 
         // Assert
-        Assert.False(isV2);
-        Assert.Equal("mycontainer", container);
-        Assert.Equal("abc123def456", name);
-        Assert.Null(blobUri);
-        Assert.Null(containerUri);
+        Assert.False(decoded.IsV2);
+        Assert.Equal("mycontainer", decoded.Container);
+        Assert.Equal("abc123def456", decoded.Name);
+        Assert.Null(decoded.BlobUri);
+        Assert.Null(decoded.ContainerUri);
     }
 
     [Fact]

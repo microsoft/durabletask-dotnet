@@ -53,16 +53,21 @@ jobs:
       with:
         submodules: true
 
-    - name: Setup .NET
+    - name: Setup .NET 6.0
+      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Setup .NET from global.json
       uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
       with:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $solution
+      run: dotnet restore "$env:solution" --configfile "$env:GITHUB_WORKSPACE\nuget.config"
 
     - name: Build
-      run: dotnet build $solution #--configuration $config #--no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
+      run: dotnet build "$env:solution" --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
 
     # Run CodeQL analysis
     - name: Perform CodeQL Analysis

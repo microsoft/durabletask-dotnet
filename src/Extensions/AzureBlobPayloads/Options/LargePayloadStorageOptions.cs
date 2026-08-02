@@ -125,10 +125,12 @@ public sealed class LargePayloadStorageOptions
     /// Defaults to <c>false</c> (opt-in).
     /// </summary>
     /// <remarks>
-    /// Auto-purge only deletes blobs referenced by self-describing <c>blob:v2:</c> tokens. Payloads that were
-    /// externalized by SDK versions that wrote legacy <c>blob:v1:</c> tokens are acknowledged and logged at
-    /// error level, but their blobs are not deleted: a v1 token does not identify the storage account, so the
-    /// delete cannot be verified.
+    /// Auto-purge reclaims only blobs referenced by self-describing <c>blob:v2:</c> tokens. Payloads written by
+    /// SDK versions that emitted legacy <c>blob:v1:</c> tokens are not reclaimed, because a v1 token identifies
+    /// the container by name only and not the storage account, so the delete cannot be verified. Their backing
+    /// blobs remain in storage exactly as they did before auto-purge existed - this is not a new leak introduced
+    /// by auto-purge - and the backend removes their rows normally. Upgrading to an SDK version that writes v2
+    /// tokens makes newly-externalized payloads eligible.
     /// </remarks>
     public bool AutoPurge { get; set; }
 

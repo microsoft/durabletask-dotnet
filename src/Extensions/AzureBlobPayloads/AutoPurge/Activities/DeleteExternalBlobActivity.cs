@@ -24,7 +24,9 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// name, not the storage account, so a delete against the currently-configured account cannot be verified - if
 /// the store has been repointed the delete would report success while the real blob survives elsewhere. The
 /// backend ack protocol has no "skip" status (an un-acked row is re-served every cycle), so the token is acked
-/// to keep the pipeline moving and logged at error level as the operator's recovery pointer.
+/// to keep the pipeline moving and logged at error level as the operator's recovery pointer. A current backend
+/// hard-deletes v1 rows instead of tombstoning them, so this branch is a defensive guard for an older backend
+/// build or a row tombstoned before that fix, not the expected path.
 /// </item>
 /// <item>
 /// Permanent failures are discarded (acked so the backend clears the row) because retrying can never succeed:
@@ -72,7 +74,9 @@ public class DeleteExternalBlobActivity(
             // on an unverifiable pointer, the token is discarded. The backend ack protocol carries no "skip"
             // status (PayloadPurgeAck is just partition/instance/payload id, and an un-acked row is re-served by
             // an uncursored TOP(N) query every cycle), so declining without acking would permanently block the
-            // pipeline. The full token is logged at error level so it remains a recoverable pointer.
+            // pipeline. The full token is logged at error level so it remains a recoverable pointer. A current
+            // backend hard-deletes v1 rows instead of tombstoning them, so reaching this branch means an older
+            // backend build or a row tombstoned before that fix - it is a defensive guard, not the expected path.
             this.logger.BlobPurgeDeleteV1TokenUnsupported(input);
             return BlobDeleteResult.Discarded;
         }

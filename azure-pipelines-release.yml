@@ -45,8 +45,14 @@ steps:
 - task: NuGetAuthenticate@1
   displayName: Authenticate NuGet feeds
 
-- pwsh: dotnet restore "$(project)" --configfile nuget.config --verbosity minimal
+- task: DotNetCoreCLI@2
   displayName: Restore
+  inputs:
+    command: restore
+    verbosityRestore: Minimal
+    projects: $(project)
+    feedsToUse: config
+    nugetConfigPath: nuget.config
 
 # Build source directory
 - task: DotNetCoreCLI@2

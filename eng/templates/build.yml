@@ -47,14 +47,19 @@ jobs:
         - task: NuGetAuthenticate@1
           displayName: Authenticate NuGet feeds
 
+        # Restore uses command: custom rather than command: restore. The restore command's
+        # feedsToUse/nugetConfigPath inputs make the task copy nuget.config into a generated temp
+        # config and prefix every package source key with "feed-". Package source mapping matches on
+        # the source key and those entries are not rewritten, so the mapping the Central Feed Service
+        # requires stops applying and NuGet excludes the only feed. See
+        # https://github.com/microsoft/azure-pipelines-tasks/issues/15542.
         - task: DotNetCoreCLI@2
           displayName: Restore
           inputs:
-            command: restore
-            verbosityRestore: Minimal
+            command: custom
+            custom: restore
             projects: $(project)
-            feedsToUse: config
-            nugetConfigPath: nuget.config
+            arguments: --configfile nuget.config --verbosity minimal
 
         # Build source directory
         - task: DotNetCoreCLI@2

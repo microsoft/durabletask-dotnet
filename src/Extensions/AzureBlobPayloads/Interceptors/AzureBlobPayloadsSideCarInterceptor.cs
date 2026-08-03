@@ -16,11 +16,11 @@ namespace Microsoft.DurableTask;
 public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
     : PayloadInterceptor<object, object>(payloadStore, options)
 {
-    // Conservative cap on simultaneous Azure Blob uploads/downloads for a single message (e.g. a
-    // fan-out orchestrator response, a history chunk, or a batch of entity operations). Bounding
-    // concurrency lets independent payload operations overlap -- avoiding additive per-field
-    // latency -- without issuing an unbounded burst of requests that could trip Azure Storage
-    // account-level throttling (see https://aka.ms/azure-storage-scalability-targets).
+    // Conservative per-message cap on simultaneous Azure Blob uploads/downloads (e.g. a fan-out
+    // orchestrator response, a history chunk, or a batch of entity operations). This overlaps
+    // independent payload I/O without issuing an unbounded burst from one message. Account-wide
+    // throughput remains governed by Azure Storage scalability targets and SDK retry behavior
+    // (see https://aka.ms/azure-storage-scalability-targets).
     const int MaxConcurrentPayloadOperations = 8;
 
     Action? BeforeSharedMessageLockForTest { get; set; }
@@ -124,47 +124,22 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         switch (response)
         {
             case P.GetInstanceResponse r when r.OrchestrationState is { } s:
-                await RunWithBoundedConcurrencyAsync(
-                    [
-                        async () =>
-                        {
-                            string? input = await this.MaybeResolveAsync(s.Input, cancellation);
-                            this.BeforeSharedMessageLockForTest?.Invoke();
-                            lock (s)
-                            {
-                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
-                                s.Input = input;
-                            }
-                        },
-                        async () =>
-                        {
-                            string? output = await this.MaybeResolveAsync(s.Output, cancellation);
-                            this.BeforeSharedMessageLockForTest?.Invoke();
-                            lock (s)
-                            {
-                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
-                                s.Output = output;
-                            }
-                        },
-                        async () =>
-                        {
-                            string? customStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
-                            this.BeforeSharedMessageLockForTest?.Invoke();
-                            lock (s)
-                            {
-                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
-                                s.CustomStatus = customStatus;
-                            }
-                        },
-                    ],
-                    cancellation);
+                {
+                    List<Func<Task>> operations = [];
+                    this.AddOrchestrationStateResolutionOperations(operations, s, cancellation);
+                    await RunWithBoundedConcurrencyAsync(operations, cancellation);
+                }
+
                 break;
             case P.HistoryChunk c when c.Events != null:
                 {
                     List<Func<Task>> operations = [];
                     foreach (P.HistoryEvent e in c.Events)
                     {
-                        operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                        if (this.RequiresEventPayloadResolution(e))
+                        {
+                            operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                        }
                     }
 
                     await RunWithBoundedConcurrencyAsync(operations, cancellation);
@@ -176,36 +151,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     List<Func<Task>> operations = [];
                     foreach (P.OrchestrationState s in r.OrchestrationState)
                     {
-                        operations.Add(async () =>
-                        {
-                            string? input = await this.MaybeResolveAsync(s.Input, cancellation);
-                            this.BeforeSharedMessageLockForTest?.Invoke();
-                            lock (s)
-                            {
-                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
-                                s.Input = input;
-                            }
-                        });
-                        operations.Add(async () =>
-                        {
-                            string? output = await this.MaybeResolveAsync(s.Output, cancellation);
-                            this.BeforeSharedMessageLockForTest?.Invoke();
-                            lock (s)
-                            {
-                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
-                                s.Output = output;
-                            }
-                        });
-                        operations.Add(async () =>
-                        {
-                            string? customStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
-                            this.BeforeSharedMessageLockForTest?.Invoke();
-                            lock (s)
-                            {
-                                this.SharedMessageLockAcquiredForTest?.Invoke(s);
-                                s.CustomStatus = customStatus;
-                            }
-                        });
+                        this.AddOrchestrationStateResolutionOperations(operations, s, cancellation);
                     }
 
                     await RunWithBoundedConcurrencyAsync(operations, cancellation);
@@ -220,7 +166,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     List<Func<Task>> operations = [];
                     foreach (P.EntityMetadata em in r.Entities)
                     {
-                        operations.Add(async () => em.SerializedState = await this.MaybeResolveAsync(em.SerializedState, cancellation));
+                        string? serializedState = em.SerializedState;
+                        if (this.RequiresResolution(serializedState))
+                        {
+                            operations.Add(async () => em.SerializedState = await this.MaybeResolveAsync(serializedState, cancellation));
+                        }
                     }
 
                     await RunWithBoundedConcurrencyAsync(operations, cancellation);
@@ -234,32 +184,51 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     // Resolve activity input
                     if (wi.ActivityRequest is { } ar)
                     {
-                        operations.Add(async () => ar.Input = await this.MaybeResolveAsync(ar.Input, cancellation));
+                        string? input = ar.Input;
+                        if (this.RequiresResolution(input))
+                        {
+                            operations.Add(async () => ar.Input = await this.MaybeResolveAsync(input, cancellation));
+                        }
                     }
 
                     // Resolve orchestration input embedded in ExecutionStarted event and external events
                     if (wi.OrchestratorRequest is { } or)
                     {
-                        foreach (P.HistoryEvent? e in or.PastEvents)
+                        foreach (P.HistoryEvent e in or.PastEvents)
                         {
-                            operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                            if (this.RequiresEventPayloadResolution(e))
+                            {
+                                operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                            }
                         }
 
-                        foreach (P.HistoryEvent? e in or.NewEvents)
+                        foreach (P.HistoryEvent e in or.NewEvents)
                         {
-                            operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                            if (this.RequiresEventPayloadResolution(e))
+                            {
+                                operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                            }
                         }
                     }
 
                     // Resolve entity V1 batch request (OperationRequest inputs and entity state)
                     if (wi.EntityRequest is { } er1)
                     {
-                        operations.Add(async () => er1.EntityState = await this.MaybeResolveAsync(er1.EntityState, cancellation));
+                        string? entityState = er1.EntityState;
+                        if (this.RequiresResolution(entityState))
+                        {
+                            operations.Add(async () => er1.EntityState = await this.MaybeResolveAsync(entityState, cancellation));
+                        }
+
                         if (er1.Operations != null)
                         {
                             foreach (P.OperationRequest op in er1.Operations)
                             {
-                                operations.Add(async () => op.Input = await this.MaybeResolveAsync(op.Input, cancellation));
+                                string? input = op.Input;
+                                if (this.RequiresResolution(input))
+                                {
+                                    operations.Add(async () => op.Input = await this.MaybeResolveAsync(input, cancellation));
+                                }
                             }
                         }
                     }
@@ -267,12 +236,20 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     // Resolve entity V2 request (history-based operation requests and entity state)
                     if (wi.EntityRequestV2 is { } er2)
                     {
-                        operations.Add(async () => er2.EntityState = await this.MaybeResolveAsync(er2.EntityState, cancellation));
+                        string? entityState = er2.EntityState;
+                        if (this.RequiresResolution(entityState))
+                        {
+                            operations.Add(async () => er2.EntityState = await this.MaybeResolveAsync(entityState, cancellation));
+                        }
+
                         if (er2.OperationRequests != null)
                         {
                             foreach (P.HistoryEvent opEvt in er2.OperationRequests)
                             {
-                                operations.Add(() => this.ResolveEventPayloadsAsync(opEvt, cancellation));
+                                if (this.RequiresEventPayloadResolution(opEvt))
+                                {
+                                    operations.Add(() => this.ResolveEventPayloadsAsync(opEvt, cancellation));
+                                }
                             }
                         }
                     }
@@ -284,66 +261,159 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         }
     }
 
+    void AddOrchestrationStateResolutionOperations(
+        List<Func<Task>> operations,
+        P.OrchestrationState state,
+        CancellationToken cancellation)
+    {
+        // Snapshot before dispatch so a queued operation never reads a field after another
+        // operation has begun mutating this shared message. Locks cover assignment only: current
+        // generated setters are simple reference writes, but protobuf's message API does not
+        // guarantee concurrent mutation or that future generated setters remain independent.
+        string? input = state.Input;
+        if (this.RequiresResolution(input))
+        {
+            operations.Add(async () =>
+            {
+                string? resolvedInput = await this.MaybeResolveAsync(input, cancellation);
+                this.BeforeSharedMessageLockForTest?.Invoke();
+                lock (state)
+                {
+                    this.SharedMessageLockAcquiredForTest?.Invoke(state);
+                    state.Input = resolvedInput;
+                }
+            });
+        }
+
+        string? output = state.Output;
+        if (this.RequiresResolution(output))
+        {
+            operations.Add(async () =>
+            {
+                string? resolvedOutput = await this.MaybeResolveAsync(output, cancellation);
+                this.BeforeSharedMessageLockForTest?.Invoke();
+                lock (state)
+                {
+                    this.SharedMessageLockAcquiredForTest?.Invoke(state);
+                    state.Output = resolvedOutput;
+                }
+            });
+        }
+
+        string? customStatus = state.CustomStatus;
+        if (this.RequiresResolution(customStatus))
+        {
+            operations.Add(async () =>
+            {
+                string? resolvedCustomStatus = await this.MaybeResolveAsync(customStatus, cancellation);
+                this.BeforeSharedMessageLockForTest?.Invoke();
+                lock (state)
+                {
+                    this.SharedMessageLockAcquiredForTest?.Invoke(state);
+                    state.CustomStatus = resolvedCustomStatus;
+                }
+            });
+        }
+    }
+
     async Task ExternalizeOrchestratorResponseAsync(P.OrchestratorResponse r, CancellationToken cancellation)
     {
-        List<Func<Task>> operations = [async () => r.CustomStatus = await this.MaybeExternalizeAsync(r.CustomStatus, cancellation)];
+        List<Func<Task>> operations = [];
+        string? customStatus = r.CustomStatus;
+        if (this.RequiresExternalization(customStatus))
+        {
+            operations.Add(async () => r.CustomStatus = await this.MaybeExternalizeAsync(customStatus, cancellation));
+        }
 
         foreach (P.OrchestratorAction a in r.Actions)
         {
             if (a.CompleteOrchestration is { } complete)
             {
-                operations.Add(async () =>
+                string? result = complete.Result;
+                if (this.RequiresExternalization(result))
                 {
-                    string? result = await this.MaybeExternalizeAsync(complete.Result, cancellation);
-                    this.BeforeSharedMessageLockForTest?.Invoke();
-                    lock (complete)
+                    operations.Add(async () =>
                     {
-                        this.SharedMessageLockAcquiredForTest?.Invoke(complete);
-                        complete.Result = result;
-                    }
-                });
-                operations.Add(async () =>
+                        string? externalizedResult = await this.MaybeExternalizeAsync(result, cancellation);
+                        this.BeforeSharedMessageLockForTest?.Invoke();
+                        lock (complete)
+                        {
+                            this.SharedMessageLockAcquiredForTest?.Invoke(complete);
+                            complete.Result = externalizedResult;
+                        }
+                    });
+                }
+
+                string? details = complete.Details;
+                if (this.RequiresExternalization(details))
                 {
-                    string? details = await this.MaybeExternalizeAsync(complete.Details, cancellation);
-                    this.BeforeSharedMessageLockForTest?.Invoke();
-                    lock (complete)
+                    operations.Add(async () =>
                     {
-                        this.SharedMessageLockAcquiredForTest?.Invoke(complete);
-                        complete.Details = details;
-                    }
-                });
+                        string? externalizedDetails = await this.MaybeExternalizeAsync(details, cancellation);
+                        this.BeforeSharedMessageLockForTest?.Invoke();
+                        lock (complete)
+                        {
+                            this.SharedMessageLockAcquiredForTest?.Invoke(complete);
+                            complete.Details = externalizedDetails;
+                        }
+                    });
+                }
             }
 
             if (a.TerminateOrchestration is { } term)
             {
-                operations.Add(async () => term.Reason = await this.MaybeExternalizeAsync(term.Reason, cancellation));
+                string? reason = term.Reason;
+                if (this.RequiresExternalization(reason))
+                {
+                    operations.Add(async () => term.Reason = await this.MaybeExternalizeAsync(reason, cancellation));
+                }
             }
 
             if (a.ScheduleTask is { } schedule)
             {
-                operations.Add(async () => schedule.Input = await this.MaybeExternalizeAsync(schedule.Input, cancellation));
+                string? input = schedule.Input;
+                if (this.RequiresExternalization(input))
+                {
+                    operations.Add(async () => schedule.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                }
             }
 
             if (a.CreateSubOrchestration is { } sub)
             {
-                operations.Add(async () => sub.Input = await this.MaybeExternalizeAsync(sub.Input, cancellation));
+                string? input = sub.Input;
+                if (this.RequiresExternalization(input))
+                {
+                    operations.Add(async () => sub.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                }
             }
 
             if (a.SendEvent is { } sendEvt)
             {
-                operations.Add(async () => sendEvt.Data = await this.MaybeExternalizeAsync(sendEvt.Data, cancellation));
+                string? data = sendEvt.Data;
+                if (this.RequiresExternalization(data))
+                {
+                    operations.Add(async () => sendEvt.Data = await this.MaybeExternalizeAsync(data, cancellation));
+                }
             }
 
             if (a.SendEntityMessage is { } entityMsg)
             {
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
-                    operations.Add(async () => sig.Input = await this.MaybeExternalizeAsync(sig.Input, cancellation));
+                    string? input = sig.Input;
+                    if (this.RequiresExternalization(input))
+                    {
+                        operations.Add(async () => sig.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    }
                 }
 
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
-                    operations.Add(async () => called.Input = await this.MaybeExternalizeAsync(called.Input, cancellation));
+                    string? input = called.Input;
+                    if (this.RequiresExternalization(input))
+                    {
+                        operations.Add(async () => called.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    }
                 }
             }
         }
@@ -353,7 +423,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
     async Task ExternalizeEntityBatchResultAsync(P.EntityBatchResult r, CancellationToken cancellation)
     {
-        List<Func<Task>> operations = [async () => r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation)];
+        List<Func<Task>> operations = [];
+        string? entityState = r.EntityState;
+        if (this.RequiresExternalization(entityState))
+        {
+            operations.Add(async () => r.EntityState = await this.MaybeExternalizeAsync(entityState, cancellation));
+        }
 
         if (r.Results != null)
         {
@@ -361,7 +436,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             {
                 if (result.Success is { } success)
                 {
-                    operations.Add(async () => success.Result = await this.MaybeExternalizeAsync(success.Result, cancellation));
+                    string? resultValue = success.Result;
+                    if (this.RequiresExternalization(resultValue))
+                    {
+                        operations.Add(
+                            async () => success.Result = await this.MaybeExternalizeAsync(resultValue, cancellation));
+                    }
                 }
             }
         }
@@ -372,12 +452,20 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             {
                 if (action.SendSignal is { } sendSig)
                 {
-                    operations.Add(async () => sendSig.Input = await this.MaybeExternalizeAsync(sendSig.Input, cancellation));
+                    string? input = sendSig.Input;
+                    if (this.RequiresExternalization(input))
+                    {
+                        operations.Add(async () => sendSig.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    }
                 }
 
                 if (action.StartNewOrchestration is { } start)
                 {
-                    operations.Add(async () => start.Input = await this.MaybeExternalizeAsync(start.Input, cancellation));
+                    string? input = start.Input;
+                    if (this.RequiresExternalization(input))
+                    {
+                        operations.Add(async () => start.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    }
                 }
             }
         }
@@ -387,17 +475,71 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
     async Task ExternalizeEntityBatchRequestAsync(P.EntityBatchRequest r, CancellationToken cancellation)
     {
-        List<Func<Task>> operations = [async () => r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation)];
+        List<Func<Task>> operations = [];
+        string? entityState = r.EntityState;
+        if (this.RequiresExternalization(entityState))
+        {
+            operations.Add(async () => r.EntityState = await this.MaybeExternalizeAsync(entityState, cancellation));
+        }
 
         if (r.Operations != null)
         {
             foreach (P.OperationRequest op in r.Operations)
             {
-                operations.Add(async () => op.Input = await this.MaybeExternalizeAsync(op.Input, cancellation));
+                string? input = op.Input;
+                if (this.RequiresExternalization(input))
+                {
+                    operations.Add(async () => op.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                }
             }
         }
 
         await RunWithBoundedConcurrencyAsync(operations, cancellation);
+    }
+
+    bool RequiresEventPayloadResolution(P.HistoryEvent e)
+    {
+        return e.EventTypeCase switch
+        {
+            P.HistoryEvent.EventTypeOneofCase.ExecutionStarted =>
+                this.RequiresResolution(e.ExecutionStarted?.Input),
+            P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted =>
+                this.RequiresResolution(e.ExecutionCompleted?.Result),
+            P.HistoryEvent.EventTypeOneofCase.EventRaised =>
+                this.RequiresResolution(e.EventRaised?.Input),
+            P.HistoryEvent.EventTypeOneofCase.TaskScheduled =>
+                this.RequiresResolution(e.TaskScheduled?.Input),
+            P.HistoryEvent.EventTypeOneofCase.TaskCompleted =>
+                this.RequiresResolution(e.TaskCompleted?.Result),
+            P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated =>
+                this.RequiresResolution(e.SubOrchestrationInstanceCreated?.Input),
+            P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted =>
+                this.RequiresResolution(e.SubOrchestrationInstanceCompleted?.Result),
+            P.HistoryEvent.EventTypeOneofCase.EventSent =>
+                this.RequiresResolution(e.EventSent?.Input),
+            P.HistoryEvent.EventTypeOneofCase.GenericEvent =>
+                this.RequiresResolution(e.GenericEvent?.Data),
+            P.HistoryEvent.EventTypeOneofCase.ContinueAsNew =>
+                this.RequiresResolution(e.ContinueAsNew?.Input),
+            P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated =>
+                this.RequiresResolution(e.ExecutionTerminated?.Input),
+            P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended =>
+                this.RequiresResolution(e.ExecutionSuspended?.Input),
+            P.HistoryEvent.EventTypeOneofCase.ExecutionResumed =>
+                this.RequiresResolution(e.ExecutionResumed?.Input),
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled =>
+                this.RequiresResolution(e.EntityOperationSignaled?.Input),
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled =>
+                this.RequiresResolution(e.EntityOperationCalled?.Input),
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted =>
+                this.RequiresResolution(e.EntityOperationCompleted?.Output),
+            P.HistoryEvent.EventTypeOneofCase.HistoryState =>
+                e.HistoryState?.OrchestrationState is { } state
+                && (this.RequiresResolution(state.Input)
+                    || this.RequiresResolution(state.Output)
+                    || this.RequiresResolution(state.CustomStatus)),
+            _ => false,
+        };
     }
 
     async Task ResolveEventPayloadsAsync(P.HistoryEvent e, CancellationToken cancellation)
@@ -519,6 +661,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             case P.HistoryEvent.EventTypeOneofCase.HistoryState:
                 if (e.HistoryState is { } hs && hs.OrchestrationState is { } os)
                 {
+                    // A HistoryState event is one bounded operation, so its three fields remain
+                    // sequential. Concurrent history operations always target different messages.
                     os.Input = await this.MaybeResolveAsync(os.Input, cancellation);
                     os.Output = await this.MaybeResolveAsync(os.Output, cancellation);
                     os.CustomStatus = await this.MaybeResolveAsync(os.CustomStatus, cancellation);
@@ -532,11 +676,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// Runs a set of independent Azure Blob payload externalization/resolution operations with
     /// bounded concurrency, instead of either awaiting them one at a time (additive latency) or
     /// firing them all at once via an unbounded <see cref="Task.WhenAll(IEnumerable{Task})"/>
-    /// (risking Azure Storage throttling for messages with many payloads). Each delegate is
+    /// (creating a per-message burst for messages with many payloads). Each delegate is
     /// expected to assign its result to a distinct protobuf field/element, so the relative
     /// completion order between operations does not affect correctness. Blob I/O is concurrent,
-    /// but assignments targeting fields on the same protobuf message are serialized because
-    /// Google.Protobuf messages do not support concurrent mutation.
+    /// but assignments targeting fields on the same protobuf message are serialized rather than
+    /// relying on current generated setter implementation details.
     /// </summary>
     /// <remarks>
     /// Cancellation is honored before starting any operation not already in flight. If any
@@ -546,6 +690,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// chain's message-order failure semantics and takes precedence over a concurrent cancellation,
     /// preserving the existing caller behavior (e.g. converting permanent failures into a
     /// <see cref="P.TaskFailureDetails"/> completion).
+    /// Messages with no eligible Blob operation return without observing cancellation, preserving
+    /// the prior no-op behavior; cancellation is surfaced when it prevents actual payload I/O.
     /// <para>
     /// Every started operation is always drained (fully awaited) before this method returns or
     /// throws -- including when stopping early due to cancellation or a prior failure -- so that
@@ -554,7 +700,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// protobuf field after control has already passed back to the caller.
     /// </para>
     /// </remarks>
-    /// <param name="operations">The independent operations to run.</param>
+    /// <param name="operations">The independent Blob I/O operations to run.</param>
     /// <param name="cancellation">Cancellation token.</param>
     /// <param name="afterAdvisoryDispatchCheckForTest">Optional test callback after advisory eligibility but before dispatch claim.</param>
     /// <param name="failureRecordedForTest">Optional test callback after an operation's failure is recorded.</param>
@@ -566,6 +712,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     {
         if (operations.Count == 0)
         {
+            // No storage operation exists to cancel.
             return;
         }
 

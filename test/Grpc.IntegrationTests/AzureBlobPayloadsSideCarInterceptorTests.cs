@@ -102,6 +102,66 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task ResolveResponsePayloadsAsync_QueryInstancesResponse_UsesFieldSnapshotsForQueuedOperations()
+    {
+        // Arrange: 3 states produce 9 operations, so the final CustomStatus download waits behind
+        // the concurrency limit of 8. Mutating that field after dispatch starts must not change
+        // which token the already-built operation resolves.
+        TaskCompletionSource<bool> firstWaveStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseFirstWave = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<string> queuedTokenObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int downloadsStarted = 0;
+        TrackingPayloadStore store = new(downloadAsync: async (token, cancellationToken) =>
+        {
+            int ordinal = Interlocked.Increment(ref downloadsStarted);
+            if (ordinal <= 8)
+            {
+                if (ordinal == 8)
+                {
+                    firstWaveStarted.TrySetResult(true);
+                }
+
+                await releaseFirstWave.Task.WaitAsync(cancellationToken);
+            }
+            else
+            {
+                queuedTokenObserved.TrySetResult(token);
+            }
+
+            return token["test-blob://".Length..];
+        });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.QueryInstancesResponse response = new();
+        for (int i = 0; i < 3; i++)
+        {
+            response.OrchestrationState.Add(new P.OrchestrationState
+            {
+                InstanceId = $"instance-{i}",
+                Input = $"test-blob://state-{i}-input",
+                Output = $"test-blob://state-{i}-output",
+                CustomStatus = i == 2 ? "test-blob://original-status" : $"test-blob://state-{i}-status",
+            });
+        }
+
+        // Act: once the first 8 operations are in flight, change the field backing the queued
+        // ninth delegate. The delegate must use the value captured while the list was built.
+        Task resolveTask = ResolveAsync(interceptor, response, CancellationToken.None);
+        await firstWaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        P.OrchestrationState queuedState = response.OrchestrationState[2];
+        lock (queuedState)
+        {
+            queuedState.CustomStatus = "test-blob://changed-status";
+        }
+
+        releaseFirstWave.SetResult(true);
+        await resolveTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Assert
+        (await queuedTokenObserved.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().Be("test-blob://original-status");
+        queuedState.CustomStatus.Should().Be("original-status");
+    }
+
+    [Fact]
     public async Task ResolveResponsePayloadsAsync_GetInstanceResponse_SerializesSharedStateMutationsAfterConcurrentDownloads()
     {
         // Arrange: all three fields belong to the same OrchestrationState message. The test holds
@@ -202,6 +262,36 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         state.CustomStatus.Should().Be("status");
         Volatile.Read(ref assignmentsReachedLock).Should().Be(3);
         Volatile.Read(ref messageLockAcquisitions).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ResolveResponsePayloadsAsync_GetInstanceResponse_PreCancelledInlineFieldsPerformNoWork()
+    {
+        // Arrange: no field contains a payload token, so the response has no storage operation to
+        // cancel. This preserves the pre-concurrency behavior where inline values return unchanged.
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.GetInstanceResponse response = new()
+        {
+            OrchestrationState = new P.OrchestrationState
+            {
+                Input = "inline-input",
+                Output = "inline-output",
+                CustomStatus = "inline-status",
+            },
+        };
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        // Act
+        Func<Task> act = () => ResolveAsync(interceptor, response, cts.Token);
+
+        // Assert
+        await act.Should().NotThrowAsync();
+        store.DownloadCount.Should().Be(0);
+        response.OrchestrationState.Input.Should().Be("inline-input");
+        response.OrchestrationState.Output.Should().Be("inline-output");
+        response.OrchestrationState.CustomStatus.Should().Be("inline-status");
     }
 
     [Fact]
@@ -526,6 +616,37 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         store.UploadCount.Should().Be(0);
         response.CustomStatus.Should().Be("status");
         response.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_PreCancelledInlineFieldsPerformNoWork()
+    {
+        // Arrange: all values are below the externalization threshold, so cancellation has no Blob
+        // operation to prevent and the response should remain untouched.
+        TrackingPayloadStore store = new();
+        LargePayloadStorageOptions options = new() { ThresholdBytes = 1024 };
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, options);
+        P.OrchestratorResponse response = new()
+        {
+            InstanceId = "instance-1",
+            CustomStatus = "inline-status",
+        };
+        response.Actions.Add(new P.OrchestratorAction
+        {
+            ScheduleTask = new P.ScheduleTaskAction { Input = "inline-input" },
+        });
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        // Act
+        Func<Task> act = () => ExternalizeAsync(interceptor, response, cts.Token);
+
+        // Assert
+        await act.Should().NotThrowAsync();
+        store.UploadCount.Should().Be(0);
+        response.CustomStatus.Should().Be("inline-status");
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].ScheduleTask.Input.Should().Be("inline-input");
     }
 
     [Fact]

@@ -181,16 +181,12 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// <returns>A task that returns the externalized token or the original value.</returns>
     protected async Task<string?> MaybeExternalizeAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value))
+        if (!this.RequiresExternalization(value))
         {
             return value;
         }
 
-        int size = Encoding.UTF8.GetByteCount(value);
-        if (size < this.options.ThresholdBytes)
-        {
-            return value;
-        }
+        int size = Encoding.UTF8.GetByteCount(value!);
 
         // Enforce a hard cap to prevent unbounded payload sizes
         if (size > this.options.MaxPayloadBytes)
@@ -211,12 +207,33 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// <returns>The resolved value or the original value if it's not a known payload token.</returns>
     protected async Task<string?> MaybeResolveAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value) || !this.payloadStore.IsKnownPayloadToken(value ?? string.Empty))
+        if (!this.RequiresResolution(value))
         {
             return value;
         }
 
         return await this.payloadStore.DownloadAsync(value!, cancellation);
+    }
+
+    /// <summary>
+    /// Determines whether a value requires externalization.
+    /// </summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <returns><c>true</c> when the value meets the configured externalization threshold.</returns>
+    private protected bool RequiresExternalization(string? value)
+    {
+        return !string.IsNullOrEmpty(value)
+            && Encoding.UTF8.GetByteCount(value) >= this.options.ThresholdBytes;
+    }
+
+    /// <summary>
+    /// Determines whether a value requires resolution.
+    /// </summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <returns><c>true</c> when the payload store recognizes the value as a token.</returns>
+    private protected bool RequiresResolution(string? value)
+    {
+        return !string.IsNullOrEmpty(value) && this.payloadStore.IsKnownPayloadToken(value);
     }
 
     sealed class TransformingStreamReader<T>(

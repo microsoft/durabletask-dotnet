@@ -19,8 +19,7 @@
 - test(InProcessTestHost): external-event + durable-timer timeout coverage (relates to #713) ([#764](https://github.com/microsoft/durabletask-dotnet/pull/764))
 - Fix generator emitting invalid C# for nullable activity input ([#763](https://github.com/microsoft/durabletask-dotnet/pull/763))
 - Pin GitHub Actions to full-length commit SHAs ([#759](https://github.com/microsoft/durabletask-dotnet/pull/759))
-- Set default large payload offloading threshold to 256 KiB ([#755](https://github.com/microsoft/durabletask-dotnet/pull/755))
-- Change the default large payload externalization threshold (`LargePayloadStorageOptions.ThresholdBytes`) from 900,000 bytes to 256 KiB (262,144 bytes)
+- Change the default large payload externalization threshold (`LargePayloadStorageOptions.ThresholdBytes`) from 900,000 bytes to 256 KiB (262,144 bytes) ([#755](https://github.com/microsoft/durabletask-dotnet/pull/755))
 
 
 ## v1.25.0-preview.2
@@ -492,6 +491,4 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
-
-
 

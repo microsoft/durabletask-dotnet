@@ -4,6 +4,8 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
+using DurableTask.Core;
+using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask;
@@ -34,6 +36,9 @@ public class GrpcDurableTaskWorkerTests
         .GetMethod("DispatchWorkItem", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo TryRecreateChannelAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("TryRecreateChannelAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo BuildRuntimeStateAsyncMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("BuildRuntimeStateAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     [Fact]
     public async Task ExecuteAsync_ConnectFailureThreshold_RecreatesConfiguredChannel()
@@ -599,6 +604,189 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
+    public async Task BuildRuntimeStateAsync_MultiChunkHistoryStream_MaterializesEventsInOrderAndClassifiesNewVsPast()
+    {
+        // Arrange — three chunks arriving over the StreamInstanceHistory call. Chunk boundaries are
+        // arbitrary from the caller's perspective; the resulting runtime state must read as if all events
+        // had arrived in a single chunk, in the same relative order, with past/new events kept distinct.
+        P.HistoryEvent executionStarted = new()
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new P.ExecutionStartedEvent
+            {
+                Name = "TestOrchestration",
+                Version = "1.0",
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance-1",
+                    ExecutionId = "execution-1",
+                },
+            },
+        };
+
+        P.HistoryChunk[] chunks =
+        {
+            new() { Events = { executionStarted } },
+            new() { Events = { CreateGenericEvent(1, "chunk-2-event-1"), CreateGenericEvent(2, "chunk-2-event-2") } },
+            new() { Events = { CreateGenericEvent(3, "chunk-3-event-1") } },
+        };
+
+        SequenceAsyncStreamReader<P.HistoryChunk> reader = new(chunks);
+        HistoryStreamCallInvoker callInvoker = new(reader);
+        P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(callInvoker);
+        GrpcDurableTaskWorker worker = CreateWorker(new GrpcDurableTaskWorkerOptions());
+        object processor = CreateProcessor(worker, client);
+
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            ExecutionId = "execution-1",
+            RequiresHistoryStreaming = true,
+        };
+        request.NewEvents.Add(CreateGenericEvent(4, "new-event"));
+
+        // Act
+        OrchestrationRuntimeState runtimeState = await InvokeBuildRuntimeStateAsync(
+            processor, request, entityConversionState: null, CancellationToken.None);
+
+        // Assert
+        runtimeState.PastEvents.Should().HaveCount(4);
+        runtimeState.PastEvents[0].Should().BeOfType<ExecutionStartedEvent>();
+        ((GenericEvent)runtimeState.PastEvents[1]).Data.Should().Be("chunk-2-event-1");
+        ((GenericEvent)runtimeState.PastEvents[2]).Data.Should().Be("chunk-2-event-2");
+        ((GenericEvent)runtimeState.PastEvents[3]).Data.Should().Be("chunk-3-event-1");
+
+        runtimeState.NewEvents.Should().HaveCount(1);
+        ((GenericEvent)runtimeState.NewEvents[0]).Data.Should().Be("new-event");
+
+        runtimeState.ExecutionStartedEvent.Should().NotBeNull();
+        runtimeState.ExecutionStartedEvent!.Name.Should().Be("TestOrchestration");
+    }
+
+    [Fact]
+    public async Task BuildRuntimeStateAsync_HistoryStreamCanceledMidStream_PropagatesCancellation()
+    {
+        // Arrange — the second chunk read observes a canceled token. Cancellation must propagate out of
+        // BuildRuntimeStateAsync rather than being swallowed while accumulating history chunks.
+        using CancellationTokenSource cts = new();
+        P.HistoryChunk firstChunk = new() { Events = { CreateGenericEvent(1, "chunk-1-event-1") } };
+        CancelingAsyncStreamReader<P.HistoryChunk> reader = new(cts, firstChunk);
+        HistoryStreamCallInvoker callInvoker = new(reader);
+        P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(callInvoker);
+        GrpcDurableTaskWorker worker = CreateWorker(new GrpcDurableTaskWorkerOptions());
+        object processor = CreateProcessor(worker, client);
+
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            ExecutionId = "execution-1",
+            RequiresHistoryStreaming = true,
+        };
+
+        // Act
+        Func<Task> act = () => InvokeBuildRuntimeStateAsync(
+            processor, request, entityConversionState: null, cts.Token);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task BuildRuntimeStateAsync_ManySingleEventChunks_DoesNotExhibitQuadraticListGrowth()
+    {
+        // Arrange — regression test for a prior bug where the accumulating list's Capacity was forced to
+        // the exact running total on every chunk. That defeats List<T>'s own amortized (geometric)
+        // doubling growth strategy: with many single-event chunks, it reallocates and copies the entire
+        // list on *every* chunk, making history materialization quadratic again (the same class of bug
+        // issue #772 originally fixed, just reintroduced via a different mechanism).
+        //
+        // Wall-clock timing assertions are flaky across machines/CI load, so instead this asserts on
+        // bytes allocated, which cleanly separates the two regimes for a large enough event count:
+        // amortized doubling growth allocates O(n) total across all chunks, while forcing Capacity to the
+        // exact count per single-event chunk allocates O(n^2) (a sum-of-1..n series of full-list copies).
+        const int eventCount = 5_000;
+
+        P.HistoryEvent executionStarted = new()
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new P.ExecutionStartedEvent
+            {
+                Name = "TestOrchestration",
+                Version = "1.0",
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance-1",
+                    ExecutionId = "execution-1",
+                },
+            },
+        };
+
+        List<P.HistoryChunk> chunks = new(eventCount + 1) { new() { Events = { executionStarted } } };
+        for (int i = 0; i < eventCount; i++)
+        {
+            // One event per chunk is the worst case for any strategy that resizes per chunk.
+            chunks.Add(new P.HistoryChunk { Events = { CreateGenericEvent(i, $"event-{i}") } });
+        }
+
+        GrpcDurableTaskWorker worker = CreateWorker(new GrpcDurableTaskWorkerOptions());
+
+        async Task<OrchestrationRuntimeState> RunAsync()
+        {
+            SequenceAsyncStreamReader<P.HistoryChunk> reader = new(chunks.ToArray());
+            HistoryStreamCallInvoker callInvoker = new(reader);
+            P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(callInvoker);
+            object processor = CreateProcessor(worker, client);
+
+            P.OrchestratorRequest request = new()
+            {
+                InstanceId = "instance-1",
+                ExecutionId = "execution-1",
+                RequiresHistoryStreaming = true,
+            };
+
+            return await InvokeBuildRuntimeStateAsync(
+                processor, request, entityConversionState: null, CancellationToken.None);
+        }
+
+        // Warm up once (JIT/type initialization) before measuring allocations for the real run.
+        await RunAsync();
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        // Act
+        OrchestrationRuntimeState runtimeState = await RunAsync();
+
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        // Assert — functional correctness: all events materialized, in order.
+        runtimeState.PastEvents.Should().HaveCount(eventCount + 1);
+        runtimeState.PastEvents[0].Should().BeOfType<ExecutionStartedEvent>();
+        ((GenericEvent)runtimeState.PastEvents[eventCount]).Data.Should().Be($"event-{eventCount - 1}");
+
+        // Assert — performance: O(n) amortized list growth allocates on the order of a few hundred
+        // kilobytes to a few megabytes for this input size (list growth plus per-event object overhead).
+        // The prior per-chunk-exact-Capacity bug instead reallocates and copies the whole list on every
+        // single-event chunk, which allocates on the order of n^2 * pointer-size bytes (~100+ MB for
+        // n = 5,000) — orders of magnitude more. The threshold below is generous enough to avoid flakiness
+        // from ordinary object/collection overhead while remaining far below the quadratic regime.
+        allocatedBytes.Should().BeLessThan(
+            50 * 1024 * 1024,
+            "history materialization should not exhibit quadratic (O(n^2)) memory growth across many streamed chunks");
+    }
+
+    static P.HistoryEvent CreateGenericEvent(int eventId, string data)
+    {
+        return new P.HistoryEvent
+        {
+            EventId = eventId,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            GenericEvent = new P.GenericEvent { Data = data },
+        };
+    }
+
+    [Fact]
     public void Constructor_StrictWorkerVersioningWithoutRegistryContents_DoesNotThrow()
     {
         // Arrange — combine UseVersioning(Strict) with multi-version registrations. Both are now part of
@@ -817,6 +1005,17 @@ public class GrpcDurableTaskWorkerTests
         Task task = (Task)TryRecreateChannelAsyncMethod.Invoke(worker, args)!;
         await task;
         return task.GetType().GetProperty("Result")!.GetValue(task)!;
+    }
+
+    static async Task<OrchestrationRuntimeState> InvokeBuildRuntimeStateAsync(
+        object processor,
+        P.OrchestratorRequest orchestratorRequest,
+        object? entityConversionState,
+        CancellationToken cancellationToken)
+    {
+        object result = BuildRuntimeStateAsyncMethod.Invoke(
+            processor, new object?[] { orchestratorRequest, entityConversionState, cancellationToken })!;
+        return await (ValueTask<OrchestrationRuntimeState>)result;
     }
 
     static T GetResultProperty<T>(object result, string propertyName)
@@ -1053,6 +1252,74 @@ public class GrpcDurableTaskWorkerTests
         public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
         {
             throw new NotSupportedException();
+        }
+    }
+
+    sealed class HistoryStreamCallInvoker : CallInvoker
+    {
+        readonly IAsyncStreamReader<P.HistoryChunk> reader;
+
+        public HistoryStreamCallInvoker(IAsyncStreamReader<P.HistoryChunk> reader)
+        {
+            this.reader = reader;
+        }
+
+        public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+        {
+            throw new NotSupportedException($"Unexpected unary method {method.FullName}.");
+        }
+
+        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+        {
+            if (method.FullName == "/TaskHubSidecarService/StreamInstanceHistory")
+            {
+                return (AsyncServerStreamingCall<TResponse>)(object)CreateServerStreamingCall(this.reader);
+            }
+
+            throw new NotSupportedException($"Unexpected server-streaming method {method.FullName}.");
+        }
+
+        public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    sealed class CancelingAsyncStreamReader<T> : IAsyncStreamReader<T>
+    {
+        readonly CancellationTokenSource cancellationSource;
+        readonly Queue<T> items;
+
+        public CancelingAsyncStreamReader(CancellationTokenSource cancellationSource, params T[] items)
+        {
+            this.cancellationSource = cancellationSource;
+            this.items = new Queue<T>(items);
+        }
+
+        public T Current { get; private set; } = default!;
+
+        public Task<bool> MoveNext(CancellationToken cancellationToken)
+        {
+            if (this.items.Count > 0)
+            {
+                this.Current = this.items.Dequeue();
+                return Task.FromResult(true);
+            }
+
+            // Simulate the underlying stream observing cancellation once the caller cancels mid-stream.
+            this.cancellationSource.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(false);
         }
     }
 }

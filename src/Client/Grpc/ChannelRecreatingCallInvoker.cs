@@ -38,6 +38,13 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     readonly bool ownsChannel;
     readonly ILogger logger;
 
+    // Cached once per invoker instance (instead of once per RPC) so ObserveOutcome's ContinueWith call
+    // does not allocate a new delegate for every unary call. The method-name diagnostic is threaded
+    // through as the ContinueWith `state` argument (a string, already a reference type) instead of a
+    // boxed (self, methodName) tuple, eliminating that per-call delegate and boxed-tuple allocation
+    // (Task.ContinueWith's own internal continuation/Task bookkeeping is unaffected).
+    readonly Action<Task, object?> onUnaryCallCompleted;
+
     // Cancelled in DisposeAsync so an in-flight RecreateAsync stops promptly and does not leak the
     // freshly created channel back into our state after we've disposed.
     readonly CancellationTokenSource disposalCts = new();
@@ -68,6 +75,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         this.minRecreateInterval = minRecreateInterval;
         this.ownsChannel = ownsChannel;
         this.logger = logger;
+        this.onUnaryCallCompleted = this.OnUnaryCallCompleted;
         this.state = new TransportState(initialChannel, initialChannel.CreateCallInvoker());
 
         // Backdate the initial timestamp so the first recreate is never blocked by the cooldown.
@@ -195,26 +203,31 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         return TimeSpan.FromSeconds((double)elapsedTicks / Stopwatch.Frequency);
     }
 
-    void ObserveOutcome<TResponse>(Task<TResponse> responseAsync, string methodFullName)
+    void ObserveOutcome(Task responseAsync, string methodFullName)
     {
-        // Use ContinueWith with TaskScheduler.Default so we don't capture sync context.
+        // Use ContinueWith with TaskScheduler.Default so we don't capture sync context. Both the
+        // continuation delegate (this.onUnaryCallCompleted, cached once per invoker instance) and the
+        // continuation state (methodFullName, already a reference-typed string) are allocation-free
+        // per call: no boxed tuple and no per-call delegate closure.
         responseAsync.ContinueWith(
-            (t, state) =>
-            {
-                var (self, name) = ((ChannelRecreatingCallInvoker, string))state!;
-                if (t.Status == TaskStatus.RanToCompletion)
-                {
-                    self.RecordSuccess();
-                }
-                else if (t.Exception?.InnerException is RpcException rpcEx)
-                {
-                    self.RecordFailure(rpcEx.StatusCode, name);
-                }
-            },
-            (this, methodFullName),
+            this.onUnaryCallCompleted,
+            methodFullName,
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
+    }
+
+    void OnUnaryCallCompleted(Task task, object? continuationState)
+    {
+        string methodFullName = (string)continuationState!;
+        if (task.Status == TaskStatus.RanToCompletion)
+        {
+            this.RecordSuccess();
+        }
+        else if (task.Exception?.InnerException is RpcException rpcEx)
+        {
+            this.RecordFailure(rpcEx.StatusCode, methodFullName);
+        }
     }
 
     void RecordSuccess()

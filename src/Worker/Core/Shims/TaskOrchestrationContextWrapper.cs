@@ -448,11 +448,13 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext,
 
 #pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
         bool reuseHashAlgorithm = this.invocationContext.ReuseNewGuidHashAlgorithm;
+
+        /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
+           and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
+           customers' inflight orchestrations. */
         SHA1 hashAlgorithm = reuseHashAlgorithm
             ? this.cachedHashAlgorithm ??= SHA1.Create()
-            : SHA1.Create(); /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
-                                and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
-                                customers' inflight orchestrations. */
+            : SHA1.Create();
 
         byte[] hashByteArray;
         try

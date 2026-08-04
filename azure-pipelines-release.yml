@@ -42,6 +42,9 @@ steps:
     useGlobalJson: true
 
 # Start by restoring all the dependencies. This needs to be its own task.
+- task: NuGetAuthenticate@1
+  displayName: Authenticate NuGet feeds
+
 - task: DotNetCoreCLI@2
   displayName: Restore
   inputs:
@@ -105,7 +108,7 @@ steps:
   inputs:
     command: custom
     custom: pack
-    arguments: --no-build $(build_args) $(pack_binlog)
+    arguments: --no-build --no-restore $(build_args) $(pack_binlog)
     projects: $(project)
 
 # Digitally sign all the nuget packages with the Microsoft certificate.

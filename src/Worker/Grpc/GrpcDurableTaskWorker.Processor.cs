@@ -256,7 +256,7 @@ sealed partial class GrpcDurableTaskWorker
                 ? ProtoUtils.ConvertHistoryEvent
                 : entityConversionState.ConvertFromProto;
 
-            IEnumerable<HistoryEvent> pastEvents = [];
+            List<HistoryEvent> pastEvents;
             if (orchestratorRequest.RequiresHistoryStreaming)
             {
                 // Stream the remaining events from the remote service
@@ -270,25 +270,41 @@ sealed partial class GrpcDurableTaskWorker
                 using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                     this.client.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+                // Materialize each chunk's events directly into the accumulating list as they arrive,
+                // rather than building a deeply nested Concat/Select iterator chain. Enumerating that
+                // chain dispatches through the preceding Concat nodes for each event, so with many small
+                // chunks the iterator work grows quadratically in the number of chunks.
+                //
+                // Note: intentionally do NOT set List<T>.Capacity to an exact per-chunk running total here.
+                // The Capacity setter reallocates to precisely the requested size, so with many small
+                // chunks (e.g. one event per chunk) that would reallocate and copy on every chunk, which is
+                // itself quadratic. List<T>.Add's built-in geometric (doubling) growth already gives
+                // amortized O(1) appends, so we let it manage capacity on its own.
+                pastEvents = new List<HistoryEvent>();
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
-                    pastEvents = pastEvents.Concat(chunk.Events.Select(converter));
+                    foreach (P.HistoryEvent protoEvent in chunk.Events)
+                    {
+                        pastEvents.Add(converter(protoEvent));
+                    }
                 }
             }
             else
             {
                 // The history was already provided in the work item request
-                pastEvents = orchestratorRequest.PastEvents.Select(converter);
+                pastEvents = new List<HistoryEvent>(orchestratorRequest.PastEvents.Count);
+                foreach (P.HistoryEvent protoEvent in orchestratorRequest.PastEvents)
+                {
+                    pastEvents.Add(converter(protoEvent));
+                }
             }
 
-            IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter);
-
             // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
-            var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
-            foreach (HistoryEvent e in newEvents)
+            var runtimeState = new OrchestrationRuntimeState(pastEvents);
+            foreach (P.HistoryEvent protoEvent in orchestratorRequest.NewEvents)
             {
                 // AddEvent() puts events into the NewEvents list.
-                runtimeState.AddEvent(e);
+                runtimeState.AddEvent(converter(protoEvent));
             }
 
             if (runtimeState.ExecutionStartedEvent == null)
@@ -908,11 +924,14 @@ sealed partial class GrpcDurableTaskWorker
                 traceActivity?.Dispose();
             }
 
-            this.Logger.SendingOrchestratorResponse(
-                name,
-                response.InstanceId,
-                response.Actions.Count,
-                GetActionsListForLogging(response.Actions));
+            if (this.Logger.IsEnabled(LogLevel.Debug))
+            {
+                this.Logger.SendingOrchestratorResponse(
+                    name,
+                    response.InstanceId,
+                    response.Actions.Count,
+                    GetActionsListForLogging(response.Actions));
+            }
 
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
@@ -925,9 +944,12 @@ sealed partial class GrpcDurableTaskWorker
             using Activity? traceActivity = TraceHelper.StartTraceActivityForTaskExecution(request);
 
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
-            string rawInput = request.Input;
-            int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
-            this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
+            if (this.Logger.IsEnabled(LogLevel.Debug))
+            {
+                string rawInput = request.Input;
+                int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
+                this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
+            }
 
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new(request.Name);
@@ -998,21 +1020,31 @@ sealed partial class GrpcDurableTaskWorker
                 return;
             }
 
-            int outputSizeInBytes = 0;
             if (failureDetails != null)
             {
                 traceActivity?.SetStatus(ActivityStatusCode.Error, failureDetails.ErrorMessage);
-
-                outputSizeInBytes = failureDetails.GetApproximateByteCount();
             }
-            else if (output != null)
+
+            if (this.Logger.IsEnabled(LogLevel.Debug))
             {
-                outputSizeInBytes = Encoding.UTF8.GetByteCount(output);
-            }
+                int outputSizeInBytes;
+                if (failureDetails != null)
+                {
+                    outputSizeInBytes = failureDetails.GetApproximateByteCount();
+                }
+                else if (output != null)
+                {
+                    outputSizeInBytes = Encoding.UTF8.GetByteCount(output);
+                }
+                else
+                {
+                    outputSizeInBytes = 0;
+                }
 
-            string successOrFailure = failureDetails != null ? "failure" : "success";
-            this.Logger.SendingActivityResponse(
-                successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
+                string successOrFailure = failureDetails != null ? "failure" : "success";
+                this.Logger.SendingActivityResponse(
+                    successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
+            }
 
             P.ActivityResponse response = new()
             {

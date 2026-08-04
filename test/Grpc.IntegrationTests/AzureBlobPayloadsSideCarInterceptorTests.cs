@@ -692,8 +692,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         // Operation 0 simulates an upload/download that has already committed and is in the
         // process of failing for a real, unrelated reason (e.g. a permanent PayloadStorageException)
         // -- it does not observe the cancellation token at all, so it only completes once the test
-        // explicitly releases it, well after cancellation has been requested. Operations 1-6
-        // likewise ignore cancellation and simply succeed once released. Operation 7 (the 9th, index
+        // explicitly releases it, well after cancellation has been requested. Operations 1-7
+        // likewise ignore cancellation and simply succeed once released. Operation 8 (the 9th, index
         // 8) must never be dispatched at all, since cancellation is requested before a 9th slot ever
         // frees up.
         TaskCompletionSource<bool> releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -181,26 +181,12 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// <returns>A task that returns the externalized token or the original value.</returns>
     protected async Task<string?> MaybeExternalizeAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value))
+        if (!this.TryGetExternalizationSize(value, out int size))
         {
             return value;
         }
 
-        int size = Encoding.UTF8.GetByteCount(value);
-        if (size < this.options.ThresholdBytes)
-        {
-            return value;
-        }
-
-        // Enforce a hard cap to prevent unbounded payload sizes
-        if (size > this.options.MaxPayloadBytes)
-        {
-            throw new PayloadStorageException(
-                $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
-                "Reduce the payload size or increase the max payload size limit.");
-        }
-
-        return await this.payloadStore.UploadAsync(value!, cancellation);
+        return await this.ExternalizePayloadAsync(value!, size, cancellation);
     }
 
     /// <summary>
@@ -211,12 +197,63 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// <returns>The resolved value or the original value if it's not a known payload token.</returns>
     protected async Task<string?> MaybeResolveAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value) || !this.payloadStore.IsKnownPayloadToken(value ?? string.Empty))
+        if (!this.RequiresResolution(value))
         {
             return value;
         }
 
         return await this.payloadStore.DownloadAsync(value!, cancellation);
+    }
+
+    /// <summary>
+    /// Externalizes a payload whose UTF-8 size has already been calculated.
+    /// </summary>
+    /// <param name="value">The value to externalize.</param>
+    /// <param name="size">The UTF-8 size of <paramref name="value"/>.</param>
+    /// <param name="cancellation">Cancellation token.</param>
+    /// <returns>A task that returns the externalized token.</returns>
+    private protected async Task<string> ExternalizePayloadAsync(
+        string value,
+        int size,
+        CancellationToken cancellation)
+    {
+        // Enforce a hard cap to prevent unbounded payload sizes
+        if (size > this.options.MaxPayloadBytes)
+        {
+            throw new PayloadStorageException(
+                $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
+                "Reduce the payload size or increase the max payload size limit.");
+        }
+
+        return await this.payloadStore.UploadAsync(value, cancellation);
+    }
+
+    /// <summary>
+    /// Calculates a value's UTF-8 size and determines whether it requires externalization.
+    /// </summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <param name="size">The calculated UTF-8 size, or zero when <paramref name="value"/> is empty.</param>
+    /// <returns><c>true</c> when the value meets the configured externalization threshold.</returns>
+    private protected bool TryGetExternalizationSize(string? value, out int size)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            size = 0;
+            return false;
+        }
+
+        size = Encoding.UTF8.GetByteCount(value);
+        return size >= this.options.ThresholdBytes;
+    }
+
+    /// <summary>
+    /// Determines whether a value requires resolution.
+    /// </summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <returns><c>true</c> when the payload store recognizes the value as a token.</returns>
+    private protected bool RequiresResolution(string? value)
+    {
+        return !string.IsNullOrEmpty(value) && this.payloadStore.IsKnownPayloadToken(value!);
     }
 
     sealed class TransformingStreamReader<T>(

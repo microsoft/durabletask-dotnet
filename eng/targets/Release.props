@@ -19,7 +19,7 @@
 
   <PropertyGroup>
     <VersionPrefix>1.25.0</VersionPrefix>
-    <VersionSuffix>preview.2</VersionSuffix>
+    <VersionSuffix></VersionSuffix>
   </PropertyGroup>
 
 </Project>

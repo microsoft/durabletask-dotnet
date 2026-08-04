@@ -789,15 +789,29 @@ sealed partial class GrpcDurableTaskWorker
                             _ => null,
                         };
 
-                        TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
-                        TaskOrchestrationExecutor executor = new(
-                            runtimeState,
-                            shim,
-                            BehaviorOnContinueAsNew.Carryover,
-                            request.EntityParameters.ToCore(),
-                            ErrorPropagationMode.UseFailureDetails,
-                            this.exceptionPropertiesProvider);
-                        result = executor.Execute();
+                        TaskOrchestration shim = this.shimFactory.CreateOrchestrationWithManagedLifetime(
+                            name,
+                            orchestrator!,
+                            parent);
+                        try
+                        {
+                            TaskOrchestrationExecutor executor = new(
+                                runtimeState,
+                                shim,
+                                BehaviorOnContinueAsNew.Carryover,
+                                request.EntityParameters.ToCore(),
+                                ErrorPropagationMode.UseFailureDetails,
+                                this.exceptionPropertiesProvider);
+                            result = executor.Execute();
+                        }
+                        finally
+                        {
+                            // This worker (unlike the extended-session path in GrpcOrchestrationRunner) never
+                            // reuses a shim across work items, so it owns and must dispose it once execution
+                            // of this single work item completes (e.g. to release the SHA1 instance cached by
+                            // NewGuid).
+                            (shim as IDisposable)?.Dispose();
+                        }
                     }
                     else
                     {

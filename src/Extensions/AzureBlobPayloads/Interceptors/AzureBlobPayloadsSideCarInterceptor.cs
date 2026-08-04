@@ -320,9 +320,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     {
         List<Func<Task>> operations = [];
         string? customStatus = r.CustomStatus;
-        if (this.RequiresExternalization(customStatus))
+        if (this.TryGetExternalizationSize(customStatus, out int customStatusSize))
         {
-            operations.Add(async () => r.CustomStatus = await this.MaybeExternalizeAsync(customStatus, cancellation));
+            operations.Add(
+                async () => r.CustomStatus =
+                    await this.ExternalizePayloadAsync(customStatus!, customStatusSize, cancellation));
         }
 
         foreach (P.OrchestratorAction a in r.Actions)
@@ -330,11 +332,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             if (a.CompleteOrchestration is { } complete)
             {
                 string? result = complete.Result;
-                if (this.RequiresExternalization(result))
+                if (this.TryGetExternalizationSize(result, out int resultSize))
                 {
                     operations.Add(async () =>
                     {
-                        string? externalizedResult = await this.MaybeExternalizeAsync(result, cancellation);
+                        string externalizedResult =
+                            await this.ExternalizePayloadAsync(result!, resultSize, cancellation);
                         this.BeforeSharedMessageLockForTest?.Invoke();
                         lock (complete)
                         {
@@ -345,11 +348,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 }
 
                 string? details = complete.Details;
-                if (this.RequiresExternalization(details))
+                if (this.TryGetExternalizationSize(details, out int detailsSize))
                 {
                     operations.Add(async () =>
                     {
-                        string? externalizedDetails = await this.MaybeExternalizeAsync(details, cancellation);
+                        string externalizedDetails =
+                            await this.ExternalizePayloadAsync(details!, detailsSize, cancellation);
                         this.BeforeSharedMessageLockForTest?.Invoke();
                         lock (complete)
                         {
@@ -363,36 +367,44 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             if (a.TerminateOrchestration is { } term)
             {
                 string? reason = term.Reason;
-                if (this.RequiresExternalization(reason))
+                if (this.TryGetExternalizationSize(reason, out int reasonSize))
                 {
-                    operations.Add(async () => term.Reason = await this.MaybeExternalizeAsync(reason, cancellation));
+                    operations.Add(
+                        async () => term.Reason =
+                            await this.ExternalizePayloadAsync(reason!, reasonSize, cancellation));
                 }
             }
 
             if (a.ScheduleTask is { } schedule)
             {
                 string? input = schedule.Input;
-                if (this.RequiresExternalization(input))
+                if (this.TryGetExternalizationSize(input, out int inputSize))
                 {
-                    operations.Add(async () => schedule.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    operations.Add(
+                        async () => schedule.Input =
+                            await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                 }
             }
 
             if (a.CreateSubOrchestration is { } sub)
             {
                 string? input = sub.Input;
-                if (this.RequiresExternalization(input))
+                if (this.TryGetExternalizationSize(input, out int inputSize))
                 {
-                    operations.Add(async () => sub.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    operations.Add(
+                        async () => sub.Input =
+                            await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                 }
             }
 
             if (a.SendEvent is { } sendEvt)
             {
                 string? data = sendEvt.Data;
-                if (this.RequiresExternalization(data))
+                if (this.TryGetExternalizationSize(data, out int dataSize))
                 {
-                    operations.Add(async () => sendEvt.Data = await this.MaybeExternalizeAsync(data, cancellation));
+                    operations.Add(
+                        async () => sendEvt.Data =
+                            await this.ExternalizePayloadAsync(data!, dataSize, cancellation));
                 }
             }
 
@@ -401,18 +413,22 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
                     string? input = sig.Input;
-                    if (this.RequiresExternalization(input))
+                    if (this.TryGetExternalizationSize(input, out int inputSize))
                     {
-                        operations.Add(async () => sig.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                        operations.Add(
+                            async () => sig.Input =
+                                await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                     }
                 }
 
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
                     string? input = called.Input;
-                    if (this.RequiresExternalization(input))
+                    if (this.TryGetExternalizationSize(input, out int inputSize))
                     {
-                        operations.Add(async () => called.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                        operations.Add(
+                            async () => called.Input =
+                                await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                     }
                 }
             }
@@ -425,9 +441,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     {
         List<Func<Task>> operations = [];
         string? entityState = r.EntityState;
-        if (this.RequiresExternalization(entityState))
+        if (this.TryGetExternalizationSize(entityState, out int entityStateSize))
         {
-            operations.Add(async () => r.EntityState = await this.MaybeExternalizeAsync(entityState, cancellation));
+            operations.Add(
+                async () => r.EntityState =
+                    await this.ExternalizePayloadAsync(entityState!, entityStateSize, cancellation));
         }
 
         if (r.Results != null)
@@ -437,10 +455,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 if (result.Success is { } success)
                 {
                     string? resultValue = success.Result;
-                    if (this.RequiresExternalization(resultValue))
+                    if (this.TryGetExternalizationSize(resultValue, out int resultSize))
                     {
                         operations.Add(
-                            async () => success.Result = await this.MaybeExternalizeAsync(resultValue, cancellation));
+                            async () => success.Result =
+                                await this.ExternalizePayloadAsync(resultValue!, resultSize, cancellation));
                     }
                 }
             }
@@ -453,18 +472,22 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 if (action.SendSignal is { } sendSig)
                 {
                     string? input = sendSig.Input;
-                    if (this.RequiresExternalization(input))
+                    if (this.TryGetExternalizationSize(input, out int inputSize))
                     {
-                        operations.Add(async () => sendSig.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                        operations.Add(
+                            async () => sendSig.Input =
+                                await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                     }
                 }
 
                 if (action.StartNewOrchestration is { } start)
                 {
                     string? input = start.Input;
-                    if (this.RequiresExternalization(input))
+                    if (this.TryGetExternalizationSize(input, out int inputSize))
                     {
-                        operations.Add(async () => start.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                        operations.Add(
+                            async () => start.Input =
+                                await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                     }
                 }
             }
@@ -477,9 +500,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     {
         List<Func<Task>> operations = [];
         string? entityState = r.EntityState;
-        if (this.RequiresExternalization(entityState))
+        if (this.TryGetExternalizationSize(entityState, out int entityStateSize))
         {
-            operations.Add(async () => r.EntityState = await this.MaybeExternalizeAsync(entityState, cancellation));
+            operations.Add(
+                async () => r.EntityState =
+                    await this.ExternalizePayloadAsync(entityState!, entityStateSize, cancellation));
         }
 
         if (r.Operations != null)
@@ -487,9 +512,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             foreach (P.OperationRequest op in r.Operations)
             {
                 string? input = op.Input;
-                if (this.RequiresExternalization(input))
+                if (this.TryGetExternalizationSize(input, out int inputSize))
                 {
-                    operations.Add(async () => op.Input = await this.MaybeExternalizeAsync(input, cancellation));
+                    operations.Add(
+                        async () => op.Input =
+                            await this.ExternalizePayloadAsync(input!, inputSize, cancellation));
                 }
             }
         }
@@ -811,8 +838,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         try
         {
             // Wait for every started operation to finish -- regardless of outcome -- before this
-            // method returns or throws. TrackAsync below never lets an exception fault this
-            // Task.WhenAll; it only records it in `lowestOrdinalFailure`, so draining always completes.
+            // method returns or throws. TrackAsync captures operation failures in
+            // `lowestOrdinalFailure`. Even if an optional test callback faults a TrackAsync task,
+            // Task.WhenAll waits for every task to complete before propagating that test failure.
             await Task.WhenAll(inFlight);
         }
         finally
@@ -887,8 +915,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             {
                 // Preserve the lowest-ordinal failure, rather than whichever concurrently running
                 // operation happened to finish first. The exception is captured -- not rethrown --
-                // so Task.WhenAll above never faults, guaranteeing every operation, including
-                // this finally block, runs to completion before the semaphore is disposed.
+                // so operation failures do not fault Task.WhenAll. The optional test callback below
+                // can still fault this task, but Task.WhenAll drains all tasks before propagating it.
                 RecordFailure(ex, operationOrdinal);
                 failureRecordedForTest?.Invoke(operationOrdinal);
             }

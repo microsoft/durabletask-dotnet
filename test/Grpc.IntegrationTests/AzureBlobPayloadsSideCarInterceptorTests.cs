@@ -999,7 +999,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             }
         }
 
-        public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
+        public override async Task<string> UploadAsync(string payload, CancellationToken cancellationToken)
         {
             this.EnterCall();
             try
@@ -1008,7 +1008,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
                 if (uploadAsync != null)
                 {
-                    return await uploadAsync(payLoad, cancellationToken);
+                    return await uploadAsync(payload, cancellationToken);
                 }
 
                 if (delay > TimeSpan.Zero)
@@ -1019,7 +1019,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
                 string token = TokenPrefix + Guid.NewGuid().ToString("N");
                 lock (this.gate)
                 {
-                    this.tokenToValue[token] = payLoad;
+                    this.tokenToValue[token] = payload;
                 }
 
                 return token;

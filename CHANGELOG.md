@@ -1,7 +1,25 @@
 # Changelog
 
 ## Unreleased
-- Change the default large payload externalization threshold (`LargePayloadStorageOptions.ThresholdBytes`) from 900,000 bytes to 256 KiB (262,144 bytes)
+
+
+## v1.25.0
+- Route NuGet restores through Central Feed Service ([#789](https://github.com/microsoft/durabletask-dotnet/pull/789))
+- Perf: avoid debug-only logging work when Debug logging is disabled ([#787](https://github.com/microsoft/durabletask-dotnet/pull/787))
+- Perf: materialize streamed orchestration history incrementally ([#783](https://github.com/microsoft/durabletask-dotnet/pull/783))
+- Reduce per-call allocations in ChannelRecreatingCallInvoker outcome tracking ([#782](https://github.com/microsoft/durabletask-dotnet/pull/782))
+- Cache Azure Blob container initialization to avoid per-upload CreateIfNotExistsAsync ([#785](https://github.com/microsoft/durabletask-dotnet/pull/785))
+- Performance: remove unnecessary Task.Run from payload unary interception ([#781](https://github.com/microsoft/durabletask-dotnet/pull/781))
+- Make externalized large-payload token self-describing (token v2) ([#766](https://github.com/microsoft/durabletask-dotnet/pull/766))
+- Bump the github-actions group across 1 directory with 5 updates ([#760](https://github.com/microsoft/durabletask-dotnet/pull/760))
+- Bump Microsoft.Azure.DurableTask.Core from 3.8.0 to 3.9.0 ([#753](https://github.com/microsoft/durabletask-dotnet/pull/753))
+- Bump Microsoft.Azure.Functions.Worker from 2.51.0 to 2.52.0 ([#715](https://github.com/microsoft/durabletask-dotnet/pull/715))
+- Bump dotnet-sdk from 10.0.203 to 10.0.302 ([#767](https://github.com/microsoft/durabletask-dotnet/pull/767))
+- Reduce shim instance-start polling load with bounded jitter ([#779](https://github.com/microsoft/durabletask-dotnet/pull/779))
+- test(InProcessTestHost): external-event + durable-timer timeout coverage (relates to #713) ([#764](https://github.com/microsoft/durabletask-dotnet/pull/764))
+- Fix generator emitting invalid C# for nullable activity input ([#763](https://github.com/microsoft/durabletask-dotnet/pull/763))
+- Pin GitHub Actions to full-length commit SHAs ([#759](https://github.com/microsoft/durabletask-dotnet/pull/759))
+- Change the default large payload externalization threshold (`LargePayloadStorageOptions.ThresholdBytes`) from 900,000 bytes to 256 KiB (262,144 bytes) ([#755](https://github.com/microsoft/durabletask-dotnet/pull/755))
 
 
 ## v1.25.0-preview.2
@@ -473,6 +491,4 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
-
-
 

@@ -2,11 +2,15 @@
 // Licensed under the MIT License.
 
 using Grpc.Core.Interceptors;
+using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask;
@@ -16,6 +20,24 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 {
+    /// <summary>
+    /// Enables externalized payload storage using Azure Blob Storage for the specified client builder.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <param name="configure">The callback to configure the storage options.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseExternalizedPayloads(
+        this IDurableTaskClientBuilder builder,
+        Action<LargePayloadStorageOptions> configure)
+    {
+        Check.NotNull(builder);
+        Check.NotNull(configure);
+
+        builder.Services.Configure(builder.Name, configure);
+
+        return UseExternalizedPayloadsCore(builder);
+    }
+
     /// <summary>
     /// Enables externalized payload storage using a pre-configured shared payload store.
     /// This overload helps ensure client and worker use the same configuration.
@@ -31,6 +53,15 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 
     static IDurableTaskClientBuilder UseExternalizedPayloadsCore(IDurableTaskClientBuilder builder)
     {
+        // Reuse the shared payload store when one is already registered (e.g. via AddExternalizedPayloadStore or
+        // the worker builder in the same process); only register our own as a fallback so we never create a
+        // second, redundant PayloadStore.
+        builder.Services.TryAddSingleton<PayloadStore>(sp =>
+        {
+            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
+            return new BlobPayloadStore(opts);
+        });
+
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC client
         builder.Services
             .AddOptions<GrpcDurableTaskClientOptions>(builder.Name)
@@ -56,6 +87,23 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 }
             });
 
+        // Always register the auto-purge starter. Whether auto-purge is actually enabled can only be known once
+        // options are fully resolved - the flag can be set by the inline configure delegate, services.Configure,
+        // configuration binding or PostConfigure, none of which are visible here at registration time - so the
+        // starter is registered unconditionally and no-ops in StartAsync when AutoPurge is disabled.
+        RegisterBlobPurgeJobStarter(builder);
+
         return builder;
+    }
+
+    static void RegisterBlobPurgeJobStarter(IDurableTaskClientBuilder builder)
+    {
+        string builderName = builder.Name;
+        builder.Services.AddSingleton<IHostedService>(sp => new BlobPurgeJobStarter(
+            sp.GetRequiredService<IDurableTaskClientProvider>(),
+            sp.GetRequiredService<PayloadStore>(),
+            sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>(),
+            builderName,
+            sp.GetRequiredService<ILogger<BlobPurgeJobStarter>>()));
     }
 }

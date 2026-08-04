@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using Grpc.Core.Interceptors;
-using Grpc.Net.Client;
-using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -31,11 +31,6 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         Check.NotNull(configure);
 
         builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<PayloadStore>(sp =>
-        {
-            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
-            return new BlobPayloadStore(opts);
-        });
 
         return UseExternalizedPayloadsCore(builder);
     }
@@ -55,6 +50,15 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 
     static IDurableTaskWorkerBuilder UseExternalizedPayloadsCore(IDurableTaskWorkerBuilder builder)
     {
+        // Reuse the shared payload store when one is already registered (e.g. via AddExternalizedPayloadStore or
+        // the client builder in the same process); only register our own as a fallback so we never create a
+        // second, redundant PayloadStore.
+        builder.Services.TryAddSingleton<PayloadStore>(sp =>
+        {
+            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
+            return new BlobPayloadStore(opts);
+        });
+
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
@@ -81,6 +85,19 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
             });
+
+        // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
+        // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
+        // execute here. The purge activities fetch/ack via the injected DurableTaskClient.
+        builder.AddTasks(r =>
+        {
+            r.AddEntity<BlobPurgeJob>();
+            r.AddOrchestrator<ExecuteBlobPurgeJobOperationOrchestrator>();
+            r.AddOrchestrator<BlobPurgeJobOrchestrator>();
+            r.AddActivity<GetTombstonedPayloadsActivity>();
+            r.AddActivity<DeleteExternalBlobActivity>();
+            r.AddActivity<AckPurgedPayloadsActivity>();
+        });
 
         return builder;
     }

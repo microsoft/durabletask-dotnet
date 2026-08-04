@@ -23,7 +23,11 @@ namespace Microsoft.DurableTask;
     Justification = "SemaphoreSlim does not allocate a disposable resource unless AvailableWaitHandle is accessed.")]
 public sealed class BlobPayloadStore : PayloadStore
 {
-    const string TokenPrefixV1 = "blob:v1:";
+    /// <summary>
+    /// The prefix of legacy v1 payload tokens, which identify the container by name only and not the storage
+    /// account. Auto-purge uses this to detect and skip v1 tokens.
+    /// </summary>
+    internal const string TokenPrefixV1 = "blob:v1:";
     const string TokenPrefixV2 = "blob:v2:";
     const string ContentEncodingGzip = "gzip";
     const int MaxRetryAttempts = 8;
@@ -196,6 +200,50 @@ public sealed class BlobPayloadStore : PayloadStore
         }
 
         return await DownloadFromBlobAsync(blob, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public override async Task DeleteAsync(string token, CancellationToken cancellationToken)
+    {
+        DecodeTokenResult decoded = DecodeToken(token);
+
+        BlobClient blob;
+        if (!decoded.IsV2)
+        {
+            // v1 tokens do not carry the account, so the payload is assumed to live in the configured container.
+            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Token container does not match configured container.", nameof(token));
+            }
+
+            blob = this.containerClient.GetBlobClient(decoded.Name);
+        }
+        else if (this.IsConfiguredContainer(decoded.ContainerUri!))
+        {
+            // Same account and container as the configured store: reuse it (works with any auth mode).
+            blob = this.containerClient.GetBlobClient(decoded.Name);
+        }
+        else if (this.options.Credential != null)
+        {
+            // The payload lives in a different account (e.g. the store was repointed). Identity auth can still
+            // delete it as long as the credential has RBAC access to that account.
+            blob = new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
+        }
+        else
+        {
+            throw new PayloadStorageException(
+                $"The externalized payload lives in a different storage account ('{decoded.ContainerUri}') than the " +
+                $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload deletes " +
+                "require identity (AAD) authentication with access to both accounts; connection-string / " +
+                "account-key credentials are account-specific and cannot delete in another account.");
+        }
+
+        // Idempotent by design: DeleteIfExistsAsync returns false (rather than throwing) when the blob is
+        // already gone, so re-delivered tombstones and concurrent purges from multiple worker replicas are safe.
+        await blob.DeleteIfExistsAsync(
+            DeleteSnapshotsOption.IncludeSnapshots,
+            conditions: null,
+            cancellationToken: cancellationToken);
     }
 
     /// <inheritdoc/>

@@ -73,6 +73,9 @@ public class ExtendedSessionsCache : IDisposable
     /// Gets the cache for extended sessions if it has already been initialized, or otherwise initializes it
     /// with an expiration scan frequency derived from the supplied duration.
     /// </summary>
+    /// <remarks>
+    /// The returned cache remains owned by this instance and must not be disposed by callers.
+    /// </remarks>
     /// <param name="expirationScanFrequencyInSeconds">
     /// The duration, in seconds, used to derive the expiration scan frequency. The cache checks for stale
     /// items every one-fifth of this duration.

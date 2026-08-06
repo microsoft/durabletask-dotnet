@@ -1,0 +1,14 @@
+### Add item to shopping cart using strongly-typed proxy
+POST http://localhost:7071/api/shopping-cart/cart1/items?id=ITEM001&name=Laptop&price=999.99&quantity=1
+
+### Add another item
+POST http://localhost:7071/api/shopping-cart/cart1/items?id=ITEM002&name=Mouse&price=29.99&quantity=2
+
+### Get shopping cart state
+GET http://localhost:7071/api/shopping-cart/cart1
+
+### Process order (runs orchestration that uses strongly-typed proxy)
+POST http://localhost:7071/api/shopping-cart/cart1/process
+
+### Clear shopping cart
+DELETE http://localhost:7071/api/shopping-cart/cart1

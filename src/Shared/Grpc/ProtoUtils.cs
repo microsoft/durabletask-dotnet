@@ -415,6 +415,7 @@ static class ProtoUtils
                             out string requestId);
 
                         entityConversionState.EntityRequestIds.Add(requestId);
+                        sendAction.ParentTraceContext = CreateTraceContext();
 
                         switch (sendAction.EntityMessageTypeCase)
                         {
@@ -636,6 +637,9 @@ static class ProtoUtils
                     Id = Guid.Parse(op.EntityOperationSignaled.RequestId),
                     Operation = op.EntityOperationSignaled.Operation,
                     Input = op.EntityOperationSignaled.Input,
+                    TraceContext = op.EntityOperationSignaled.ParentTraceContext is { } signalTc
+                        ? new DistributedTraceContext(signalTc.TraceParent, signalTc.TraceState)
+                        : null,
                 });
                 operationInfos.Add(new P.OperationInfo
                 {
@@ -650,6 +654,9 @@ static class ProtoUtils
                     Id = Guid.Parse(op.EntityOperationCalled.RequestId),
                     Operation = op.EntityOperationCalled.Operation,
                     Input = op.EntityOperationCalled.Input,
+                    TraceContext = op.EntityOperationCalled.ParentTraceContext is { } calledTc
+                        ? new DistributedTraceContext(calledTc.TraceParent, calledTc.TraceState)
+                        : null,
                 });
                 operationInfos.Add(new P.OperationInfo
                 {

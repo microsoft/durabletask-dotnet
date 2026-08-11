@@ -147,7 +147,8 @@ public sealed class LargePayloadStorageOptions
             if (value < 1 || value > BlobPurgeConstants.MaxBatchSize)
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(this.PayloadPurgeBatchSize), value,
+                    nameof(this.PayloadPurgeBatchSize),
+                    value,
                     $"PayloadPurgeBatchSize must be between 1 and {BlobPurgeConstants.MaxBatchSize} (inclusive).");
             }
 

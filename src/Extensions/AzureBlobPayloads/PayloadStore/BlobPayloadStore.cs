@@ -374,7 +374,7 @@ public sealed class BlobPayloadStore : PayloadStore
     /// Creates the ownership metadata stamped on every blob this store writes, so a later purge can prove the
     /// store created the blob before deleting it.
     /// </summary>
-    static IDictionary<string, string> CreateOwnershipMetadata() =>
+    static Dictionary<string, string> CreateOwnershipMetadata() =>
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [OwnershipMarkerName] = OwnershipMarkerValue,

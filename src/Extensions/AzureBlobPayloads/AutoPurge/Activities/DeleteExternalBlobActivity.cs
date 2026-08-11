@@ -1,53 +1,45 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Globalization;
+using System.Net;
 using Azure;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
-/// Activity that deletes a single externalized payload blob given its token. Deletion is idempotent, so
-/// re-delivered tokens and concurrent workers are safe.
+/// Activity that deletes a single externalized payload blob given its token, and classifies the attempt as
+/// <see cref="LargePayloadPurgeDisposition.Deleted"/>, <see cref="LargePayloadPurgeDisposition.Retry"/>, or
+/// <see cref="LargePayloadPurgeDisposition.Quarantined"/> with a stable reason code. Deletion is idempotent,
+/// so re-delivered tokens and concurrent workers are safe.
 /// </summary>
 /// <remarks>
-/// Outcome classification, verified against the Azure.Storage.Blobs / Azure.Core exception model (not
-/// assumed):
+/// The split between retry and quarantine is whether the failure can self-heal, verified against the
+/// Azure.Storage.Blobs / Azure.Core exception model (not assumed):
 /// <list type="bullet">
 /// <item>
 /// The Azure SDK already retries transient failures internally (connection errors plus HTTP
 /// 408/429/500/502/503/504, with exponential backoff), so any exception that escapes
-/// <see cref="PayloadStore.DeleteAsync"/> means those built-in retries were already exhausted.
+/// <see cref="PayloadStore.DeleteAsync"/> means those built-in retries were already exhausted. It is still
+/// classified as retryable, because the backend - not this activity - owns retry scheduling and can defer the
+/// row past a storage outage.
 /// </item>
 /// <item>
-/// Legacy <c>blob:v1:</c> tokens are discarded without a delete attempt: a v1 token carries only a container
-/// name, not the storage account, so a delete against the currently-configured account cannot be verified - if
-/// the store has been repointed the delete would report success while the real blob survives elsewhere. The
-/// backend ack protocol has no "skip" status (an un-acked row is re-served every cycle), so the token is acked
-/// to keep the pipeline moving and logged at error level as the operator's recovery pointer. A current backend
-/// hard-deletes v1 rows instead of tombstoning them, so this branch is a defensive guard for an older backend
-/// build or a row tombstoned before that fix, not the expected path.
+/// Quarantine is reserved for deterministic failures and protocol violations that retrying can never fix: a
+/// known version prefix whose body does not parse, a request storage rejected as permanently invalid, and a
+/// legacy v1 token. Quarantine preserves the row and its token as durable evidence, so a permanent failure
+/// neither blocks the queue nor destroys the only record of the blob.
 /// </item>
 /// <item>
-/// Permanent failures are discarded (acked so the backend clears the row) because retrying can never succeed:
-/// an <see cref="ArgumentException"/> from the store's token decode - a genuinely malformed or unrecognized
-/// token (v1 tokens are gated out above and never reach the store); a
-/// <see cref="RequestFailedException"/> with <see cref="RequestFailedException.Status"/> 400 (for example
-/// InvalidUri / InvalidResourceName when the decoded blob name violates Azure naming rules); and a
-/// <see cref="PayloadStorageException"/> when a v2 token points at a storage account the configured credential
-/// cannot reach (connection-string / account-key auth is account-specific). The backend batch is cursor-less,
-/// so an undroppable row would otherwise re-stream every cycle and block the pipeline head-of-line; the
-/// account-unreachable case is logged at error level so an operator can reconcile it.
-/// </item>
-/// <item>
-/// Everything else is treated as transient and leaves the payload tombstoned to retry on a later cycle:
-/// throttling / 5xx that outlived the SDK's retries, 403 authorization failures (which need an operator
-/// credential fix rather than dropping data), timeouts / cancellation, and a <see cref="NotSupportedException"/>
-/// from a misconfigured store that cannot delete at all (retried, not dropped, so the work is recoverable once
-/// a deleting store is registered). A blob is never dropped on an uncertain error, and a single bad token never
-/// fails the whole batch.
+/// A blob is never deleted on an uncertain error, and a single bad token never fails the whole batch: a
+/// failure is returned as a disposition rather than thrown.
 /// </item>
 /// </list>
+/// Per design §7 no log here carries the token or raw exception text - a token exposes the storage account,
+/// container, and blob path. Diagnostics are the stable reason enum plus a bounded, sanitized storage error
+/// code; the token itself is preserved on the backend's quarantined row.
 /// </remarks>
 /// <param name="store">The payload store used to delete blobs.</param>
 /// <param name="logger">The logger instance.</param>
@@ -55,78 +47,145 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 public class DeleteExternalBlobActivity(
     PayloadStore store,
     ILogger<DeleteExternalBlobActivity> logger)
-    : TaskActivity<string, BlobDeleteResult>
+    : TaskActivity<string, BlobPurgeOutcome>
 {
     readonly PayloadStore store = Check.NotNull(store);
     readonly ILogger<DeleteExternalBlobActivity> logger = Check.NotNull(logger);
 
     /// <inheritdoc/>
-    public override async Task<BlobDeleteResult> RunAsync(TaskActivityContext context, string input)
+    public override async Task<BlobPurgeOutcome> RunAsync(TaskActivityContext context, string input)
     {
         Check.NotNullOrEmpty(input, nameof(input));
 
-        if (input.StartsWith(BlobPayloadStore.TokenPrefixV1, StringComparison.Ordinal))
+        BlobPurgeOutcome outcome = await this.DeleteAsync(input);
+
+        switch (outcome.Disposition)
         {
-            // Auto-purge deliberately does not act on legacy v1 tokens. A v1 token carries only a container
-            // *name* - not the storage account - so a delete against the currently-configured account cannot be
-            // verified: if the store has since been repointed, DeleteIfExistsAsync returns false and the purge
-            // would silently report success while the real blob survives in the old account. Rather than delete
-            // on an unverifiable pointer, the token is discarded. The backend ack protocol carries no "skip"
-            // status (PayloadPurgeAck is just partition/instance/payload id, and an un-acked row is re-served by
-            // an uncursored TOP(N) query every cycle), so declining without acking would permanently block the
-            // pipeline. The full token is logged at error level so it remains a recoverable pointer. A current
-            // backend hard-deletes v1 rows instead of tombstoning them, so reaching this branch means an older
-            // backend build or a row tombstoned before that fix - it is a defensive guard, not the expected path.
-            this.logger.BlobPurgeDeleteV1TokenUnsupported(input);
-            return BlobDeleteResult.Discarded;
+            case LargePayloadPurgeDisposition.Quarantined:
+                this.logger.BlobPurgeDeleteQuarantined(outcome.Reason.ToString(), outcome.StorageErrorCode);
+                break;
+            case LargePayloadPurgeDisposition.Retry:
+                this.logger.BlobPurgeDeleteRetryable(outcome.Reason.ToString(), outcome.StorageErrorCode);
+                break;
+            case LargePayloadPurgeDisposition.Deleted
+                when outcome.Reason == LargePayloadPurgeReason.BlobNotStoreOwned:
+                this.logger.BlobPurgeBlobNotStoreOwned();
+                break;
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Extracts a bounded, sanitized storage error code for diagnostics. The service's own error code (for
+    /// example <c>BlobNotFound</c>) is a fixed vocabulary and the numeric status is the fallback, so neither
+    /// can carry a token or raw exception text.
+    /// </summary>
+    static string SanitizeErrorCode(RequestFailedException exception) =>
+        string.IsNullOrEmpty(exception.ErrorCode)
+            ? exception.Status.ToString(CultureInfo.InvariantCulture)
+            : exception.ErrorCode;
+
+    async Task<BlobPurgeOutcome> DeleteAsync(string token)
+    {
+        // Classify the token's version prefix before consulting the store. The store reports every token it
+        // cannot decode as the same ArgumentException, but the three cases have opposite dispositions, so they
+        // are separated here, where the prefix is still visible.
+        if (token.StartsWith(BlobPayloadStore.TokenPrefixV1, StringComparison.Ordinal))
+        {
+            // A v1 token carries a container *name* but not the storage account, so a delete against the
+            // currently-configured account cannot be verified: if the store has since been repointed,
+            // DeleteIfExists returns false and the purge would falsely report success while the real blob
+            // survives in the old account. Retrying cannot fix that, and a success-shaped discard would destroy
+            // the only durable record of the blob, so the row is quarantined instead - the backend preserves
+            // its token as evidence and stops polling it. The backend excludes v1 at insertion time, so
+            // reaching this branch is an invariant violation rather than an expected path.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.LegacyV1Token);
+        }
+
+        if (!token.StartsWith(BlobPayloadStore.TokenPrefixV2, StringComparison.Ordinal))
+        {
+            // An unrecognized prefix is most likely a token written by a newer SDK than this worker runs. That
+            // recovers after an upgrade, so it earns a deferral rather than quarantine.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.UnsupportedTokenVersion);
         }
 
         try
         {
-            await this.store.DeleteAsync(input, CancellationToken.None);
-            return BlobDeleteResult.Deleted;
+            PayloadDeleteOutcome outcome = await this.store.DeleteAsync(token, CancellationToken.None);
+            return outcome switch
+            {
+                PayloadDeleteOutcome.Deleted => new BlobPurgeOutcome(
+                    LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeReason.BlobDeleted),
+                PayloadDeleteOutcome.AlreadyAbsent => new BlobPurgeOutcome(
+                    LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeReason.BlobAlreadyAbsent),
+
+                // The blob exists but this store never wrote it, so it was left untouched. That is an expected
+                // outcome, not a defect - the token text merely matched the v2 grammar - and quarantining it
+                // would fill the quarantine set with non-defects. The tombstone is still resolved, because a
+                // blob the store does not own is not the store's to delete.
+                _ => new BlobPurgeOutcome(
+                    LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeReason.BlobNotStoreOwned),
+            };
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException)
         {
-            // The token is malformed or points at a different container; it can never succeed. Discard it so
-            // the backend clears the row instead of re-streaming the same poison token every cycle.
-            this.logger.BlobPurgeDeleteDiscarded(ex, input);
-            return BlobDeleteResult.Discarded;
+            // The prefix gate above proves this is a v2 token, so the only remaining decode failure is a v2
+            // body that does not parse. The SDK and backend control both sides of the protocol, so that
+            // indicates a producer, corruption, or compatibility bug; retrying can never fix it.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.MalformedToken);
         }
-        catch (RequestFailedException ex) when (ex.Status == 400)
+        catch (NotSupportedException)
         {
-            // Service rejected the request as permanently invalid (e.g. InvalidUri / InvalidResourceName - the
-            // decoded blob name violates Azure naming rules). Retrying can never succeed, so discard it like a
-            // poison token: ack so the backend clears the row instead of re-streaming it forever.
-            this.logger.BlobPurgeDeleteDiscarded(ex, input);
-            return BlobDeleteResult.Discarded;
+            // The registered store does not implement deletion. Every payload would fail the same way, so the
+            // work is kept recoverable until an operator registers a store that can delete.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StoreCannotDelete);
         }
-        catch (NotSupportedException ex)
+        catch (PayloadStorageException)
         {
-            // The registered store does not implement deletion (PayloadStore.DeleteAsync is virtual and its base
-            // implementation throws). This is a misconfiguration, not poison data: every payload would fail the
-            // same way, so acking would hard-delete the backend's entire record of what still needs cleanup while
-            // every blob survives. Keep the payload tombstoned so the work is recoverable once an operator
-            // registers a store that can delete.
-            this.logger.BlobPurgeDeleteNotSupported(ex, input);
-            return BlobDeleteResult.Retry;
+            // The token is well formed but points at a storage account this worker's credential cannot reach
+            // (account-key auth is account-specific). Recoverable after a configuration or credential change,
+            // so it is deferred rather than discarded.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StorageAccountUnreachable);
         }
-        catch (PayloadStorageException ex)
+        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.BadRequest)
         {
-            // The token is well-formed but points at a storage account this worker's credential cannot reach
-            // (cross-account without AAD). Retrying can never succeed from this process, and because the backend
-            // streams tombstones with an uncursored TOP(N) query, leaving it un-acked would re-serve the same
-            // token every cycle and permanently block the purge pipeline. Discard it so the row is cleared, and
-            // log at Error so an operator can reclaim the orphaned blob out-of-band.
-            this.logger.BlobPurgeDeleteUnreachable(ex, input);
-            return BlobDeleteResult.Discarded;
+            // Storage rejected a request generated from a well-formed token as permanently invalid (for
+            // example InvalidUri / InvalidResourceName). Retrying can never succeed.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Quarantined,
+                LargePayloadPurgeReason.InvalidStorageRequest,
+                SanitizeErrorCode(ex));
+        }
+        catch (RequestFailedException ex) when (
+            ex.Status == (int)HttpStatusCode.Unauthorized || ex.Status == (int)HttpStatusCode.Forbidden)
+        {
+            // Authorization can be transient or fixed by reconfiguration, so it stays recoverable rather than
+            // dropping data an operator can still reclaim.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Retry,
+                LargePayloadPurgeReason.StorageAuthorizationFailed,
+                SanitizeErrorCode(ex));
+        }
+        catch (RequestFailedException ex)
+        {
+            // Throttling, 5xx, and anything else the service reported, including a failed If-Match on the
+            // ownership check: transient by default.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Retry,
+                LargePayloadPurgeReason.TransientStorageFailure,
+                SanitizeErrorCode(ex));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
-            // Transient failure: leave the payload tombstoned so a later purge cycle can retry it. A single
-            // bad token must not fail the whole batch.
-            this.logger.BlobPurgeDeleteFailed(ex, input);
-            return BlobDeleteResult.Retry;
+            // Timeouts, cancellation, and network failures. A blob is never dropped on an uncertain error.
+            return new BlobPurgeOutcome(
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.TransientStorageFailure);
         }
     }
 }

@@ -32,11 +32,17 @@ public abstract class PayloadStore
     /// The default implementation throws <see cref="NotSupportedException"/>. Stores that externalize
     /// payloads to deletable storage (for example Azure Blob Storage) should override it. It is declared
     /// virtual rather than abstract so that adding it does not break existing external subclasses.
+    /// Implementations must delete only objects they created; an object that carries no proof of the
+    /// store's ownership must be left untouched and reported as
+    /// <see cref="PayloadDeleteOutcome.NotStoreOwned"/>.
     /// </remarks>
     /// <param name="token">The opaque reference token.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task that completes when the payload has been deleted (or was already absent).</returns>
-    public virtual Task DeleteAsync(string token, CancellationToken cancellationToken) =>
+    /// <returns>
+    /// The outcome of the deletion: whether the object was deleted, was already absent, or was left in
+    /// place because the store does not own it.
+    /// </returns>
+    public virtual Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken) =>
         throw new NotSupportedException(
             $"This {nameof(PayloadStore)} implementation does not support deleting payloads.");
 

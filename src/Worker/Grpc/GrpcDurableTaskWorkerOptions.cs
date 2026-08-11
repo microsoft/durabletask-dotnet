@@ -45,6 +45,13 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
 
     /// <summary>
+    /// Gets or sets a value indicating whether this worker opts in to large-payload auto-purge, announced to
+    /// the backend on connection. <c>null</c> means the worker expresses no opinion and the backend keeps its
+    /// current behavior; an explicit <c>true</c> or <c>false</c> is the customer's choice.
+    /// </summary>
+    public bool? LargePayloadAutoPurgeEnabled { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum size of all actions in a complete orchestration work item chunk.
     /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
     /// </summary>

@@ -9,13 +9,16 @@ using Azure.Storage.Blobs.Models;
 namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="BlobPayloadStore.DeleteAsync"/>, covering legacy v1 back-compatibility and the
-/// self-describing v2 token resolution (same account, cross-account with identity, cross-account without).
+/// Unit tests for <see cref="BlobPayloadStore.DeleteAsync"/>, covering legacy v1 back-compatibility, the
+/// self-describing v2 token resolution (same account, cross-account with identity, cross-account without), and
+/// the ownership marker that gates every delete.
 /// </summary>
 public class BlobPayloadStoreDeleteTests
 {
     const string ContainerName = "payloads";
     const string ConfiguredAccountUrl = "https://myaccount.blob.core.windows.net";
+
+    static readonly ETag KnownETag = new("\"0x8DTEST\"");
 
     static Mock<BlobContainerClient> CreateContainer(Mock<BlobClient> blob, string expectedBlobName)
     {
@@ -26,9 +29,34 @@ public class BlobPayloadStoreDeleteTests
         return container;
     }
 
-    static Mock<BlobClient> CreateBlob(bool existed)
+    /// <summary>
+    /// Creates a blob that exists and carries this store's ownership marker, which is the ordinary case for a
+    /// payload the store itself uploaded.
+    /// </summary>
+    static Mock<BlobClient> CreateBlob(bool existed) => CreateBlob(existed, owned: true);
+
+    static Mock<BlobClient> CreateBlob(bool existed, bool owned)
     {
         Mock<BlobClient> blob = new();
+
+        if (existed)
+        {
+            Dictionary<string, string> metadata = owned
+                ? new() { [BlobPayloadStore.OwnershipMarkerName] = BlobPayloadStore.OwnershipMarkerValue }
+                : new() { ["customer-tag"] = "not-ours" };
+
+            blob
+                .Setup(b => b.GetPropertiesAsync(It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Response.FromValue(
+                    BlobsModelFactory.BlobProperties(metadata: metadata, eTag: KnownETag), Mock.Of<Response>()));
+        }
+        else
+        {
+            blob
+                .Setup(b => b.GetPropertiesAsync(It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new RequestFailedException(404, "not found", "BlobNotFound", null));
+        }
+
         blob
             .Setup(b => b.DeleteIfExistsAsync(
                 It.IsAny<DeleteSnapshotsOption>(), It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()))
@@ -45,17 +73,22 @@ public class BlobPayloadStoreDeleteTests
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), container.Object);
 
         // Act
-        await store.DeleteAsync($"blob:v1:{ContainerName}:abc123", CancellationToken.None);
+        PayloadDeleteOutcome outcome = await store.DeleteAsync(
+            $"blob:v1:{ContainerName}:abc123", CancellationToken.None);
 
         // Assert
+        outcome.Should().Be(PayloadDeleteOutcome.Deleted);
         container.Verify(c => c.GetBlobClient("abc123"), Times.Once);
         blob.Verify(
-            b => b.DeleteIfExistsAsync(DeleteSnapshotsOption.IncludeSnapshots, null, It.IsAny<CancellationToken>()),
+            b => b.DeleteIfExistsAsync(
+                DeleteSnapshotsOption.IncludeSnapshots,
+                It.Is<BlobRequestConditions>(c => c.IfMatch == KnownETag),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task DeleteAsync_MissingBlob_IsIdempotentAndDoesNotThrow()
+    public async Task DeleteAsync_MissingBlob_IsIdempotentAndReportsAlreadyAbsent()
     {
         // Arrange
         Mock<BlobClient> blob = CreateBlob(existed: false);
@@ -63,13 +96,36 @@ public class BlobPayloadStoreDeleteTests
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), container.Object);
 
         // Act (a missing blob must be a no-op, not an error)
-        await store.DeleteAsync($"blob:v1:{ContainerName}:missing", CancellationToken.None);
+        PayloadDeleteOutcome outcome = await store.DeleteAsync(
+            $"blob:v1:{ContainerName}:missing", CancellationToken.None);
 
-        // Assert
+        // Assert - the ownership probe already proved absence, so no delete request is needed.
+        outcome.Should().Be(PayloadDeleteOutcome.AlreadyAbsent);
         blob.Verify(
             b => b.DeleteIfExistsAsync(
                 It.IsAny<DeleteSnapshotsOption>(), It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_BlobWithoutOwnershipMarker_LeavesBlobUntouched()
+    {
+        // Arrange - a blob whose token text matches the v2 grammar but which this store never wrote (for
+        // example a customer dataset referenced by URL, or a payload written before the marker shipped).
+        Mock<BlobClient> blob = CreateBlob(existed: true, owned: false);
+        Mock<BlobContainerClient> container = CreateContainer(blob, "abc123");
+        BlobPayloadStore store = new(new LargePayloadStorageOptions(), container.Object);
+
+        // Act
+        PayloadDeleteOutcome outcome = await store.DeleteAsync(
+            $"blob:v2:{ConfiguredAccountUrl}/{ContainerName}/abc123", CancellationToken.None);
+
+        // Assert - reported distinctly and, critically, never deleted.
+        outcome.Should().Be(PayloadDeleteOutcome.NotStoreOwned);
+        blob.Verify(
+            b => b.DeleteIfExistsAsync(
+                It.IsAny<DeleteSnapshotsOption>(), It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -115,12 +171,17 @@ public class BlobPayloadStoreDeleteTests
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), container.Object);
 
         // Act
-        await store.DeleteAsync($"blob:v2:{ConfiguredAccountUrl}/{ContainerName}/abc123", CancellationToken.None);
+        PayloadDeleteOutcome outcome = await store.DeleteAsync(
+            $"blob:v2:{ConfiguredAccountUrl}/{ContainerName}/abc123", CancellationToken.None);
 
         // Assert
+        outcome.Should().Be(PayloadDeleteOutcome.Deleted);
         container.Verify(c => c.GetBlobClient("abc123"), Times.Once);
         blob.Verify(
-            b => b.DeleteIfExistsAsync(DeleteSnapshotsOption.IncludeSnapshots, null, It.IsAny<CancellationToken>()),
+            b => b.DeleteIfExistsAsync(
+                DeleteSnapshotsOption.IncludeSnapshots,
+                It.Is<BlobRequestConditions>(c => c.IfMatch == KnownETag),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

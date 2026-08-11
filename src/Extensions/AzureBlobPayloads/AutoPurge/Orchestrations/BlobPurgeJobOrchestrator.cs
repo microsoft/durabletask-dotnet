@@ -17,9 +17,10 @@ public sealed record BlobPurgeJobRunRequest(
     EntityInstanceId JobEntityId, int PurgeBatchSize, int ProcessedCycles = 0);
 
 /// <summary>
-/// Perpetual orchestrator that drains tombstoned payloads from the backend, deletes their blobs with capped
-/// parallelism, and acknowledges the successful deletions so the backend can hard-delete the rows. It idles
-/// on a timer when there is nothing to purge and continues-as-new periodically to keep its history small.
+/// Perpetual orchestrator that drains due large-payload tombstones from the backend, deletes their blobs with
+/// capped parallelism, and reports every outcome so the backend can resolve, reschedule, or quarantine each
+/// row. It idles on a timer when there is nothing to purge and continues-as-new periodically to keep its
+/// history small.
 /// </summary>
 [DurableTask]
 public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest, object?>
@@ -66,8 +67,8 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                     return null;
                 }
 
-                List<TombstonedPayload> tombstones = await context.CallActivityAsync<List<TombstonedPayload>>(
-                    nameof(GetTombstonedPayloadsActivity),
+                List<LargePayloadTombstone> tombstones = await context.CallActivityAsync<List<LargePayloadTombstone>>(
+                    nameof(GetLargePayloadTombstonesActivity),
                     batchSize,
                     new TaskOptions(PurgeActivityRetryPolicy));
 
@@ -78,26 +79,34 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                     continue;
                 }
 
-                List<PayloadPurgeAck> acks = await this.DeleteBatchAsync(context, tombstones);
+                List<LargePayloadPurgeResult> results = await this.DeleteBatchAsync(context, tombstones);
 
-                if (acks.Count > 0)
+                // Every attempted row produces a result, including the retryable ones: the backend owns retry
+                // scheduling, so it needs to hear about a failure to defer the row. Reporting unconditionally
+                // is what keeps a failing row from being re-served unchanged on the very next cycle.
+                await context.CallActivityAsync(
+                    nameof(ReportLargePayloadPurgeResultsActivity),
+                    results,
+                    new TaskOptions(PurgeActivityRetryPolicy));
+
+                // Two different questions, deliberately not conflated. Progress counts only payloads that were
+                // actually purged; the backoff decision asks whether ANY row left the retry queue, because a
+                // quarantined row also stops being re-served even though nothing was reclaimed.
+                int purged = CountDisposition(results, LargePayloadPurgeDisposition.Deleted);
+                int resolved = results.Count - CountDisposition(results, LargePayloadPurgeDisposition.Retry);
+
+                if (purged > 0)
                 {
-                    await context.CallActivityAsync(
-                        nameof(AckPurgedPayloadsActivity),
-                        acks,
-                        new TaskOptions(PurgeActivityRetryPolicy));
-
                     await context.Entities.CallEntityAsync(
-                        input.JobEntityId, nameof(BlobPurgeJob.RecordPurged), (long)acks.Count);
+                        input.JobEntityId, nameof(BlobPurgeJob.RecordPurged), (long)purged);
                 }
-                else
+
+                if (resolved == 0)
                 {
-                    // Nothing in this batch could be acknowledged: every delete returned Retry (e.g. a storage
-                    // outage or throttling). Deletes report failure as a return value rather than an exception,
-                    // so no retry policy or backoff applies on that path. The backend serves tombstones with an
-                    // uncursored TOP(N) query, so continuing immediately would refetch the identical rows and
-                    // re-attempt the identical deletes in a tight loop for as long as the outage lasts. Back off
-                    // before trying again.
+                    // The whole batch came back retryable (e.g. a storage outage or throttling). Deletes report
+                    // failure as a return value rather than an exception, so no activity retry policy applies on
+                    // that path. Continuing immediately would refetch and re-attempt in a tight loop for as long
+                    // as the outage lasts, so back off before the next cycle.
                     await context.CreateTimer(ErrorBackoff, default);
                 }
             }
@@ -112,56 +121,71 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         }
     }
 
-    async Task<List<PayloadPurgeAck>> DeleteBatchAsync(
-        TaskOrchestrationContext context, List<TombstonedPayload> tombstones)
+    static int CountDisposition(
+        List<LargePayloadPurgeResult> results, LargePayloadPurgeDisposition disposition)
     {
-        List<PayloadPurgeAck> acks = new(tombstones.Count);
-        List<Task<DeleteOutcome>> tasks = new();
+        int count = 0;
+        foreach (LargePayloadPurgeResult result in results)
+        {
+            if (result.Disposition == disposition)
+            {
+                count++;
+            }
+        }
 
-        foreach (TombstonedPayload tombstone in tombstones)
+        return count;
+    }
+
+    static async Task DrainAsync(
+        List<Task<LargePayloadPurgeResult>> tasks, List<LargePayloadPurgeResult> results)
+    {
+        LargePayloadPurgeResult[] completed = await Task.WhenAll(tasks);
+        results.AddRange(completed);
+    }
+
+    async Task<List<LargePayloadPurgeResult>> DeleteBatchAsync(
+        TaskOrchestrationContext context, List<LargePayloadTombstone> tombstones)
+    {
+        List<LargePayloadPurgeResult> results = new(tombstones.Count);
+        List<Task<LargePayloadPurgeResult>> tasks = new();
+
+        foreach (LargePayloadTombstone tombstone in tombstones)
         {
             tasks.Add(this.DeleteOneAsync(context, tombstone));
 
             if (tasks.Count >= MaxParallelDeletes)
             {
-                await DrainAsync(tasks, acks);
+                await DrainAsync(tasks, results);
                 tasks.Clear();
             }
         }
 
         if (tasks.Count > 0)
         {
-            await DrainAsync(tasks, acks);
+            await DrainAsync(tasks, results);
         }
 
-        return acks;
+        return results;
     }
 
-    static async Task DrainAsync(List<Task<DeleteOutcome>> tasks, List<PayloadPurgeAck> acks)
+    async Task<LargePayloadPurgeResult> DeleteOneAsync(
+        TaskOrchestrationContext context, LargePayloadTombstone tombstone)
     {
-        DeleteOutcome[] outcomes = await Task.WhenAll(tasks);
-        foreach (DeleteOutcome outcome in outcomes)
-        {
-            // Acknowledge blobs that were deleted (or already gone) and poison tokens that can never succeed
-            // so the backend can hard-delete their rows; transient failures stay tombstoned to retry.
-            if (outcome.ShouldAck)
-            {
-                acks.Add(outcome.Ack);
-            }
-        }
-    }
-
-    async Task<DeleteOutcome> DeleteOneAsync(TaskOrchestrationContext context, TombstonedPayload tombstone)
-    {
-        BlobDeleteResult result = await context.CallActivityAsync<BlobDeleteResult>(
+        BlobPurgeOutcome outcome = await context.CallActivityAsync<BlobPurgeOutcome>(
             nameof(DeleteExternalBlobActivity),
             tombstone.Token,
             new TaskOptions(PurgeActivityRetryPolicy));
 
-        return new DeleteOutcome(
-            result != BlobDeleteResult.Retry,
-            new PayloadPurgeAck(tombstone.PartitionId, tombstone.InstanceKey, tombstone.PayloadId));
+        // The revision is echoed back unchanged so the backend can detect a tombstone that was rewritten while
+        // this attempt was in flight and ignore the stale result. Retry scheduling is the backend's job, so no
+        // next-attempt time is computed here.
+        return new LargePayloadPurgeResult(
+            tombstone.PartitionId,
+            tombstone.InstanceKey,
+            tombstone.PayloadId,
+            tombstone.Revision,
+            outcome.Disposition,
+            outcome.Reason,
+            outcome.StorageErrorCode);
     }
-
-    readonly record struct DeleteOutcome(bool ShouldAck, PayloadPurgeAck Ack);
 }

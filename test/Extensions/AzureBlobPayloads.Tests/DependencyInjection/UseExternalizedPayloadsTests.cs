@@ -2,8 +2,11 @@
 // Licensed under the MIT License.
 
 using FluentAssertions;
+using Grpc.Core;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -115,10 +118,40 @@ public class UseExternalizedPayloadsTests
         // Act - UseDevelopmentStorage=true is a valid connection string that BlobServiceClient accepts with no
         // network I/O, so the store constructs offline. Build the provider and actually resolve PayloadStore.
         builder.Object.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true");
-        using ServiceProvider provider = services.BuildServiceProvider();
+        using ServiceProvider clientProvider = services.BuildServiceProvider();
 
         // Assert - the store resolves without throwing and is the blob-backed implementation.
-        PayloadStore store = provider.GetRequiredService<PayloadStore>();
+        PayloadStore store = clientProvider.GetRequiredService<PayloadStore>();
         store.Should().BeOfType<BlobPayloadStore>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UseExternalizedPayloads_Worker_SendsResolvedAutoPurgeValueOnTheHandshake(bool autoPurge)
+    {
+        // Arrange - the backend only tombstones payloads for a task hub whose workers opted in, so the resolved
+        // AutoPurge value has to ride the GetWorkItems handshake. A worker that never calls this extension sends
+        // nothing at all, which the backend reads as "no opinion".
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(string.Empty);
+        services.AddOptions<GrpcDurableTaskWorkerOptions>(string.Empty)
+            .Configure(o => o.CallInvoker = Mock.Of<CallInvoker>());
+
+        // Act
+        builder.Object.UseExternalizedPayloads(options =>
+        {
+            options.ConnectionString = "UseDevelopmentStorage=true";
+            options.AutoPurge = autoPurge;
+        });
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        GrpcDurableTaskWorkerOptions grpcOptions =
+            provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(string.Empty);
+
+        // Assert - an explicit true/false, never left absent, because calling this extension IS the choice.
+        grpcOptions.LargePayloadAutoPurgeEnabled.Should().Be(autoPurge);
     }
 }

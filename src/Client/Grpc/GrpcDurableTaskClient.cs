@@ -625,7 +625,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task<List<TombstonedPayload>> GetTombstonedPayloadsAsync(
+    public override async Task<List<LargePayloadTombstone>> GetLargePayloadTombstonesAsync(
         int limit, CancellationToken cancellation = default)
     {
         if (limit <= 0 || limit > 1000)
@@ -634,59 +634,70 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 nameof(limit), limit, "Limit must be greater than 0 and less than or equal to 1000.");
         }
 
-        P.GetTombstonedPayloadsResponse response;
+        P.GetLargePayloadTombstonesResponse response;
         try
         {
-            response = await this.sidecarClient.GetTombstonedPayloadsAsync(
-                new P.GetTombstonedPayloadsRequest { Limit = limit },
+            response = await this.sidecarClient.GetLargePayloadTombstonesAsync(
+                new P.GetLargePayloadTombstonesRequest { Limit = limit },
                 cancellationToken: cancellation);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.GetTombstonedPayloadsAsync)} operation was canceled.", e, cancellation);
+                $"The {nameof(this.GetLargePayloadTombstonesAsync)} operation was canceled.", e, cancellation);
         }
 
-        List<TombstonedPayload> result = new(response.Payloads.Count);
-        foreach (P.TombstonedPayload payload in response.Payloads)
+        List<LargePayloadTombstone> result = new(response.Tombstones.Count);
+        foreach (P.LargePayloadTombstone tombstone in response.Tombstones)
         {
-            result.Add(new TombstonedPayload(
-                payload.PartitionId, payload.InstanceKey, payload.PayloadId, payload.Token));
+            result.Add(new LargePayloadTombstone(
+                tombstone.PartitionId,
+                tombstone.InstanceKey,
+                tombstone.PayloadId,
+                tombstone.Token,
+                tombstone.Revision));
         }
 
         return result;
     }
 
     /// <inheritdoc/>
-    public override async Task AckPurgedPayloadsAsync(
-        IEnumerable<PayloadPurgeAck> acks, CancellationToken cancellation = default)
+    public override async Task ReportLargePayloadPurgeResultsAsync(
+        IEnumerable<LargePayloadPurgeResult> results, CancellationToken cancellation = default)
     {
-        Check.NotNull(acks);
+        Check.NotNull(results);
 
-        P.AckPurgedPayloadsRequest request = new();
-        foreach (PayloadPurgeAck ack in acks)
+        P.ReportLargePayloadPurgeResultsRequest request = new();
+        foreach (LargePayloadPurgeResult result in results)
         {
-            request.Acks.Add(new P.PayloadPurgeAck
+            request.Results.Add(new P.LargePayloadPurgeResult
             {
-                PartitionId = ack.PartitionId,
-                InstanceKey = ack.InstanceKey,
-                PayloadId = ack.PayloadId,
+                PartitionId = result.PartitionId,
+                InstanceKey = result.InstanceKey,
+                PayloadId = result.PayloadId,
+                Revision = result.Revision,
+
+                // The managed enums declare the same numeric values as their protobuf counterparts, so the
+                // disposition and reason map across by value.
+                Disposition = (P.LargePayloadPurgeDisposition)result.Disposition,
+                Reason = (P.LargePayloadPurgeReason)result.Reason,
+                StorageErrorCode = result.StorageErrorCode ?? string.Empty,
             });
         }
 
-        if (request.Acks.Count == 0)
+        if (request.Results.Count == 0)
         {
             return;
         }
 
         try
         {
-            await this.sidecarClient.AckPurgedPayloadsAsync(request, cancellationToken: cancellation);
+            await this.sidecarClient.ReportLargePayloadPurgeResultsAsync(request, cancellationToken: cancellation);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.AckPurgedPayloadsAsync)} operation was canceled.", e, cancellation);
+                $"The {nameof(this.ReportLargePayloadPurgeResultsAsync)} operation was canceled.", e, cancellation);
         }
     }
 

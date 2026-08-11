@@ -349,6 +349,10 @@ sealed partial class GrpcDurableTaskWorker
                         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
                     Capabilities = { this.worker.grpcOptions.Capabilities },
                     WorkItemFilters = this.worker.workItemFilters?.ToGrpcWorkItemFilters(),
+
+                    // Left unset when the worker has no opinion, so the backend can distinguish "not
+                    // configured" from an explicit opt-out.
+                    LargePayloadAutoPurgeEnabled = this.worker.grpcOptions.LargePayloadAutoPurgeEnabled,
                 },
                 cancellationToken: cancellation);
         }

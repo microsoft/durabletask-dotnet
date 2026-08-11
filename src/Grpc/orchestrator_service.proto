@@ -786,6 +786,18 @@ service TaskHubSidecarService {
     rpc PurgeInstances(PurgeInstancesRequest) returns (PurgeInstancesResponse);
 
     rpc GetWorkItems(GetWorkItemsRequest) returns (stream WorkItem);
+
+    // Returns a bounded, deterministically ordered batch of due large-payload tombstones whose
+    // external blobs the worker must delete. Scoped to the caller's authenticated task hub.
+    // Only rows that are pending and whose next attempt time has arrived are returned; a row stays
+    // pending until its outcome is reported, so this is safe under retries and duplicate callers.
+    rpc GetLargePayloadTombstones(GetLargePayloadTombstonesRequest) returns (GetLargePayloadTombstonesResponse);
+
+    // Reports the outcome of each attempted blob deletion. The backend owns retry scheduling: it
+    // deletes rows reported as DELETED, reschedules RETRY with a reason-appropriate next attempt,
+    // and moves QUARANTINED rows out of the active fetch while preserving their evidence.
+    rpc ReportLargePayloadPurgeResults(ReportLargePayloadPurgeResultsRequest) returns (ReportLargePayloadPurgeResultsResponse);
+
     rpc CompleteActivityTask(ActivityResponse) returns (CompleteTaskResponse);
     rpc CompleteOrchestratorTask(OrchestratorResponse) returns (CompleteTaskResponse);
     rpc CompleteEntityTask(EntityBatchResult) returns (CompleteTaskResponse);
@@ -823,53 +835,133 @@ service TaskHubSidecarService {
     // "Skip" graceful termination of orchestrations by immediately changing their status in storage to "terminated".
     // Note that a maximum of 500 orchestrations can be terminated at a time using this method.
     rpc SkipGracefulOrchestrationTerminations(SkipGracefulOrchestrationTerminationsRequest) returns (SkipGracefulOrchestrationTerminationsResponse);
-
-    // Returns a batch of blob-externalized payload tombstones the backend has soft-deleted so the worker
-    // can delete the corresponding blobs from customer storage (the backend has no storage credentials of
-    // its own). The worker deletes each blob and then calls AckPurgedPayloads so the backend can
-    // hard-delete the soft-deleted rows. This is an opt-in, worker-driven pull model.
-    rpc GetTombstonedPayloads(GetTombstonedPayloadsRequest) returns (GetTombstonedPayloadsResponse);
-
-    // Acknowledges that the worker has deleted the blobs for the identified payloads so the backend can
-    // hard-delete the soft-deleted rows.
-    rpc AckPurgedPayloads(AckPurgedPayloadsRequest) returns (AckPurgedPayloadsResponse);
 }
 
-// Server -> client. Identifies a blob-externalized payload that the backend has soft-deleted and whose
-// blob the worker should delete from customer storage.
-message TombstonedPayload {
+// server -> client: one tombstoned large-payload row whose external blob the worker must delete.
+message LargePayloadTombstone {
     int32 partitionId = 1;
     int64 instanceKey = 2;
     int64 payloadId = 3;
-    // The externalized payload token (e.g. "blob:v1:<container>:<blobName>") whose backing blob should be deleted.
+
+    // A self-describing SDK v2 token: "blob:v2:{fullBlobUrl}".
+    // Legacy v1 tokens are never tombstoned: v1 carries a container name but not the storage
+    // account, so a delete against the configured account cannot be verified. The backend
+    // hard-deletes v1 payload rows instead (design §8).
     string token = 4;
+
+    // Optimistic-concurrency guard. The worker echoes this value back unmodified in the result so
+    // the backend can reject duplicate or stale reports without taking a per-row lease.
+    int64 revision = 5;
 }
 
-// Client -> server. Acknowledges that the worker has deleted the blob for the identified payload so the
-// backend can hard-delete the soft-deleted row.
-message PayloadPurgeAck {
+// The outcome of a single blob deletion attempt. The split is by whether a failure can self-heal.
+enum LargePayloadPurgeDisposition {
+    LARGE_PAYLOAD_PURGE_DISPOSITION_UNSPECIFIED = 0;
+
+    // Terminal success. The blob was deleted, was already absent, or was deliberately left in
+    // place because it is not owned by the payload store (design §5.5). The backend deletes the
+    // tombstone in all three cases.
+    LARGE_PAYLOAD_PURGE_DISPOSITION_DELETED = 1;
+
+    // The failure may self-heal, so the row stays pending and the backend sets the next attempt.
+    LARGE_PAYLOAD_PURGE_DISPOSITION_RETRY = 2;
+
+    // A deterministic failure or protocol violation that retrying can never fix. The backend
+    // preserves the evidence, alerts, and stops automatic retries.
+    LARGE_PAYLOAD_PURGE_DISPOSITION_QUARANTINED = 3;
+}
+
+// A stable, bounded reason for a disposition. Never carries a token or raw exception text
+// (design §7: tokens expose storage account, container, and blob path).
+enum LargePayloadPurgeReason {
+    LARGE_PAYLOAD_PURGE_REASON_UNSPECIFIED = 0;
+
+    // --- Reported with DELETED ---
+
+    // The blob was deleted by this attempt.
+    LARGE_PAYLOAD_PURGE_REASON_BLOB_DELETED = 1;
+
+    // The blob was already absent. Deletion is idempotent, so this is a success.
+    LARGE_PAYLOAD_PURGE_REASON_BLOB_ALREADY_ABSENT = 2;
+
+    // The blob did not carry the payload store's ownership marker, so it was left untouched
+    // (design §5.5). This is an expected outcome, not a defect: the token text merely matched the
+    // v2 grammar. The tombstone is still resolved because the blob is not the store's to delete.
+    LARGE_PAYLOAD_PURGE_REASON_BLOB_NOT_STORE_OWNED = 3;
+
+    // --- Reported with RETRY ---
+
+    // Network failure, timeout, storage outage, throttling, or a 5xx response.
+    LARGE_PAYLOAD_PURGE_REASON_TRANSIENT_STORAGE_FAILURE = 10;
+
+    // The registered payload store does not implement deletion. Every payload would fail the same
+    // way, so the work is kept recoverable until an operator registers a store that can delete.
+    LARGE_PAYLOAD_PURGE_REASON_STORE_CANNOT_DELETE = 11;
+
+    // The token is well formed but points at a storage account this worker's credential cannot
+    // reach. Recoverable after a configuration or credential change.
+    LARGE_PAYLOAD_PURGE_REASON_STORAGE_ACCOUNT_UNREACHABLE = 12;
+
+    // The token uses a recognized-but-newer version prefix this worker does not understand.
+    // Recoverable after an SDK upgrade, so it earns a long defer rather than quarantine.
+    LARGE_PAYLOAD_PURGE_REASON_UNSUPPORTED_TOKEN_VERSION = 13;
+
+    // Authorization failed in a way that may be transient or reconfigurable (401/403).
+    LARGE_PAYLOAD_PURGE_REASON_STORAGE_AUTHORIZATION_FAILED = 14;
+
+    // --- Reported with QUARANTINED ---
+
+    // The token carries a known version prefix but its body does not parse. Because the SDK and
+    // backend control both sides of the protocol, this indicates a producer, corruption, or
+    // compatibility bug.
+    LARGE_PAYLOAD_PURGE_REASON_MALFORMED_TOKEN = 20;
+
+    // Storage rejected a request generated from a well-formed token as permanently invalid
+    // (HTTP 400, e.g. InvalidUri / InvalidResourceName). Retrying can never succeed.
+    LARGE_PAYLOAD_PURGE_REASON_INVALID_STORAGE_REQUEST = 21;
+
+    // A legacy v1 token reached the worker. This is an invariant violation, because the backend
+    // excludes v1 at insertion time. It cannot be safely deleted (no storage account in the token)
+    // and cannot be fixed by retrying, so the evidence is preserved instead (design §6).
+    LARGE_PAYLOAD_PURGE_REASON_LEGACY_V1_TOKEN = 22;
+}
+
+// client -> server: the outcome of exactly one tombstoned row.
+message LargePayloadPurgeResult {
+    // Row identity, echoed from the corresponding LargePayloadTombstone.
     int32 partitionId = 1;
     int64 instanceKey = 2;
     int64 payloadId = 3;
+
+    // Echoed unmodified from the fetched tombstone; used as a compare-and-swap guard.
+    int64 revision = 4;
+
+    LargePayloadPurgeDisposition disposition = 5;
+    LargePayloadPurgeReason reason = 6;
+
+    // Optional bounded, sanitized storage status or error code for diagnostics
+    // (for example "BlobNotFound" or "409"). Must never contain a token or raw exception text.
+    string storageErrorCode = 7;
 }
 
-// Client -> server. Requests up to `limit` tombstoned payloads for the worker to delete.
-message GetTombstonedPayloadsRequest {
+// client -> server: request up to `limit` due tombstones for the caller's task hub.
+message GetLargePayloadTombstonesRequest {
+    // The maximum number of rows to return. The service clamps this to its own maximum.
     int32 limit = 1;
 }
 
-// Server -> client. Carries the batch of tombstoned payloads for the worker to delete.
-message GetTombstonedPayloadsResponse {
-    repeated TombstonedPayload payloads = 1;
+// server -> client: the due tombstones whose blobs the worker must delete.
+message GetLargePayloadTombstonesResponse {
+    repeated LargePayloadTombstone tombstones = 1;
 }
 
-// Client -> server. Acknowledges a batch of payloads whose blobs the worker has deleted.
-message AckPurgedPayloadsRequest {
-    repeated PayloadPurgeAck acks = 1;
+// client -> server: a bounded batch of purge outcomes.
+message ReportLargePayloadPurgeResultsRequest {
+    repeated LargePayloadPurgeResult results = 1;
 }
 
-// Server -> client. Empty response acknowledging the acks were recorded.
-message AckPurgedPayloadsResponse {
+// server -> client: acknowledgement that the reported outcomes were recorded.
+message ReportLargePayloadPurgeResultsResponse {
 }
 
 message GetWorkItemsRequest {
@@ -879,6 +971,16 @@ message GetWorkItemsRequest {
 
     repeated WorkerCapability capabilities = 10;
     WorkItemFilters workItemFilters = 11;
+
+    // Task-hub scoped opt-in for large-payload blob auto-purge.
+    //
+    // This is a setting, not a WorkerCapability: WORKER_CAPABILITY_LARGE_PAYLOADS means a worker
+    // *can resolve* externalized payloads, not that the customer opted into *deleting* them.
+    // A capability list is presence-only and cannot express an explicit false, so a three-state
+    // wrapper is used instead:
+    //   absent      -> the worker has no opinion (older SDK); the persisted setting is unchanged.
+    //   true/false  -> an explicit customer choice; persisted only when the value actually differs.
+    google.protobuf.BoolValue large_payload_auto_purge_enabled = 12;
 }
 
 enum WorkerCapability {

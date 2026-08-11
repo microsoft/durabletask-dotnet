@@ -84,19 +84,24 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 }
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
+
+                // Item 2 of the pre-merge checklist: the resolved AutoPurge value rides the work-item
+                // handshake so the backend only tombstones payloads for a task hub whose workers opted in.
+                // Absent means "no opinion"; an explicit true/false is the customer's choice.
+                opt.LargePayloadAutoPurgeEnabled = opts.AutoPurge;
             });
 
         // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
         // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
-        // execute here. The purge activities fetch/ack via the injected DurableTaskClient.
+        // execute here. The purge activities fetch/report via the injected DurableTaskClient.
         builder.AddTasks(r =>
         {
             r.AddEntity<BlobPurgeJob>();
             r.AddOrchestrator<ExecuteBlobPurgeJobOperationOrchestrator>();
             r.AddOrchestrator<BlobPurgeJobOrchestrator>();
-            r.AddActivity<GetTombstonedPayloadsActivity>();
+            r.AddActivity<GetLargePayloadTombstonesActivity>();
             r.AddActivity<DeleteExternalBlobActivity>();
-            r.AddActivity<AckPurgedPayloadsActivity>();
+            r.AddActivity<ReportLargePayloadPurgeResultsActivity>();
         });
 
         return builder;

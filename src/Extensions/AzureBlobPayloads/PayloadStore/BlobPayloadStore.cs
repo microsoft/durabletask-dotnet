@@ -28,7 +28,28 @@ public sealed class BlobPayloadStore : PayloadStore
     /// account. Auto-purge uses this to detect and skip v1 tokens.
     /// </summary>
     internal const string TokenPrefixV1 = "blob:v1:";
-    const string TokenPrefixV2 = "blob:v2:";
+
+    /// <summary>
+    /// The prefix of self-describing v2 payload tokens, which carry the blob's absolute URI including the
+    /// storage account. Auto-purge uses this to tell a malformed v2 token (a protocol defect) apart from an
+    /// unrecognized version prefix (a token written by a newer SDK).
+    /// </summary>
+    internal const string TokenPrefixV2 = "blob:v2:";
+
+    /// <summary>
+    /// The metadata name of the ownership marker written on every blob this store creates. Recognizing a
+    /// token proves only that its text matches the store's grammar; the marker is what proves the store
+    /// actually wrote the blob, so a customer's own blob is never deleted just because an orchestration
+    /// referenced it. Azure requires metadata names to follow the naming rules for C# identifiers, so the
+    /// marker is spelled with an underscore rather than a hyphen.
+    /// </summary>
+    internal const string OwnershipMarkerName = "managed_by";
+
+    /// <summary>
+    /// The fixed value of the ownership marker written on every blob this store creates.
+    /// </summary>
+    internal const string OwnershipMarkerValue = "dts";
+
     const string ContentEncodingGzip = "gzip";
     const int MaxRetryAttempts = 8;
     const int BaseDelayMs = 250;
@@ -124,6 +145,7 @@ public sealed class BlobPayloadStore : PayloadStore
                     BlobOpenWriteOptions writeOptions = new()
                     {
                         HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
+                        Metadata = CreateOwnershipMetadata(),
                     };
                     using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
                     using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
@@ -137,7 +159,15 @@ public sealed class BlobPayloadStore : PayloadStore
                 }
                 else
                 {
-                    using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+                    // The uncompressed path still needs write options purely to carry the ownership marker:
+                    // the marker must be written by every path that creates a blob, or auto-purge would later
+                    // decline to delete the store's own uncompressed payloads. It rides along in the PUT the
+                    // upload already issues, so it costs no extra request.
+                    BlobOpenWriteOptions writeOptions = new()
+                    {
+                        Metadata = CreateOwnershipMetadata(),
+                    };
+                    using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
 
                     // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
                     // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
@@ -203,7 +233,7 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <inheritdoc/>
-    public override async Task DeleteAsync(string token, CancellationToken cancellationToken)
+    public override async Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken)
     {
         DecodeTokenResult decoded = DecodeToken(token);
 
@@ -238,12 +268,43 @@ public sealed class BlobPayloadStore : PayloadStore
                 "account-key credentials are account-specific and cannot delete in another account.");
         }
 
+        // Recognizing the token proves only that its text matches this store's grammar - not that this store
+        // wrote the blob. A customer may keep an expensive dataset in Blob Storage and have orchestrations
+        // reference it by URL; deleting that would destroy data the store never created. So ownership is read
+        // from the object itself before anything is deleted.
+        BlobProperties properties;
+        try
+        {
+            Response<BlobProperties> response = await blob.GetPropertiesAsync(
+                conditions: null, cancellationToken: cancellationToken);
+            properties = response.Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
+        {
+            // Already gone. Deletion is idempotent, so a re-delivered tombstone or a concurrent worker
+            // replica that won the race is a success, not an error.
+            return PayloadDeleteOutcome.AlreadyAbsent;
+        }
+
+        if (!HasOwnershipMarker(properties.Metadata))
+        {
+            // Positive evidence that the blob is customer-owned: leave it untouched. The caller still resolves
+            // the payload reference, because a blob this store never wrote is not this store's to delete.
+            return PayloadDeleteOutcome.NotStoreOwned;
+        }
+
+        // Pair the ownership read with the delete using the ETag from that same read. If anything rewrites the
+        // blob in between - including a customer overwriting it with content that no longer carries the marker
+        // - the If-Match condition fails the delete instead of removing the newer content, so the read-then-
+        // delete behaves as a single check-and-delete without taking a lease.
         // Idempotent by design: DeleteIfExistsAsync returns false (rather than throwing) when the blob is
         // already gone, so re-delivered tombstones and concurrent purges from multiple worker replicas are safe.
-        await blob.DeleteIfExistsAsync(
+        Response<bool> deleted = await blob.DeleteIfExistsAsync(
             DeleteSnapshotsOption.IncludeSnapshots,
-            conditions: null,
+            conditions: new BlobRequestConditions { IfMatch = properties.ETag },
             cancellationToken: cancellationToken);
+
+        return deleted.Value ? PayloadDeleteOutcome.Deleted : PayloadDeleteOutcome.AlreadyAbsent;
     }
 
     /// <inheritdoc/>
@@ -307,6 +368,38 @@ public sealed class BlobPayloadStore : PayloadStore
         }
 
         throw new ArgumentException("Invalid external payload token.", nameof(token));
+    }
+
+    /// <summary>
+    /// Creates the ownership metadata stamped on every blob this store writes, so a later purge can prove the
+    /// store created the blob before deleting it.
+    /// </summary>
+    static IDictionary<string, string> CreateOwnershipMetadata() =>
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [OwnershipMarkerName] = OwnershipMarkerValue,
+        };
+
+    /// <summary>
+    /// Returns whether the supplied blob metadata carries this store's ownership marker. Azure treats metadata
+    /// names as case-insensitive, so the lookup is too.
+    /// </summary>
+    static bool HasOwnershipMarker(IDictionary<string, string>? metadata)
+    {
+        if (metadata is null)
+        {
+            return false;
+        }
+
+        foreach (KeyValuePair<string, string> entry in metadata)
+        {
+            if (string.Equals(entry.Key, OwnershipMarkerName, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(entry.Value, OwnershipMarkerValue, StringComparison.Ordinal);
+            }
+        }
+
+        return false;
     }
 
     static async Task WritePayloadAsync(byte[] payloadBuffer, Stream target, CancellationToken cancellationToken)

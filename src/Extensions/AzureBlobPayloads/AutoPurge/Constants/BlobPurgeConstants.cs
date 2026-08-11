@@ -22,7 +22,7 @@ static class BlobPurgeConstants
 
     /// <summary>
     /// The maximum batch size the auto-purge job may request per cycle. Mirrors the gRPC
-    /// GetTombstonedPayloadsAsync contract, which rejects limits greater than 1000.
+    /// GetLargePayloadTombstones contract, which rejects limits greater than 1000.
     /// </summary>
     public const int MaxBatchSize = 1000;
 

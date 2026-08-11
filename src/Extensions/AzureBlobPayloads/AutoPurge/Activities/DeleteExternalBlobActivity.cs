@@ -81,10 +81,16 @@ public class DeleteExternalBlobActivity(
     /// example <c>BlobNotFound</c>) is a fixed vocabulary and the numeric status is the fallback, so neither
     /// can carry a token or raw exception text.
     /// </summary>
-    static string SanitizeErrorCode(RequestFailedException exception) =>
-        string.IsNullOrEmpty(exception.ErrorCode)
+    static string SanitizeErrorCode(RequestFailedException exception)
+    {
+        // Pattern-matched rather than string.IsNullOrEmpty: on netstandard2.0 that method carries no
+        // [NotNullWhen(false)] annotation, so flow analysis cannot prove the else branch is non-null and warns.
+        // A constant pattern is analyzed by the compiler itself and so behaves the same on every target.
+        string? errorCode = exception.ErrorCode;
+        return errorCode is null or ""
             ? exception.Status.ToString(CultureInfo.InvariantCulture)
-            : exception.ErrorCode;
+            : errorCode;
+    }
 
     async Task<BlobPurgeOutcome> DeleteAsync(string token)
     {

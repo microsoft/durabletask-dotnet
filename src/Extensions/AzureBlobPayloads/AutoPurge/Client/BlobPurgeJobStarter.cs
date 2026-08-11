@@ -18,7 +18,7 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// that retries until the backend is reachable. The job is a per-task-hub singleton, so racing client
 /// processes simply no-op.
 /// </summary>
-sealed class BlobPurgeJobStarter : IHostedService
+sealed class BlobPurgeJobStarter : IHostedService, IDisposable
 {
     static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(10);
 
@@ -32,6 +32,14 @@ sealed class BlobPurgeJobStarter : IHostedService
     CancellationTokenSource? cts;
     Task? ensureTask;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BlobPurgeJobStarter"/> class.
+    /// </summary>
+    /// <param name="clientProvider">The provider used to resolve the named durable task client.</param>
+    /// <param name="store">The registered payload store, checked for delete support before starting the job.</param>
+    /// <param name="options">The monitor used to read the fully-resolved large payload storage options.</param>
+    /// <param name="builderName">The name of the client builder this starter belongs to.</param>
+    /// <param name="logger">The logger.</param>
     public BlobPurgeJobStarter(
         IDurableTaskClientProvider clientProvider,
         PayloadStore store,
@@ -98,6 +106,21 @@ sealed class BlobPurgeJobStarter : IHostedService
             // The ensure loop observes cancellation and returns promptly; swallow any faulted/cancelled result.
             await Task.WhenAny(pending, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Disposes the cancellation source backing the background ensure task.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not disposed in <see cref="StopAsync"/>: that method stops waiting as soon as the host's
+    /// shutdown token fires, so the ensure task may still hold this source's token. Disposing it there would
+    /// fault that still-running task with an <see cref="ObjectDisposedException"/> when it next registers a
+    /// callback. The container disposes singletons after every <see cref="StopAsync"/> has returned, which is
+    /// the safe point.
+    /// </remarks>
+    public void Dispose()
+    {
+        this.cts?.Dispose();
     }
 
     async Task EnsureJobAsync(DurableTaskClient client, int batchSize, CancellationToken cancellationToken)

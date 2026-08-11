@@ -12,8 +12,8 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// <summary>
 /// Activity that deletes a single externalized payload blob given its token, and classifies the attempt as
 /// <see cref="LargePayloadPurgeDisposition.Deleted"/>, <see cref="LargePayloadPurgeDisposition.Retry"/>, or
-/// <see cref="LargePayloadPurgeDisposition.Quarantined"/> with a stable reason code. Deletion is idempotent,
-/// so re-delivered tokens and concurrent workers are safe.
+/// <see cref="LargePayloadPurgeDisposition.Quarantined"/>. Deletion is idempotent, so re-delivered tokens and
+/// concurrent workers are safe.
 /// </summary>
 /// <remarks>
 /// The split between retry and quarantine is whether the failure can self-heal, verified against the
@@ -37,9 +37,12 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// failure is returned as a disposition rather than thrown.
 /// </item>
 /// </list>
-/// Per design §7 no log here carries the token or raw exception text - a token exposes the storage account,
-/// container, and blob path. Diagnostics are the stable reason enum plus a bounded, sanitized storage error
-/// code; the token itself is preserved on the backend's quarantined row.
+/// The reported result carries the disposition alone, so every branch below logs its cause where the cause is
+/// still exact, rather than deriving it afterwards from a value that crossed the wire. That log is the only
+/// record of why an attempt failed. Per design §7 it still carries neither the token nor raw exception text -
+/// a token exposes the storage account, container, and blob path - so the cause is a bounded classification
+/// string plus a bounded, sanitized storage error code. The token itself is preserved on the backend's
+/// quarantined row.
 /// </remarks>
 /// <param name="store">The payload store used to delete blobs.</param>
 /// <param name="logger">The logger instance.</param>
@@ -57,23 +60,7 @@ public class DeleteExternalBlobActivity(
     {
         Check.NotNullOrEmpty(input, nameof(input));
 
-        BlobPurgeOutcome outcome = await this.DeleteAsync(input);
-
-        switch (outcome.Disposition)
-        {
-            case LargePayloadPurgeDisposition.Quarantined:
-                this.logger.BlobPurgeDeleteQuarantined(outcome.Reason.ToString(), outcome.StorageErrorCode);
-                break;
-            case LargePayloadPurgeDisposition.Retry:
-                this.logger.BlobPurgeDeleteRetryable(outcome.Reason.ToString(), outcome.StorageErrorCode);
-                break;
-            case LargePayloadPurgeDisposition.Deleted
-                when outcome.Reason == LargePayloadPurgeReason.BlobNotStoreOwned:
-                this.logger.BlobPurgeBlobNotStoreOwned();
-                break;
-        }
-
-        return outcome;
+        return await this.DeleteAsync(input);
     }
 
     /// <summary>
@@ -106,94 +93,90 @@ public class DeleteExternalBlobActivity(
             // the only durable record of the blob, so the row is quarantined instead - the backend preserves
             // its token as evidence and stops polling it. The backend excludes v1 at insertion time, so
             // reaching this branch is an invariant violation rather than an expected path.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.TokenNotPurgeable);
+            this.logger.BlobPurgeDeleteQuarantined("LegacyV1Token", null);
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Quarantined);
         }
 
         if (!token.StartsWith(BlobPayloadStore.TokenPrefixV2, StringComparison.Ordinal))
         {
             // An unrecognized prefix is most likely a token written by a newer SDK than this worker runs. That
-            // recovers after an upgrade, so it earns a deferral rather than quarantine. This branch shares
-            // TokenNotPurgeable with the quarantined token cases, so its disposition is deliberately stated
-            // here rather than derived from the reason: folding it in would strand rows an upgrade would fix.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.TokenNotPurgeable);
+            // recovers after an upgrade, so it earns a deferral rather than quarantine. Quarantine is
+            // permanent and requires an operator to unwind; a deferral only leaves the row idle and visible,
+            // so an unrecognized token is deliberately kept on the recoverable side of that asymmetry.
+            this.logger.BlobPurgeDeleteRetryable("UnsupportedTokenVersion", null);
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
 
         try
         {
             PayloadDeleteOutcome outcome = await this.store.DeleteAsync(token, CancellationToken.None);
-            return outcome switch
-            {
-                PayloadDeleteOutcome.Deleted => new BlobPurgeOutcome(
-                    LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeReason.BlobDeleted),
-                PayloadDeleteOutcome.AlreadyAbsent => new BlobPurgeOutcome(
-                    LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeReason.BlobAlreadyAbsent),
 
-                // The blob exists but this store never wrote it, so it was left untouched. That is an expected
-                // outcome, not a defect - the token text merely matched the v2 grammar - and quarantining it
-                // would fill the quarantine set with non-defects. The tombstone is still resolved, because a
-                // blob the store does not own is not the store's to delete.
-                _ => new BlobPurgeOutcome(
-                    LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeReason.BlobNotStoreOwned),
-            };
+            // The blob exists but this store never wrote it, so it was left untouched. That is an expected
+            // outcome, not a defect - the token text merely matched the v2 grammar - and quarantining it would
+            // fill the quarantine set with non-defects. The tombstone is still resolved, because a blob the
+            // store does not own is not the store's to delete.
+            if (outcome == PayloadDeleteOutcome.NotStoreOwned)
+            {
+                this.logger.BlobPurgeBlobNotStoreOwned();
+            }
+
+            // Deleted, AlreadyAbsent, and NotStoreOwned are all terminal successes: none can be improved by
+            // trying again.
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted);
         }
         catch (ArgumentException)
         {
             // The prefix gate above proves this is a v2 token, so the only remaining decode failure is a v2
             // body that does not parse. The SDK and backend control both sides of the protocol, so that
             // indicates a producer, corruption, or compatibility bug; retrying can never fix it.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.TokenNotPurgeable);
+            this.logger.BlobPurgeDeleteQuarantined("MalformedToken", null);
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Quarantined);
         }
         catch (NotSupportedException)
         {
             // The registered store does not implement deletion. Every payload would fail the same way, so the
             // work is kept recoverable until an operator registers a store that can delete.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StoreCannotDelete);
+            this.logger.BlobPurgeDeleteRetryable("StoreCannotDelete", null);
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
         catch (PayloadStorageException)
         {
             // The token is well formed but points at a storage account this worker's credential cannot reach
             // (account-key auth is account-specific). Recoverable after a configuration or credential change,
             // so it is deferred rather than discarded.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StorageFailure);
+            this.logger.BlobPurgeDeleteRetryable("StorageAccountUnreachable", null);
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
         catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.BadRequest)
         {
             // Storage rejected a request generated from a well-formed token as permanently invalid (for
             // example InvalidUri / InvalidResourceName). Retrying can never succeed.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Quarantined,
-                LargePayloadPurgeReason.TokenNotPurgeable,
-                SanitizeErrorCode(ex));
+            this.logger.BlobPurgeDeleteQuarantined("InvalidStorageRequest", SanitizeErrorCode(ex));
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Quarantined);
         }
         catch (RequestFailedException ex) when (
             ex.Status == (int)HttpStatusCode.Unauthorized || ex.Status == (int)HttpStatusCode.Forbidden)
         {
             // Authorization can be transient or fixed by reconfiguration, so it stays recoverable rather than
             // dropping data an operator can still reclaim.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry,
-                LargePayloadPurgeReason.StorageFailure,
-                SanitizeErrorCode(ex));
+            this.logger.BlobPurgeDeleteRetryable("StorageAuthorizationFailed", SanitizeErrorCode(ex));
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
         catch (RequestFailedException ex)
         {
             // Throttling, 5xx, and anything else the service reported, including a failed If-Match on the
             // ownership check: transient by default.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry,
-                LargePayloadPurgeReason.StorageFailure,
-                SanitizeErrorCode(ex));
+            this.logger.BlobPurgeDeleteRetryable("TransientStorageFailure", SanitizeErrorCode(ex));
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             // Timeouts, cancellation, and network failures. A blob is never dropped on an uncertain error.
-            return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StorageFailure);
+            // Storage reported no code here, so the exception's type name is appended to the cause: it is a
+            // bounded value that cannot carry a token, and it is the only thing separating a timeout from a
+            // cancellation or a DNS failure now that no classification crosses the wire.
+            this.logger.BlobPurgeDeleteRetryable($"UnexpectedFailure:{ex.GetType().Name}", null);
+            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
     }
 }

@@ -677,11 +677,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 PayloadId = result.PayloadId,
                 Revision = result.Revision,
 
-                // The managed enums declare the same numeric values as their protobuf counterparts, so the
-                // disposition and reason map across by value.
+                // The managed disposition enum declares the same numeric values as its protobuf counterpart,
+                // so it maps across by value. This is the only enum on the message and it only travels
+                // outbound, so the SDK can never receive a value it does not know.
                 Disposition = (P.LargePayloadPurgeDisposition)result.Disposition,
-                Reason = (P.LargePayloadPurgeReason)result.Reason,
-                StorageErrorCode = result.StorageErrorCode ?? string.Empty,
             });
         }
 

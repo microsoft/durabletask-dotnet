@@ -184,8 +184,6 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             tombstone.InstanceKey,
             tombstone.PayloadId,
             tombstone.Revision,
-            outcome.Disposition,
-            outcome.Reason,
-            outcome.StorageErrorCode);
+            outcome.Disposition);
     }
 }

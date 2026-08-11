@@ -10,13 +10,10 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// orchestrator combines it with the tombstone's identity and revision to build the reported
 /// <see cref="LargePayloadPurgeResult"/>.
 /// </summary>
+/// <remarks>
+/// Carries the disposition alone, because that is the only outcome field the contract reports. Why an attempt
+/// reached its disposition is logged by <see cref="DeleteExternalBlobActivity"/> at the point it is
+/// classified, at higher fidelity than any value that could be carried here.
+/// </remarks>
 /// <param name="Disposition">Whether the row is resolved, should be retried, or must be quarantined.</param>
-/// <param name="Reason">The stable reason code explaining the disposition.</param>
-/// <param name="StorageErrorCode">
-/// An optional bounded, sanitized storage status or error code for diagnostics. Never a token or raw
-/// exception text.
-/// </param>
-public sealed record BlobPurgeOutcome(
-    LargePayloadPurgeDisposition Disposition,
-    LargePayloadPurgeReason Reason,
-    string? StorageErrorCode = null);
+public sealed record BlobPurgeOutcome(LargePayloadPurgeDisposition Disposition);

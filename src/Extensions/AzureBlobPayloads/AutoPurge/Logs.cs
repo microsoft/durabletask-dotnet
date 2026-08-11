@@ -19,8 +19,8 @@ static partial class Logs
     [LoggerMessage(EventId = 812, Level = LogLevel.Information, Message = "Blob payload auto-purge orchestrator for job '{jobId}' stopping; job status is {status}.")]
     public static partial void BlobPurgeJobOrchestratorStopping(this ILogger logger, string? jobId, string status);
 
-    [LoggerMessage(EventId = 813, Level = LogLevel.Warning, Message = "Blob payload auto-purge quarantined a payload; reason '{reason}', storage error code '{storageErrorCode}'. The failure is deterministic and cannot succeed on a retry. The backend preserves the tombstone row and its token as evidence and stops polling it.")]
-    public static partial void BlobPurgeDeleteQuarantined(this ILogger logger, string reason, string? storageErrorCode);
+    [LoggerMessage(EventId = 813, Level = LogLevel.Warning, Message = "Blob payload auto-purge quarantined a payload; cause '{cause}', storage code '{storageCode}'. The failure is deterministic and cannot succeed on a retry. The backend preserves the tombstone row and its token as evidence and stops polling it. The reported result carries the disposition alone, so this log is the only record of the cause.")]
+    public static partial void BlobPurgeDeleteQuarantined(this ILogger logger, string cause, string? storageCode);
 
     [LoggerMessage(EventId = 814, Level = LogLevel.Debug, Message = "Blob payload auto-purge fetched {count} tombstoned payload(s) from the backend.")]
     public static partial void BlobPurgeFetchedTombstones(this ILogger logger, int count);
@@ -34,8 +34,8 @@ static partial class Logs
     [LoggerMessage(EventId = 818, Level = LogLevel.Warning, Message = "Blob payload auto-purge starter could not ensure the singleton job; retrying.")]
     public static partial void BlobPurgeStarterRetry(this ILogger logger, Exception exception);
 
-    [LoggerMessage(EventId = 819, Level = LogLevel.Warning, Message = "Blob payload auto-purge could not delete a payload; reason '{reason}', storage error code '{storageErrorCode}'. The backend reschedules the tombstone for a later attempt.")]
-    public static partial void BlobPurgeDeleteRetryable(this ILogger logger, string reason, string? storageErrorCode);
+    [LoggerMessage(EventId = 819, Level = LogLevel.Warning, Message = "Blob payload auto-purge could not delete a payload; cause '{cause}', storage code '{storageCode}'. The backend reschedules the tombstone for a later attempt. The reported result carries the disposition alone, so this log is the only record of the cause.")]
+    public static partial void BlobPurgeDeleteRetryable(this ILogger logger, string cause, string? storageCode);
 
     [LoggerMessage(EventId = 820, Level = LogLevel.Warning, Message = "Blob payload auto-purge cycle for job '{jobId}' failed; backing off before retrying so the job keeps running.")]
     public static partial void BlobPurgeCycleFailed(this ILogger logger, Exception exception, string? jobId);

@@ -8,9 +8,9 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask.Client.Grpc.Tests;
 
 /// <summary>
-/// <see cref="GrpcDurableTaskClient.ReportLargePayloadPurgeResultsAsync"/> maps the managed purge enums onto
-/// their protobuf counterparts by numeric value rather than by name, which is only correct while the two sides
-/// agree on every value. A silent drift would not fail to compile; it would send the backend a different
+/// <see cref="GrpcDurableTaskClient.ReportLargePayloadPurgeResultsAsync"/> maps the managed purge disposition
+/// onto its protobuf counterpart by numeric value rather than by name, which is only correct while the two
+/// sides agree on every value. A silent drift would not fail to compile; it would send the backend a different
 /// disposition than the worker decided and delete or quarantine the wrong rows. These tests pin the mapping.
 /// </summary>
 public class LargePayloadPurgeEnumParityTests
@@ -31,24 +31,9 @@ public class LargePayloadPurgeEnumParityTests
         managed.Should().Equal(proto);
     }
 
-    [Fact]
-    public void Reason_ManagedAndProtobufValues_AreIdentical()
-    {
-        // Arrange & Act
-        Dictionary<int, string> managed = Enum.GetValues(typeof(LargePayloadPurgeReason))
-            .Cast<LargePayloadPurgeReason>()
-            .ToDictionary(v => (int)v, v => v.ToString());
-        Dictionary<int, string> proto = Enum.GetValues(typeof(P.LargePayloadPurgeReason))
-            .Cast<P.LargePayloadPurgeReason>()
-            .ToDictionary(v => (int)v, v => v.ToString());
-
-        // Assert
-        managed.Should().Equal(proto);
-    }
-
     /// <summary>
-    /// The numeric casts are safe only because no enum crosses the wire <i>inbound</i> on this feature: the SDK
-    /// casts values it defined itself, so it can never receive an unknown value and silently reinterpret it.
+    /// The numeric cast is safe only because no enum crosses the wire <i>inbound</i> on this feature: the SDK
+    /// casts a value it defined itself, so it can never receive an unknown value and silently reinterpret it.
     /// That invariant holds today by the shape of the contract, not by construction, and nothing in the code
     /// states it. Adding an enum to an inbound type would create exactly that path - a newer backend sending a
     /// value this SDK does not know, mapped by raw numeric cast onto a valid-but-wrong member - and it would
@@ -71,7 +56,7 @@ public class LargePayloadPurgeEnumParityTests
 
         // Assert
         enumMembers.Should().BeEmpty(
-            "an enum on an inbound type invalidates the numeric enum casts in " +
+            "an enum on an inbound type invalidates the numeric enum cast in " +
             "GrpcDurableTaskClient.ReportLargePayloadPurgeResultsAsync. The SDK would map a value chosen by the " +
             "backend - including one a newer backend added that this SDK does not know - onto a managed member " +
             "by raw numeric value, silently mis-dispositioning rows. Map inbound enums explicitly instead, with " +

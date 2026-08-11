@@ -107,15 +107,17 @@ public class DeleteExternalBlobActivity(
             // its token as evidence and stops polling it. The backend excludes v1 at insertion time, so
             // reaching this branch is an invariant violation rather than an expected path.
             return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.LegacyV1Token);
+                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.TokenNotPurgeable);
         }
 
         if (!token.StartsWith(BlobPayloadStore.TokenPrefixV2, StringComparison.Ordinal))
         {
             // An unrecognized prefix is most likely a token written by a newer SDK than this worker runs. That
-            // recovers after an upgrade, so it earns a deferral rather than quarantine.
+            // recovers after an upgrade, so it earns a deferral rather than quarantine. This branch shares
+            // TokenNotPurgeable with the quarantined token cases, so its disposition is deliberately stated
+            // here rather than derived from the reason: folding it in would strand rows an upgrade would fix.
             return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.UnsupportedTokenVersion);
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.TokenNotPurgeable);
         }
 
         try
@@ -142,7 +144,7 @@ public class DeleteExternalBlobActivity(
             // body that does not parse. The SDK and backend control both sides of the protocol, so that
             // indicates a producer, corruption, or compatibility bug; retrying can never fix it.
             return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.MalformedToken);
+                LargePayloadPurgeDisposition.Quarantined, LargePayloadPurgeReason.TokenNotPurgeable);
         }
         catch (NotSupportedException)
         {
@@ -157,7 +159,7 @@ public class DeleteExternalBlobActivity(
             // (account-key auth is account-specific). Recoverable after a configuration or credential change,
             // so it is deferred rather than discarded.
             return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StorageAccountUnreachable);
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StorageFailure);
         }
         catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.BadRequest)
         {
@@ -165,7 +167,7 @@ public class DeleteExternalBlobActivity(
             // example InvalidUri / InvalidResourceName). Retrying can never succeed.
             return new BlobPurgeOutcome(
                 LargePayloadPurgeDisposition.Quarantined,
-                LargePayloadPurgeReason.InvalidStorageRequest,
+                LargePayloadPurgeReason.TokenNotPurgeable,
                 SanitizeErrorCode(ex));
         }
         catch (RequestFailedException ex) when (
@@ -175,7 +177,7 @@ public class DeleteExternalBlobActivity(
             // dropping data an operator can still reclaim.
             return new BlobPurgeOutcome(
                 LargePayloadPurgeDisposition.Retry,
-                LargePayloadPurgeReason.StorageAuthorizationFailed,
+                LargePayloadPurgeReason.StorageFailure,
                 SanitizeErrorCode(ex));
         }
         catch (RequestFailedException ex)
@@ -184,14 +186,14 @@ public class DeleteExternalBlobActivity(
             // ownership check: transient by default.
             return new BlobPurgeOutcome(
                 LargePayloadPurgeDisposition.Retry,
-                LargePayloadPurgeReason.TransientStorageFailure,
+                LargePayloadPurgeReason.StorageFailure,
                 SanitizeErrorCode(ex));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             // Timeouts, cancellation, and network failures. A blob is never dropped on an uncertain error.
             return new BlobPurgeOutcome(
-                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.TransientStorageFailure);
+                LargePayloadPurgeDisposition.Retry, LargePayloadPurgeReason.StorageFailure);
         }
     }
 }

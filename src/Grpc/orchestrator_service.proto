@@ -793,9 +793,10 @@ service TaskHubSidecarService {
     // pending until its outcome is reported, so this is safe under retries and duplicate callers.
     rpc GetLargePayloadTombstones(GetLargePayloadTombstonesRequest) returns (GetLargePayloadTombstonesResponse);
 
-    // Reports the outcome of each attempted blob deletion. The backend owns retry scheduling: it
-    // deletes rows reported as DELETED, reschedules RETRY with a reason-appropriate next attempt,
-    // and moves QUARANTINED rows out of the active fetch while preserving their evidence.
+    // Reports the outcome of each attempted blob deletion. The backend owns retry scheduling and
+    // branches solely on `disposition`: it deletes rows reported as DELETED, reschedules RETRY on
+    // its own backoff, and moves QUARANTINED rows out of the active fetch while preserving their
+    // evidence. The worker never computes a retry delay.
     rpc ReportLargePayloadPurgeResults(ReportLargePayloadPurgeResultsRequest) returns (ReportLargePayloadPurgeResultsResponse);
 
     rpc CompleteActivityTask(ActivityResponse) returns (CompleteTaskResponse);
@@ -846,7 +847,7 @@ message LargePayloadTombstone {
     // A self-describing SDK v2 token: "blob:v2:{fullBlobUrl}".
     // Legacy v1 tokens are never tombstoned: v1 carries a container name but not the storage
     // account, so a delete against the configured account cannot be verified. The backend
-    // hard-deletes v1 payload rows instead (design §8).
+    // hard-deletes v1 payload rows instead.
     string token = 4;
 
     // Optimistic-concurrency guard. The worker echoes this value back unmodified in the result so
@@ -856,11 +857,16 @@ message LargePayloadTombstone {
 
 // The outcome of a single blob deletion attempt. The split is by whether a failure can self-heal.
 enum LargePayloadPurgeDisposition {
+    // Required: proto3 reserves 0 as the first value, and scalars have no field presence, so an
+    // unset field arrives as 0. Keeping 0 meaningless is load-bearing here: if 0 meant DELETED, a
+    // client that failed to set this field would make the backend delete tombstones and orphan the
+    // blobs permanently. The backend must reject a result carrying this value.
     LARGE_PAYLOAD_PURGE_DISPOSITION_UNSPECIFIED = 0;
 
-    // Terminal success. The blob was deleted, was already absent, or was deliberately left in
-    // place because it is not owned by the payload store (design §5.5). The backend deletes the
-    // tombstone in all three cases.
+    // Terminal success: the tombstone is resolved and the backend deletes it. Covers the blob being
+    // deleted, the blob already being absent, and the blob being deliberately left in place because
+    // the payload store does not own it. All three are terminal because none of them can be
+    // improved by trying again.
     LARGE_PAYLOAD_PURGE_DISPOSITION_DELETED = 1;
 
     // The failure may self-heal, so the row stays pending and the backend sets the next attempt.
@@ -871,59 +877,58 @@ enum LargePayloadPurgeDisposition {
     LARGE_PAYLOAD_PURGE_DISPOSITION_QUARANTINED = 3;
 }
 
-// A stable, bounded reason for a disposition. Never carries a token or raw exception text
-// (design §7: tokens expose storage account, container, and blob path).
+// Why a row received its disposition. Diagnostic only: the backend acts on `disposition` alone and
+// never branches on this value, so it exists to make a stuck or non-reclaiming ledger explainable
+// without access to worker logs, which run in the customer's process.
+//
+// Deliberately coarse. Granularity matches the number of distinct operator responses, not the
+// number of distinct causes, because `storageErrorCode` already carries the specific storage status.
+// Values must never carry a token or raw exception text: a token exposes the storage account,
+// container, and blob path.
 enum LargePayloadPurgeReason {
     LARGE_PAYLOAD_PURGE_REASON_UNSPECIFIED = 0;
 
     // --- Reported with DELETED ---
 
-    // The blob was deleted by this attempt.
+    // The blob was deleted by this attempt, reclaiming its bytes.
     LARGE_PAYLOAD_PURGE_REASON_BLOB_DELETED = 1;
 
-    // The blob was already absent. Deletion is idempotent, so this is a success.
+    // The blob was already absent, so deletion was a no-op and no bytes were reclaimed by this
+    // attempt. Deletion is idempotent, so this is a success rather than a failure. Reported
+    // separately from BLOB_DELETED because a high rate of it indicates duplicate tombstones.
     LARGE_PAYLOAD_PURGE_REASON_BLOB_ALREADY_ABSENT = 2;
 
-    // The blob did not carry the payload store's ownership marker, so it was left untouched
-    // (design §5.5). This is an expected outcome, not a defect: the token text merely matched the
-    // v2 grammar. The tombstone is still resolved because the blob is not the store's to delete.
+    // The blob was left in place because it did not carry the payload store's ownership marker,
+    // meaning the store did not write it. The token text merely matched the v2 grammar; the payload
+    // column is customer-writable, so matching text is not proof of ownership. This is an expected
+    // outcome rather than a defect. The tombstone is still resolved, because a blob the store does
+    // not own will never become deletable and retrying forever would leak the row. Reported
+    // separately from BLOB_DELETED so that "resolved without reclaiming bytes" stays countable.
     LARGE_PAYLOAD_PURGE_REASON_BLOB_NOT_STORE_OWNED = 3;
 
     // --- Reported with RETRY ---
 
-    // Network failure, timeout, storage outage, throttling, or a 5xx response.
-    LARGE_PAYLOAD_PURGE_REASON_TRANSIENT_STORAGE_FAILURE = 10;
+    // The deletion failed against storage: network failure, timeout, outage, throttling, an
+    // unreachable account, or an authorization failure. All of these are reconfigurable or
+    // self-healing, and they are not subdivided here because `storageErrorCode` already carries the
+    // specific status for diagnostics. Subdividing would encode the same fact twice.
+    LARGE_PAYLOAD_PURGE_REASON_STORAGE_FAILURE = 10;
 
-    // The registered payload store does not implement deletion. Every payload would fail the same
-    // way, so the work is kept recoverable until an operator registers a store that can delete.
+    // The registered payload store does not implement deletion. Every payload fails the same way,
+    // so this is a deployment-wide condition rather than a per-row one, and it is kept recoverable
+    // until an operator registers a store that can delete. `storageErrorCode` is empty because
+    // storage was never contacted, which is why this cannot be folded into STORAGE_FAILURE.
     LARGE_PAYLOAD_PURGE_REASON_STORE_CANNOT_DELETE = 11;
-
-    // The token is well formed but points at a storage account this worker's credential cannot
-    // reach. Recoverable after a configuration or credential change.
-    LARGE_PAYLOAD_PURGE_REASON_STORAGE_ACCOUNT_UNREACHABLE = 12;
-
-    // The token uses a recognized-but-newer version prefix this worker does not understand.
-    // Recoverable after an SDK upgrade, so it earns a long defer rather than quarantine.
-    LARGE_PAYLOAD_PURGE_REASON_UNSUPPORTED_TOKEN_VERSION = 13;
-
-    // Authorization failed in a way that may be transient or reconfigurable (401/403).
-    LARGE_PAYLOAD_PURGE_REASON_STORAGE_AUTHORIZATION_FAILED = 14;
 
     // --- Reported with QUARANTINED ---
 
-    // The token carries a known version prefix but its body does not parse. Because the SDK and
-    // backend control both sides of the protocol, this indicates a producer, corruption, or
-    // compatibility bug.
-    LARGE_PAYLOAD_PURGE_REASON_MALFORMED_TOKEN = 20;
-
-    // Storage rejected a request generated from a well-formed token as permanently invalid
-    // (HTTP 400, e.g. InvalidUri / InvalidResourceName). Retrying can never succeed.
-    LARGE_PAYLOAD_PURGE_REASON_INVALID_STORAGE_REQUEST = 21;
-
-    // A legacy v1 token reached the worker. This is an invariant violation, because the backend
-    // excludes v1 at insertion time. It cannot be safely deleted (no storage account in the token)
-    // and cannot be fixed by retrying, so the evidence is preserved instead (design §6).
-    LARGE_PAYLOAD_PURGE_REASON_LEGACY_V1_TOKEN = 22;
+    // The token cannot be acted on and no retry can change that: its body does not parse, it names
+    // a version this worker does not support, or storage rejected it as permanently invalid. The
+    // producer and consumer of this token are both controlled by the SDK and backend, so reaching
+    // this state indicates a producer, corruption, or compatibility bug and the evidence is
+    // preserved for investigation rather than discarded. `storageErrorCode` distinguishes the
+    // storage-rejected case, where it is populated, from the parse cases, where it is empty.
+    LARGE_PAYLOAD_PURGE_REASON_TOKEN_NOT_PURGEABLE = 20;
 }
 
 // client -> server: the outcome of exactly one tombstoned row.

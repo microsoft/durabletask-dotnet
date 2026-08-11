@@ -4,9 +4,13 @@
 namespace Microsoft.DurableTask.Client;
 
 /// <summary>
-/// A stable, bounded reason for a <see cref="LargePayloadPurgeDisposition"/>. Never carries a token or raw
-/// exception text, because tokens expose the storage account, container, and blob path. Mirrors the
-/// <c>LargePayloadPurgeReason</c> protobuf enum.
+/// Why a row received its <see cref="LargePayloadPurgeDisposition"/>. Diagnostic only: the backend acts on the
+/// disposition alone and never branches on this value, so it exists to make a stuck or non-reclaiming ledger
+/// explainable without access to worker logs. Deliberately coarse - granularity matches the number of distinct
+/// operator responses, not the number of distinct causes, because
+/// <see cref="LargePayloadPurgeResult.StorageErrorCode"/> already carries the specific storage status. Never
+/// carries a token or raw exception text, because a token exposes the storage account, container, and blob path.
+/// Mirrors the <c>LargePayloadPurgeReason</c> protobuf enum.
 /// </summary>
 public enum LargePayloadPurgeReason
 {
@@ -16,76 +20,52 @@ public enum LargePayloadPurgeReason
     Unspecified = 0,
 
     /// <summary>
-    /// The blob was deleted by this attempt. Reported with <see cref="LargePayloadPurgeDisposition.Deleted"/>.
+    /// The blob was deleted by this attempt, reclaiming its bytes. Reported with
+    /// <see cref="LargePayloadPurgeDisposition.Deleted"/>.
     /// </summary>
     BlobDeleted = 1,
 
     /// <summary>
-    /// The blob was already absent. Deletion is idempotent, so this is a success. Reported with
+    /// The blob was already absent, so deletion was a no-op and no bytes were reclaimed. Deletion is idempotent,
+    /// so this is a success rather than a failure; it is reported separately from <see cref="BlobDeleted"/>
+    /// because a high rate of it indicates duplicate tombstones. Reported with
     /// <see cref="LargePayloadPurgeDisposition.Deleted"/>.
     /// </summary>
     BlobAlreadyAbsent = 2,
 
     /// <summary>
     /// The blob did not carry the payload store's ownership marker, so it was left untouched. This is an
-    /// expected outcome, not a defect: the token text merely matched the v2 grammar. The tombstone is still
-    /// resolved because the blob is not the store's to delete. Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Deleted"/>.
+    /// expected outcome, not a defect: the token text merely matched the v2 grammar, and the payload column is
+    /// customer-writable. The tombstone is still resolved, because a blob the store does not own will never
+    /// become deletable. Reported separately from <see cref="BlobDeleted"/> so that "resolved without
+    /// reclaiming bytes" stays countable. Reported with <see cref="LargePayloadPurgeDisposition.Deleted"/>.
     /// </summary>
     BlobNotStoreOwned = 3,
 
     /// <summary>
-    /// Network failure, timeout, storage outage, throttling, or a 5xx response. Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Retry"/>.
+    /// The deletion failed against storage: network failure, timeout, outage, throttling, an unreachable
+    /// account, or an authorization failure. All of these are reconfigurable or self-healing, and they are not
+    /// subdivided because <see cref="LargePayloadPurgeResult.StorageErrorCode"/> already carries the specific
+    /// status. Reported with <see cref="LargePayloadPurgeDisposition.Retry"/>.
     /// </summary>
-    TransientStorageFailure = 10,
+    StorageFailure = 10,
 
     /// <summary>
-    /// The registered payload store does not implement deletion. Every payload would fail the same way, so the
-    /// work is kept recoverable until an operator registers a store that can delete. Reported with
+    /// The registered payload store does not implement deletion. Every payload fails the same way, so this is a
+    /// deployment-wide condition rather than a per-row one, and it stays recoverable until an operator registers
+    /// a store that can delete. <see cref="LargePayloadPurgeResult.StorageErrorCode"/> is empty because storage
+    /// was never contacted, which is why this is not folded into <see cref="StorageFailure"/>. Reported with
     /// <see cref="LargePayloadPurgeDisposition.Retry"/>.
     /// </summary>
     StoreCannotDelete = 11,
 
     /// <summary>
-    /// The token is well formed but points at a storage account this worker's credential cannot reach.
-    /// Recoverable after a configuration or credential change. Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Retry"/>.
+    /// The token cannot be acted on as it stands: its body does not parse, it names a version this worker does
+    /// not support, or storage rejected it as permanently invalid.
+    /// <see cref="LargePayloadPurgeResult.StorageErrorCode"/> distinguishes the storage-rejected case, where it
+    /// is populated, from the parse cases, where it is empty. Reported with
+    /// <see cref="LargePayloadPurgeDisposition.Quarantined"/>, except for an unsupported version prefix, which
+    /// is reported with <see cref="LargePayloadPurgeDisposition.Retry"/> because an SDK upgrade resolves it.
     /// </summary>
-    StorageAccountUnreachable = 12,
-
-    /// <summary>
-    /// The token uses a recognized-but-newer version prefix this worker does not understand. Recoverable after
-    /// an SDK upgrade, so it earns a long defer rather than quarantine. Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Retry"/>.
-    /// </summary>
-    UnsupportedTokenVersion = 13,
-
-    /// <summary>
-    /// Authorization failed in a way that may be transient or reconfigurable (401/403). Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Retry"/>.
-    /// </summary>
-    StorageAuthorizationFailed = 14,
-
-    /// <summary>
-    /// The token carries a known version prefix but its body does not parse. Because the SDK and backend
-    /// control both sides of the protocol, this indicates a producer, corruption, or compatibility bug.
-    /// Reported with <see cref="LargePayloadPurgeDisposition.Quarantined"/>.
-    /// </summary>
-    MalformedToken = 20,
-
-    /// <summary>
-    /// Storage rejected a request generated from a well-formed token as permanently invalid (HTTP 400, for
-    /// example InvalidUri / InvalidResourceName). Retrying can never succeed. Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Quarantined"/>.
-    /// </summary>
-    InvalidStorageRequest = 21,
-
-    /// <summary>
-    /// A legacy v1 token reached the worker. This is an invariant violation, because the backend excludes v1
-    /// at insertion time. It cannot be safely deleted (no storage account in the token) and cannot be fixed by
-    /// retrying, so the evidence is preserved instead. Reported with
-    /// <see cref="LargePayloadPurgeDisposition.Quarantined"/>.
-    /// </summary>
-    LegacyV1Token = 22,
+    TokenNotPurgeable = 20,
 }

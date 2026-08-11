@@ -14,7 +14,7 @@ public class DeleteExternalBlobActivityTests
     const string V2Token = "blob:v2:https://acct.blob.core.windows.net/payloads/abc123";
 
     [Fact]
-    public async Task RunAsync_WhenDeleteThrowsRequestFailed400_QuarantinesWithInvalidStorageRequest()
+    public async Task RunAsync_WhenDeleteThrowsRequestFailed400_QuarantinesAsTokenNotPurgeable()
     {
         // Arrange - a Status 400 (e.g. InvalidResourceName) is a permanent service rejection.
         StubPayloadStore store = new(new RequestFailedException(400, "bad", "InvalidResourceName", null));
@@ -23,9 +23,10 @@ public class DeleteExternalBlobActivityTests
         // Act
         BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
 
-        // Assert - quarantined (evidence preserved), never a success-shaped discard.
+        // Assert - quarantined (evidence preserved), never a success-shaped discard. The storage error code
+        // is what distinguishes this from the parse-failure cases, which share the same reason.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.InvalidStorageRequest);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.TokenNotPurgeable);
         outcome.StorageErrorCode.Should().Be("InvalidResourceName");
     }
 
@@ -41,7 +42,7 @@ public class DeleteExternalBlobActivityTests
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.TransientStorageFailure);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.StorageFailure);
         outcome.StorageErrorCode.Should().Be("ServerBusy");
     }
 
@@ -59,11 +60,11 @@ public class DeleteExternalBlobActivityTests
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.StorageAuthorizationFailed);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.StorageFailure);
     }
 
     [Fact]
-    public async Task RunAsync_WhenDeleteThrowsPayloadStorageException_RetriesAsAccountUnreachable()
+    public async Task RunAsync_WhenDeleteThrowsPayloadStorageException_RetriesAsStorageFailure()
     {
         // Arrange - the payload lives in a storage account the configured credential cannot reach. That is
         // recoverable after a configuration or credential change, so it is deferred rather than discarded.
@@ -76,7 +77,7 @@ public class DeleteExternalBlobActivityTests
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.StorageAccountUnreachable);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.StorageFailure);
     }
 
     [Fact]
@@ -92,7 +93,7 @@ public class DeleteExternalBlobActivityTests
 
         // Assert - quarantined by the gate, and the store's DeleteAsync was never invoked.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.LegacyV1Token);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.TokenNotPurgeable);
         store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -106,9 +107,11 @@ public class DeleteExternalBlobActivityTests
         // Act
         BlobPurgeOutcome outcome = await activity.RunAsync(null!, "blob:v9:https://acct.blob.core.windows.net/c/x");
 
-        // Assert - retried, NOT quarantined: quarantine is terminal and this can self-heal.
+        // Assert - retried, NOT quarantined: quarantine is terminal and this can self-heal. This is the one
+        // row where TokenNotPurgeable does not mean Quarantined, so the disposition is asserted deliberately:
+        // deriving it from the reason would strand rows that an SDK upgrade would have resolved.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.UnsupportedTokenVersion);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.TokenNotPurgeable);
         store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -123,9 +126,9 @@ public class DeleteExternalBlobActivityTests
         // Act
         BlobPurgeOutcome outcome = await activity.RunAsync(null!, "blob:v2:not-a-uri");
 
-        // Assert - contrast with the unknown-prefix case above, which is retried.
+        // Assert - contrast with the unknown-prefix case above, which shares this reason but is retried.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.MalformedToken);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.TokenNotPurgeable);
     }
 
     [Fact]
@@ -209,7 +212,7 @@ public class DeleteExternalBlobActivityTests
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        outcome.Reason.Should().Be(LargePayloadPurgeReason.TransientStorageFailure);
+        outcome.Reason.Should().Be(LargePayloadPurgeReason.StorageFailure);
         outcome.StorageErrorCode.Should().BeNull();
     }
 

@@ -885,49 +885,58 @@ enum LargePayloadPurgeDisposition {
 // number of distinct causes, because `storageErrorCode` already carries the specific storage status.
 // Values must never carry a token or raw exception text: a token exposes the storage account,
 // container, and blob path.
+//
+// Reason and disposition are orthogonal and there is no fixed mapping between them. A reason says
+// what the worker found; a disposition says whether trying again can change it. Most reasons occur
+// with exactly one disposition, but TOKEN_NOT_PURGEABLE deliberately occurs with two. Do not assert
+// a reason-to-disposition mapping anywhere.
 enum LargePayloadPurgeReason {
     LARGE_PAYLOAD_PURGE_REASON_UNSPECIFIED = 0;
 
-    // --- Reported with DELETED ---
-
-    // The blob was deleted by this attempt, reclaiming its bytes.
+    // Reported with DELETED. The blob was deleted by this attempt, reclaiming its bytes.
     LARGE_PAYLOAD_PURGE_REASON_BLOB_DELETED = 1;
 
-    // The blob was already absent, so deletion was a no-op and no bytes were reclaimed by this
-    // attempt. Deletion is idempotent, so this is a success rather than a failure. Reported
-    // separately from BLOB_DELETED because a high rate of it indicates duplicate tombstones.
+    // Reported with DELETED. The blob was already absent, so deletion was a no-op and no bytes were
+    // reclaimed by this attempt. Deletion is idempotent, so this is a success rather than a failure.
+    // Reported separately from BLOB_DELETED because a high rate of it indicates duplicate tombstones.
     LARGE_PAYLOAD_PURGE_REASON_BLOB_ALREADY_ABSENT = 2;
 
-    // The blob was left in place because it did not carry the payload store's ownership marker,
-    // meaning the store did not write it. The token text merely matched the v2 grammar; the payload
-    // column is customer-writable, so matching text is not proof of ownership. This is an expected
-    // outcome rather than a defect. The tombstone is still resolved, because a blob the store does
-    // not own will never become deletable and retrying forever would leak the row. Reported
-    // separately from BLOB_DELETED so that "resolved without reclaiming bytes" stays countable.
+    // Reported with DELETED. The blob was left in place because it did not carry the payload store's
+    // ownership marker, meaning the store did not write it. The token text merely matched the v2
+    // grammar; the payload column is customer-writable, so matching text is not proof of ownership.
+    // This is an expected outcome rather than a defect. The tombstone is still resolved, because a
+    // blob the store does not own will never become deletable and retrying forever would leak the
+    // row. Reported separately so that "resolved without reclaiming bytes" stays countable.
     LARGE_PAYLOAD_PURGE_REASON_BLOB_NOT_STORE_OWNED = 3;
 
-    // --- Reported with RETRY ---
-
-    // The deletion failed against storage: network failure, timeout, outage, throttling, an
-    // unreachable account, or an authorization failure. All of these are reconfigurable or
-    // self-healing, and they are not subdivided here because `storageErrorCode` already carries the
-    // specific status for diagnostics. Subdividing would encode the same fact twice.
+    // Reported with RETRY. The deletion failed against storage: network failure, timeout, outage,
+    // throttling, an unreachable account, or an authorization failure. All of these are
+    // reconfigurable or self-healing, and they are not subdivided here because `storageErrorCode`
+    // already carries the specific status. Subdividing would encode the same fact twice.
     LARGE_PAYLOAD_PURGE_REASON_STORAGE_FAILURE = 10;
 
-    // The registered payload store does not implement deletion. Every payload fails the same way,
-    // so this is a deployment-wide condition rather than a per-row one, and it is kept recoverable
-    // until an operator registers a store that can delete. `storageErrorCode` is empty because
-    // storage was never contacted, which is why this cannot be folded into STORAGE_FAILURE.
+    // Reported with RETRY. The registered payload store does not implement deletion. Every payload
+    // fails the same way, so this is a deployment-wide condition rather than a per-row one, and it
+    // is kept recoverable until an operator registers a store that can delete. `storageErrorCode` is
+    // empty because storage was never contacted, which is why this cannot be folded into
+    // STORAGE_FAILURE.
     LARGE_PAYLOAD_PURGE_REASON_STORE_CANNOT_DELETE = 11;
 
-    // --- Reported with QUARANTINED ---
-
-    // The token cannot be acted on and no retry can change that: its body does not parse, it names
-    // a version this worker does not support, or storage rejected it as permanently invalid. The
-    // producer and consumer of this token are both controlled by the SDK and backend, so reaching
-    // this state indicates a producer, corruption, or compatibility bug and the evidence is
-    // preserved for investigation rather than discarded. `storageErrorCode` distinguishes the
-    // storage-rejected case, where it is populated, from the parse cases, where it is empty.
+    // The worker could not act on the token. This reason is reported with TWO dispositions, and a
+    // consumer must not assume either one.
+    //
+    // Reported with QUARANTINED when the token can never become usable: its body does not parse, it
+    // is a legacy v1 token, or storage rejected a well-formed token as permanently invalid. The SDK
+    // and backend control both sides of this protocol, so reaching that state indicates a producer,
+    // corruption, or compatibility bug, and the evidence is preserved rather than discarded.
+    //
+    // Reported with RETRY in exactly one case: the token names a version this worker does not
+    // understand. Nothing is wrong with that token, since a newer worker can read it, so an SDK
+    // upgrade resolves it. The asymmetry is deliberate: quarantining it would be permanent and
+    // unrecoverable, whereas a retry that never succeeds only leaves the row idle and visible.
+    //
+    // `storageErrorCode` distinguishes the storage-rejected case, where it is populated, from the
+    // parse and unknown-version cases, where it is empty.
     LARGE_PAYLOAD_PURGE_REASON_TOKEN_NOT_PURGEABLE = 20;
 }
 

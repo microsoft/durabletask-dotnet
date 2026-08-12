@@ -140,46 +140,49 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                 //
                 // The dedupe list is an inverted whitelist. The wire policy is computed as
                 // (all statuses - dedupe statuses) = the statuses that may be REPLACED, so any status left out
-                // of this list silently becomes replaceable. It must therefore name every status that must not
-                // be disturbed, not just the interesting ones:
-                //   Completed  - re-running a finished bridge is wasteful, and with a fixed id the backend
-                //                would purge and replace the terminal instance on every host restart. There is
-                //                nothing to gain: the bridge would only re-signal Create, which no-ops while
-                //                the entity is Active.
-                //   Canceled   - terminal and not a failed setup, so it is left alone like Completed.
-                //   Pending    - instances are created Pending and only become Running after awaiting their
-                //                first task, so omitting it would leave a real window in which a just-scheduled
-                //                bridge is replaced.
-                //   Running,
-                //   Suspended  - still alive; the job is already set up.
-                // Failed and Terminated are deliberately absent, which makes them the only replaceable
-                // statuses: those may never have applied Create, so rescheduling is what lets a failed setup
-                // self-heal. Terminated must also stay out of the list because supplying it alongside a
-                // reusable running status is rejected outright.
-#pragma warning disable CS0618 // Canceled is obsolete, but is a real dedupe status and must be named here.
+                // of this list silently becomes replaceable. Deduping exactly Pending and Running therefore
+                // means: while the bridge is alive leave it alone, and in any other state re-run it.
+                //
+                // Pending is the subtle one and is not optional. Instances are created Pending and only become
+                // Running after awaiting their first task, so omitting it would leave a real window in which a
+                // just-scheduled bridge is replaced.
+                //
+                // Re-running a bridge that already finished is safe and close to free: the bridge's only effect
+                // is calling Create, which no-ops while the entity is Active, so the cost is one instance
+                // replacement plus one entity call per host start.
+                //
+                // Re-running is also what lets the job self-heal after the entity is removed, for example by
+                // CleanEntityStorageAsync. The perpetual orchestrator exits cleanly when it reads back a null
+                // entity state, and a removed entity is back to its default Pending status, so the job is left
+                // dead with a Completed bridge behind it. Keeping Completed deduped would keep it dead
+                // permanently; making it replaceable means the next host start re-runs Create, which finds the
+                // entity not Active and rebuilds the job.
+                //
+                // This deliberately does NOT recover the case where the perpetual orchestrator dies while the
+                // entity is still Active: the bridge re-runs, Create no-ops on the Active state, and the
+                // orchestrator stays down. That gap is tracked separately as an open lifecycle item.
                 await client.ScheduleNewOrchestrationInstanceAsync(
                     new TaskName(nameof(ExecuteBlobPurgeJobOperationOrchestrator)),
                     request,
                     new StartOrchestrationOptions(BlobPurgeConstants.StarterInstanceId)
                         .WithDedupeStatuses(
-                            OrchestrationRuntimeStatus.Completed,
-                            OrchestrationRuntimeStatus.Canceled,
                             OrchestrationRuntimeStatus.Pending,
-                            OrchestrationRuntimeStatus.Running,
-                            OrchestrationRuntimeStatus.Suspended),
+                            OrchestrationRuntimeStatus.Running),
                     cancellationToken);
-#pragma warning restore CS0618
 
                 this.logger.BlobPurgeJobEnsured();
                 return;
             }
             catch (OrchestrationAlreadyExistsException)
             {
-                // The expected steady-state outcome, not a rare race: the backend throws this whenever the
-                // bridge already exists in one of the dedupe statuses above, which is every host start after
-                // the first one succeeded. It means the singleton is already set up, so treat it as ensured
-                // and stop. It also covers the race this replaced a status check to close - two hosts starting
-                // together - because exactly one create wins and the loser lands here.
+                // Thrown only when the bridge already exists in one of the dedupe statuses above, so under this
+                // policy it means another host scheduled the bridge and it is still Pending or Running. That is
+                // exactly the concurrent-start race this replaced a status check to close: one create wins and
+                // the loser lands here. Either way the singleton is already being set up, so treat it as
+                // ensured and stop.
+                //
+                // Note this is NOT the steady-state path. A bridge that already finished is Completed, which is
+                // replaceable, so a later host start re-runs it rather than landing here.
                 this.logger.BlobPurgeJobEnsured();
                 return;
             }

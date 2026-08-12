@@ -87,7 +87,7 @@ public class BlobPurgeJobStarterTests
     }
 
     [Fact]
-    public async Task EnsureJob_SchedulesBridge_DedupingEveryStatusExceptFailedAndTerminated()
+    public async Task EnsureJob_SchedulesBridge_DedupingOnlyPendingAndRunning()
     {
         // Arrange - the dedupe list is an inverted whitelist: the wire policy is (all statuses - dedupe), so a
         // status omitted from the call silently becomes replaceable. Nothing in the compiler or the type system
@@ -126,10 +126,10 @@ public class BlobPurgeJobStarterTests
         options.Should().NotBeNull();
         options!.InstanceId.Should().Be(BlobPurgeConstants.StarterInstanceId);
 
-        // Failed and Terminated are the only replaceable statuses, which is what lets a failed setup self-heal.
-        // Every other status is deduped so a healthy or finished bridge is never purged and replaced.
-        options.DedupeStatuses.Should().BeEquivalentTo(
-            ["Completed", "Canceled", "Pending", "Running", "Suspended"]);
+        // Every status other than Pending and Running is replaceable, so a finished bridge is re-run on the
+        // next host start. That is what lets the job rebuild itself after the entity is removed. The set is
+        // asserted exactly, never as a superset, because the hazard is a silent omission.
+        options.DedupeStatuses.Should().BeEquivalentTo(["Pending", "Running"]);
     }
 
     static IOptionsMonitor<LargePayloadStorageOptions> OptionsFor(LargePayloadStorageOptions options)

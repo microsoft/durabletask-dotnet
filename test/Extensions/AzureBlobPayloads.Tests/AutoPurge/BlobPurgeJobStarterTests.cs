@@ -86,6 +86,52 @@ public class BlobPurgeJobStarterTests
         logger.Logs.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task EnsureJob_SchedulesBridge_DedupingEveryStatusExceptFailedAndTerminated()
+    {
+        // Arrange - the dedupe list is an inverted whitelist: the wire policy is (all statuses - dedupe), so a
+        // status omitted from the call silently becomes replaceable. Nothing in the compiler or the type system
+        // catches that, so the exact set is pinned here.
+        BlobPayloadStore store = new(new LargePayloadStorageOptions("UseDevelopmentStorage=true"));
+        Mock<DurableTaskClient> client = new("test");
+        TaskCompletionSource<StartOrchestrationOptions?> scheduled = new();
+        client
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<TaskName, object?, StartOrchestrationOptions?, CancellationToken>(
+                (_, _, options, _) => scheduled.TrySetResult(options))
+            .ReturnsAsync(BlobPurgeConstants.StarterInstanceId);
+
+        Mock<IDurableTaskClientProvider> provider = new();
+        provider.Setup(p => p.GetClient(It.IsAny<string>())).Returns(client.Object);
+        BlobPurgeJobStarter starter = new(
+            provider.Object,
+            store,
+            OptionsFor(new LargePayloadStorageOptions("UseDevelopmentStorage=true") { AutoPurge = true }),
+            "test",
+            new TestLogger<BlobPurgeJobStarter>());
+
+        // Act - the ensure work runs on a background task, so wait for the scheduling call rather than assuming
+        // it already happened.
+        await starter.StartAsync(CancellationToken.None);
+        Task completed = await Task.WhenAny(scheduled.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        await starter.StopAsync(CancellationToken.None);
+
+        // Assert
+        completed.Should().BeSameAs(scheduled.Task, "the starter must schedule the bridge orchestration");
+        StartOrchestrationOptions? options = await scheduled.Task;
+        options.Should().NotBeNull();
+        options!.InstanceId.Should().Be(BlobPurgeConstants.StarterInstanceId);
+
+        // Failed and Terminated are the only replaceable statuses, which is what lets a failed setup self-heal.
+        // Every other status is deduped so a healthy or finished bridge is never purged and replaced.
+        options.DedupeStatuses.Should().BeEquivalentTo(
+            ["Completed", "Canceled", "Pending", "Running", "Suspended"]);
+    }
+
     static IOptionsMonitor<LargePayloadStorageOptions> OptionsFor(LargePayloadStorageOptions options)
     {
         Mock<IOptionsMonitor<LargePayloadStorageOptions>> monitor = new();

@@ -129,41 +129,57 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
         {
             try
             {
-                // The singleton is already guaranteed by the entity's fixed key (Create no-ops when the job is
-                // active) and the orchestrator's fixed instance id. The bridge orchestration's only job is to
-                // apply the entity's Create once, under a fixed instance id. Before (re)scheduling it, check the
-                // existing bridge: if it already Completed - or is still alive (Running/Pending/Suspended) - the
-                // job is set up, so do not reschedule. (Re-running a Completed bridge is wasteful: with a fixed
-                // id and no dedupe policy the backend would purge and replace the terminal instance on every
-                // host restart.) Only (re)schedule when the bridge is absent, or ended in a Failed/Terminated
-                // state that may never have applied Create - which lets a failed setup self-heal.
-                OrchestrationMetadata? existing = await client.GetInstanceAsync(
-                    BlobPurgeConstants.StarterInstanceId, cancellationToken);
-
-                bool needsSchedule = existing is null
-                    or { RuntimeStatus: OrchestrationRuntimeStatus.Failed or OrchestrationRuntimeStatus.Terminated };
-                if (!needsSchedule)
-                {
-                    this.logger.BlobPurgeJobEnsured();
-                    return;
-                }
-
                 BlobPurgeJobOperationRequest request = new(
                     this.entityId, nameof(BlobPurgeJob.Create), batchSize);
 
+                // The bridge orchestration's only job is to apply the entity's Create once, under a fixed
+                // instance id. Whether it should be (re)scheduled is decided by the backend as part of the
+                // create call, not by reading its status first: a read-then-schedule pair is two independent
+                // RPCs with no atomicity between them, so two hosts starting together can both observe "absent"
+                // and both schedule.
+                //
+                // The dedupe list is an inverted whitelist. The wire policy is computed as
+                // (all statuses - dedupe statuses) = the statuses that may be REPLACED, so any status left out
+                // of this list silently becomes replaceable. It must therefore name every status that must not
+                // be disturbed, not just the interesting ones:
+                //   Completed  - re-running a finished bridge is wasteful, and with a fixed id the backend
+                //                would purge and replace the terminal instance on every host restart. There is
+                //                nothing to gain: the bridge would only re-signal Create, which no-ops while
+                //                the entity is Active.
+                //   Canceled   - terminal and not a failed setup, so it is left alone like Completed.
+                //   Pending    - instances are created Pending and only become Running after awaiting their
+                //                first task, so omitting it would leave a real window in which a just-scheduled
+                //                bridge is replaced.
+                //   Running,
+                //   Suspended  - still alive; the job is already set up.
+                // Failed and Terminated are deliberately absent, which makes them the only replaceable
+                // statuses: those may never have applied Create, so rescheduling is what lets a failed setup
+                // self-heal. Terminated must also stay out of the list because supplying it alongside a
+                // reusable running status is rejected outright.
+#pragma warning disable CS0618 // Canceled is obsolete, but is a real dedupe status and must be named here.
                 await client.ScheduleNewOrchestrationInstanceAsync(
                     new TaskName(nameof(ExecuteBlobPurgeJobOperationOrchestrator)),
                     request,
-                    new StartOrchestrationOptions(BlobPurgeConstants.StarterInstanceId),
+                    new StartOrchestrationOptions(BlobPurgeConstants.StarterInstanceId)
+                        .WithDedupeStatuses(
+                            OrchestrationRuntimeStatus.Completed,
+                            OrchestrationRuntimeStatus.Canceled,
+                            OrchestrationRuntimeStatus.Pending,
+                            OrchestrationRuntimeStatus.Running,
+                            OrchestrationRuntimeStatus.Suspended),
                     cancellationToken);
+#pragma warning restore CS0618
 
                 this.logger.BlobPurgeJobEnsured();
                 return;
             }
             catch (OrchestrationAlreadyExistsException)
             {
-                // Race: another client scheduled the bridge between our status check and schedule call. That is
-                // fine - the singleton is already kicked off; treat it as ensured and stop.
+                // The expected steady-state outcome, not a rare race: the backend throws this whenever the
+                // bridge already exists in one of the dedupe statuses above, which is every host start after
+                // the first one succeeded. It means the singleton is already set up, so treat it as ensured
+                // and stop. It also covers the race this replaced a status check to close - two hosts starting
+                // together - because exactly one create wins and the loser lands here.
                 this.logger.BlobPurgeJobEnsured();
                 return;
             }

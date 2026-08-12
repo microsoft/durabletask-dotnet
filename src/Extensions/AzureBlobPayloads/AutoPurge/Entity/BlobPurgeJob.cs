@@ -13,9 +13,10 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
 {
     /// <summary>
-    /// Creates (or reactivates) the auto-purge job. Because the job is a per-task-hub singleton, this is
-    /// intentionally a no-op when the job is already <see cref="BlobPurgeJobStatus.Active"/> so that extra
-    /// client processes racing to create it do not disturb the running job.
+    /// Creates (or reactivates) the auto-purge job. Because the job is a per-task-hub singleton, this does not
+    /// restart a job that is already <see cref="BlobPurgeJobStatus.Active"/> so that extra client processes
+    /// racing to create it do not disturb the running job. It does still take the batch size in that case, which
+    /// is what lets a configuration change reach a job that is already running.
     /// </summary>
     /// <param name="context">The entity context.</param>
     /// <param name="purgeBatchSize">
@@ -25,6 +26,14 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     {
         if (this.State.Status == BlobPurgeJobStatus.Active)
         {
+            // Deliberately not re-signalling Run: the orchestrator is already up, and starting a second one
+            // over a live one is destructive. The batch size is still taken, because this is the only path by
+            // which a changed configuration reaches an active job - the orchestrator re-reads it from here
+            // every cycle. Without this the value written by the very first Create would be the only one the
+            // job ever used, and a batch size the backend rejects would wedge it permanently.
+            this.State.PurgeBatchSize = purgeBatchSize;
+            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+
             logger.BlobPurgeJobAlreadyRunning(context.Id.Key);
             return;
         }
@@ -62,6 +71,47 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             startOrchestrationOptions);
 
         this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Stops the auto-purge job.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The perpetual orchestrator is deliberately not terminated here, and this operation does not touch its
+    /// instance ID at all. The orchestrator reads this entity at the top of every cycle and exits on its own
+    /// once the job is no longer <see cref="BlobPurgeJobStatus.Active"/>, so shutdown is cooperative: there is
+    /// no window in which one party terminates an orchestrator that the other believes is healthy, and the
+    /// in-flight cycle finishes rather than being cut off part-way through a batch of deletes.
+    /// </para>
+    /// <para>
+    /// <see cref="BlobPurgeJobState.CreatedAt"/>, <see cref="BlobPurgeJobState.PurgedCount"/> and
+    /// <see cref="BlobPurgeJobState.PurgeBatchSize"/> are preserved. They are the job's history and its
+    /// configuration, both of which are wanted if it is started again, and keeping <c>CreatedAt</c> is also what
+    /// distinguishes a stopped job from one that was never started.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">The entity context.</param>
+    public void Stop(TaskEntityContext context)
+    {
+        if (this.State.Status != BlobPurgeJobStatus.Active)
+        {
+            // Idempotent, and the repeat is the common case rather than the exception: a host with auto-purge
+            // disabled signals Stop on every start, including for an app that never enabled auto-purge at all.
+            // Returning here leaves the state exactly as it was found.
+            //
+            // This does not avoid materializing the entity - the framework persists entity state after every
+            // operation, so a stop signal to an entity that does not exist yet creates it with default state.
+            // What the guard preserves is LastModifiedAt: rewriting it on every host restart would destroy its
+            // only useful meaning, which is when the job actually stopped.
+            logger.BlobPurgeJobAlreadyStopped(context.Id.Key);
+            return;
+        }
+
+        this.State.Status = BlobPurgeJobStatus.Pending;
+        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+
+        logger.BlobPurgeJobStopped(context.Id.Key);
     }
 
     /// <summary>

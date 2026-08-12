@@ -4,6 +4,8 @@
 using FluentAssertions;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -63,27 +65,36 @@ public class BlobPurgeJobStarterTests
     }
 
     [Fact]
-    public async Task StartAsync_WhenAutoPurgeDisabled_DoesNotResolveClientOrLog()
+    public async Task StartAsync_WhenAutoPurgeDisabled_SignalsJobToStop()
     {
-        // Arrange - auto-purge is off. Even with a delete-capable blob store, the starter must no-op silently:
-        // it is registered unconditionally, so the not-opted-in path is the common case and must not log or
-        // resolve a client.
+        // Arrange - auto-purge is off. Returning silently was the whole disable bug: the job is a perpetual
+        // orchestrator owned by the task hub, so one created while the flag was on keeps deleting blobs no
+        // matter how many hosts start with it off. The disable path has to reach the backend.
         BlobPayloadStore store = new(new LargePayloadStorageOptions("UseDevelopmentStorage=true"));
-        Mock<IDurableTaskClientProvider> provider = new();
-        TestLogger<BlobPurgeJobStarter> logger = new();
-        BlobPurgeJobStarter starter = new(
-            provider.Object,
-            store,
-            OptionsFor(new LargePayloadStorageOptions("UseDevelopmentStorage=true") { AutoPurge = false }),
-            "test",
-            logger);
 
         // Act
-        await starter.StartAsync(CancellationToken.None);
+        (EntityInstanceId Id, string Operation)? signal = await SignalFromDisabledStarterAsync(store);
 
-        // Assert - returned before resolving a client and without logging anything at all.
-        provider.Verify(p => p.GetClient(It.IsAny<string>()), Times.Never);
-        logger.Logs.Should().BeEmpty();
+        // Assert
+        signal.Should().NotBeNull("the disable path must tell the job to stop");
+        signal!.Value.Id.Should().Be(new EntityInstanceId(nameof(BlobPurgeJob), BlobPurgeConstants.JobId));
+        signal.Value.Operation.Should().Be(nameof(BlobPurgeJob.Stop));
+    }
+
+    [Fact]
+    public async Task StartAsync_WhenAutoPurgeDisabledAndStoreCannotDelete_StillSignalsJobToStop()
+    {
+        // Arrange - the store-capability gate deliberately does not apply to the disable path. Stopping a job
+        // requires no ability to delete anything, and a user who has switched to a store that cannot delete is
+        // precisely the user whose still-running job must be stopped.
+
+        // Act
+        (EntityInstanceId Id, string Operation)? signal =
+            await SignalFromDisabledStarterAsync(new NonDeletingPayloadStore());
+
+        // Assert
+        signal.Should().NotBeNull("a store that cannot delete must not block stopping the job");
+        signal!.Value.Operation.Should().Be(nameof(BlobPurgeJob.Stop));
     }
 
     [Fact]
@@ -137,6 +148,44 @@ public class BlobPurgeJobStarterTests
         Mock<IOptionsMonitor<LargePayloadStorageOptions>> monitor = new();
         monitor.Setup(m => m.Get(It.IsAny<string>())).Returns(options);
         return monitor.Object;
+    }
+
+    /// <summary>
+    /// Runs a starter with auto-purge disabled and returns the entity signal it emitted, or null if none was
+    /// emitted within the timeout. The signal runs on a background task, so it is awaited rather than assumed.
+    /// </summary>
+    static async Task<(EntityInstanceId Id, string Operation)?> SignalFromDisabledStarterAsync(PayloadStore store)
+    {
+        Mock<DurableEntityClient> entities = new("test");
+        TaskCompletionSource<(EntityInstanceId Id, string Operation)> signalled = new();
+        entities
+            .Setup(e => e.SignalEntityAsync(
+                It.IsAny<EntityInstanceId>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<SignalEntityOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<EntityInstanceId, string, object?, SignalEntityOptions?, CancellationToken>(
+                (id, operation, _, _, _) => signalled.TrySetResult((id, operation)))
+            .Returns(Task.CompletedTask);
+
+        Mock<DurableTaskClient> client = new("test");
+        client.Setup(c => c.Entities).Returns(entities.Object);
+        Mock<IDurableTaskClientProvider> provider = new();
+        provider.Setup(p => p.GetClient(It.IsAny<string>())).Returns(client.Object);
+
+        BlobPurgeJobStarter starter = new(
+            provider.Object,
+            store,
+            OptionsFor(new LargePayloadStorageOptions("UseDevelopmentStorage=true") { AutoPurge = false }),
+            "test",
+            new TestLogger<BlobPurgeJobStarter>());
+
+        await starter.StartAsync(CancellationToken.None);
+        Task completed = await Task.WhenAny(signalled.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        await starter.StopAsync(CancellationToken.None);
+
+        return completed == signalled.Task ? await signalled.Task : null;
     }
 
     sealed class NonDeletingPayloadStore : PayloadStore

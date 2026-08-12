@@ -57,9 +57,14 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
 
             try
             {
-                // Stop cleanly if the job has been stopped or removed.
+                // Stop cleanly if the job has been stopped or removed. BlobPurgeJob.Stop is what makes this
+                // reachable: it moves the entity off Active without touching this orchestrator at all, so
+                // shutdown is cooperative - the in-flight cycle finishes and the loop exits on its own terms
+                // rather than being terminated part-way through a batch of deletes.
+                // input: null is named deliberately. A bare positional null binds to the (id, name, options)
+                // overload instead, which reads as if an input were being passed when it is not.
                 BlobPurgeJobState? state = await context.Entities.CallEntityAsync<BlobPurgeJobState?>(
-                    input.JobEntityId, nameof(BlobPurgeJob.Get), null);
+                    input.JobEntityId, nameof(BlobPurgeJob.Get), input: null);
 
                 if (state is null || state.Status != BlobPurgeJobStatus.Active)
                 {
@@ -67,9 +72,22 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                     return null;
                 }
 
+                // Take the batch size from the entity rather than from this orchestrator's input. A perpetual
+                // orchestrator outlives configuration changes: its input is fixed when it is created and is
+                // carried verbatim through every continue-as-new, so using input.PurgeBatchSize would pin the
+                // value written by the very first Create for the entire life of the job. Re-reading it from the
+                // state fetch this cycle already performs costs no extra call and is what lets a changed batch
+                // size actually take effect. That matters because a batch size the backend rejects fails every
+                // fetch: without this the job would be wedged with no recovery short of deleting the entity.
+                //
+                // Fall back to the input when the stored value is not positive. An entity written by an older
+                // build carries no batch size at all, and asking the backend for zero rows every cycle would be
+                // a silent, permanent stall.
+                int cycleBatchSize = state.PurgeBatchSize > 0 ? state.PurgeBatchSize : batchSize;
+
                 List<LargePayloadTombstone> tombstones = await context.CallActivityAsync<List<LargePayloadTombstone>>(
                     nameof(GetLargePayloadTombstonesActivity),
-                    batchSize,
+                    cycleBatchSize,
                     new TaskOptions(PurgeActivityRetryPolicy));
 
                 if (tombstones is null || tombstones.Count == 0)

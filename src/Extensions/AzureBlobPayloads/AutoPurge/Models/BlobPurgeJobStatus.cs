@@ -9,8 +9,10 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 public enum BlobPurgeJobStatus
 {
     /// <summary>
-    /// The job has not been started yet. This is the default status of a freshly initialized entity, so it is
-    /// kept as the zero value to avoid a brand-new entity accidentally appearing active.
+    /// The job is not running. This is both the state of a job that has never been started and the resting
+    /// state of one that has been stopped, which <see cref="BlobPurgeJobState.CreatedAt"/> distinguishes: it is
+    /// null only for a job that was never created. It is kept as the zero value so a brand-new entity does not
+    /// accidentally appear active.
     /// </summary>
     Pending,
 

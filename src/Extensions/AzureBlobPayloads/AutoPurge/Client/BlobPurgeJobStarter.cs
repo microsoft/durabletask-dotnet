@@ -106,6 +106,9 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
             //
             // The job's state is read before anything is signalled, so an app that never enabled auto-purge
             // signals nothing and no entity is created for it.
+            //
+            // Launched on a background task for the reasons given on the enabled path below; CancellationToken.None
+            // matters most here, because dropping this delegate would leave a running job's stop signal unsent.
             this.cts = new CancellationTokenSource();
             this.backgroundTask = Task.Run(() => this.SignalJobStopAsync(this.cts.Token), CancellationToken.None);
             return Task.CompletedTask;
@@ -123,14 +126,24 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
         }
 
         // Resolve the client by builder name rather than by type: a named client builder must get its own
-        // client, and resolving lazily here - after the AutoPurge gate - avoids constructing a DurableTaskClient
-        // at host start for apps that externalize payloads without auto-purge.
+        // client. This resolve sits after the AutoPurge and store gates because it runs directly in StartAsync's
+        // body, so a builder name that matches no registered client throws ArgumentOutOfRangeException straight
+        // out of host startup; keeping it behind the gates means an app that has not enabled auto-purge, or whose
+        // store cannot delete, never reaches it. It does not defer client construction: the provider is handed an
+        // already-materialized set of clients when it is constructed, before any StartAsync runs. The disabled
+        // path instead resolves inside its loop, so a bad name cannot throw out of startup; see SignalJobStopAsync.
         DurableTaskClient client = this.clientProvider.GetClient(this.builderName);
 
         int batchSize = opts.PayloadPurgeBatchSize;
 
-        // Do not block host startup; ensure the job on a background task with basic retry until the backend
-        // is reachable, and keep reconciling it from there.
+        // EnsureJobAsync is a perpetual loop, and an async method runs synchronously on its caller's thread
+        // until the first await that actually suspends. Launching it directly would make "StartAsync returns"
+        // hinge on some await inside the loop genuinely suspending - awaits that land on DurableTaskClient and
+        // DurableEntityClient implementations this code does not own. Task.Run makes "StartAsync returns
+        // immediately" a local, visible property instead, for one allocation per process. CancellationToken.None
+        // is deliberate: that argument governs only whether the delegate is invoked, so passing this.cts.Token
+        // would let a fast StopAsync drop the delegate before it runs; the loop cancels through the token passed
+        // into the method instead.
         this.cts = new CancellationTokenSource();
         this.backgroundTask = Task.Run(() => this.EnsureJobAsync(client, batchSize, this.cts.Token), CancellationToken.None);
         return Task.CompletedTask;
@@ -274,11 +287,13 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
         {
             try
             {
-                // Resolved inside the loop rather than on the host-start path. This path is taken by every app
-                // that externalizes payloads without auto-purge, and constructing a DurableTaskClient at host
-                // start for them is exactly what the enable path's lazy resolution avoids. It also means a
-                // client that cannot be resolved yet is retried here instead of throwing out of host startup,
-                // which must never happen for a feature the user has turned off.
+                // Resolved inside this loop's try, not in StartAsync's body. A builder name that matches no
+                // registered client makes GetClient throw; catching it here - and retrying after a delay - keeps
+                // that failure from surfacing as an unobserved fault for a feature the user has turned off. The
+                // enabled path is genuinely different: its resolve sits directly in StartAsync's body, so the same
+                // bad name would throw straight out of host startup. The client set is fixed when the provider is
+                // constructed, so a name that misses once misses always; the retry cannot make it resolve, it only
+                // keeps the failure contained.
                 DurableTaskClient client = this.clientProvider.GetClient(this.builderName);
 
                 // Held in a local so the query and the signal below are issued against the same object. Both go

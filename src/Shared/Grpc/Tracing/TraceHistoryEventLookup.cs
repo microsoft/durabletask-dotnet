@@ -19,8 +19,8 @@ sealed class TraceHistoryEventLookup
 {
     readonly IEnumerable<P.HistoryEvent> pastEvents;
 
-    Dictionary<int, P.HistoryEvent?>? taskScheduledEventsByEventId;
-    Dictionary<int, P.HistoryEvent?>? subOrchestrationInstanceCreatedEventsByEventId;
+    readonly Dictionary<int, P.HistoryEvent?>? taskScheduledEventsByEventId;
+    readonly Dictionary<int, P.HistoryEvent?>? subOrchestrationInstanceCreatedEventsByEventId;
 
     HashSet<int>? duplicateTaskScheduledEventIds;
     HashSet<int>? duplicateSubOrchestrationInstanceCreatedEventIds;

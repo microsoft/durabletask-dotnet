@@ -256,9 +256,8 @@ public class TraceHistoryEventLookupTests
         List<P.HistoryEvent> newEvents = [];
         if (taskScheduledEventIds is not null)
         {
-            foreach (int eventId in taskScheduledEventIds)
-            {
-                P.HistoryEvent newEvent = useFailureEvents
+            newEvents.AddRange(
+                taskScheduledEventIds.Select(eventId => useFailureEvents
                     ? new P.HistoryEvent
                     {
                         TaskFailed = new P.TaskFailedEvent { TaskScheduledId = eventId },
@@ -266,16 +265,13 @@ public class TraceHistoryEventLookupTests
                     : new P.HistoryEvent
                     {
                         TaskCompleted = new P.TaskCompletedEvent { TaskScheduledId = eventId },
-                    };
-                newEvents.Add(newEvent);
-            }
+                    }));
         }
 
         if (subOrchestrationInstanceCreatedEventIds is not null)
         {
-            foreach (int eventId in subOrchestrationInstanceCreatedEventIds)
-            {
-                P.HistoryEvent newEvent = useFailureEvents
+            newEvents.AddRange(
+                subOrchestrationInstanceCreatedEventIds.Select(eventId => useFailureEvents
                     ? new P.HistoryEvent
                     {
                         SubOrchestrationInstanceFailed =
@@ -285,9 +281,7 @@ public class TraceHistoryEventLookupTests
                     {
                         SubOrchestrationInstanceCompleted =
                             new P.SubOrchestrationInstanceCompletedEvent { TaskScheduledId = eventId },
-                    };
-                newEvents.Add(newEvent);
-            }
+                    }));
         }
 
         return new TraceHistoryEventLookup(pastEvents, newEvents);

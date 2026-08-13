@@ -30,8 +30,17 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             // active job - the orchestrator re-reads it from here every cycle. Without this the value written by
             // the very first Create would be the only one the job ever used, and a batch size the backend
             // rejects would wedge it permanently.
-            this.State.PurgeBatchSize = purgeBatchSize;
-            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+            //
+            // Written only when the value actually differs, which is what keeps LastModifiedAt tracking real
+            // configuration changes. Create runs on every host start, so an unconditional write would reduce
+            // the field to "time of the last host start". An entity written by a build that predates this
+            // field carries zero, which differs from any configured size, so the first Create after an upgrade
+            // still repairs it.
+            if (this.State.PurgeBatchSize != purgeBatchSize)
+            {
+                this.State.PurgeBatchSize = purgeBatchSize;
+                this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+            }
 
             logger.BlobPurgeJobAlreadyRunning(context.Id.Key);
 
@@ -40,13 +49,13 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             // next one. The signal is deliberately blind. An entity-initiated start carries no reuse policy, so
             // the backend decides its fate: it discards the start while the target instance exists in any
             // non-completed status, and purges and replaces it once the instance has completed, terminated,
-            // failed or been canceled (its OkToPurge / IsCompleted rule). A healthy orchestrator is therefore
-            // left strictly alone and only a dead one is replaced.
+            // failed or been canceled. A healthy orchestrator is therefore left strictly alone and only a dead
+            // one is replaced.
             //
-            // Being blind is the point, not a shortcut. The backend reaches that decision atomically within one
-            // partition operation, so delegating it removes the race entirely. Checking the orchestrator's
-            // status here and signalling only when it looked dead would reintroduce the window in which it dies
-            // - or recovers - between the read and the signal, which is strictly worse than not asking.
+            // Being blind is the point, not a shortcut. The backend reaches that decision atomically, so
+            // delegating it removes the race entirely. Checking the orchestrator's status here and signalling
+            // only when it looked dead would reintroduce the window in which it dies - or recovers - between
+            // the read and the signal, which is strictly worse than not asking.
             context.SignalEntity(context.Id, nameof(this.Run));
             return;
         }
@@ -67,12 +76,19 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// Starts the purge orchestrator if the job is active.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The orchestrator runs under a fixed instance ID, which is what keeps the singleton a singleton. No reuse
     /// policy is passed, and none can be: the entity's start action has no field to carry one, so anything set
     /// here would be dropped before it reached the wire. That default is the behaviour the job relies on rather
     /// than an omission - the backend discards a start aimed at an instance that already exists in a
     /// non-completed status, and replaces the instance only once it has completed, terminated, failed or been
     /// canceled. Signalling this operation is therefore always safe, whatever the orchestrator is doing.
+    /// </para>
+    /// <para>
+    /// This operation deliberately writes no state. It schedules an orchestrator and nothing more, and it runs
+    /// on every host start, so touching <see cref="BlobPurgeJobState.LastModifiedAt"/> here would overwrite a
+    /// real change with the time of a start that changed nothing.
+    /// </para>
     /// </remarks>
     /// <param name="context">The entity context.</param>
     public void Run(TaskEntityContext context)
@@ -89,8 +105,6 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             new TaskName(nameof(BlobPurgeJobOrchestrator)),
             new BlobPurgeJobRunRequest(context.Id, this.State.PurgeBatchSize),
             startOrchestrationOptions);
-
-        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
     }
 
     /// <summary>
@@ -124,11 +138,13 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             // because "the caller already checked" would reintroduce exactly the window it was written to
             // absorb. Concurrent hosts signalling at once land here for the same reason.
             //
-            // Returning here also leaves the state exactly as it was found. That preserves LastModifiedAt,
-            // whose only useful meaning is when the job actually stopped; rewriting it on a redundant stop
-            // would destroy that. It does not avoid materializing the entity - the framework persists entity
-            // state after every operation, so a stop signal to an entity that does not exist yet creates it
-            // with default state. Not creating it is the pre-check's job, not this guard's.
+            // Returning here also leaves the state exactly as it was found, which is what keeps
+            // LastModifiedAt meaning "when this job stopped" rather than "when a stop was last signalled at
+            // it". That only holds because no other operation rewrites the field on a no-op either: Run never
+            // writes it, and Create rewrites it only when the batch size actually differs. Breaking either of
+            // those breaks this too. It does not avoid materializing the entity - the framework persists
+            // entity state after every operation, so a stop signal to an entity that does not exist yet
+            // creates it with default state. Not creating it is the pre-check's job, not this guard's.
             logger.BlobPurgeJobAlreadyStopped(context.Id.Key);
             return;
         }

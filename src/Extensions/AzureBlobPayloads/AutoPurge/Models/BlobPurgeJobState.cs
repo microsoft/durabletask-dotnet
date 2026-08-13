@@ -19,8 +19,15 @@ public sealed class BlobPurgeJobState
     public DateTimeOffset? CreatedAt { get; set; }
 
     /// <summary>
-    /// Gets or sets the time when the job state was last modified.
+    /// Gets or sets the time of the last meaningful change to the job: when it was started, when it was
+    /// stopped, when it was given a <see cref="PurgeBatchSize"/> different from the one it already had, or
+    /// when it last recorded a non-zero number of purged blobs.
     /// </summary>
+    /// <remarks>
+    /// This is not a liveness or heartbeat signal, and it must not be read as one. Starting a host does not
+    /// move it, and an active job whose cycles keep finding nothing to purge leaves it untouched indefinitely,
+    /// so a value far in the past is equally consistent with a healthy idle job and a dead one.
+    /// </remarks>
     public DateTimeOffset? LastModifiedAt { get; set; }
 
     /// <summary>

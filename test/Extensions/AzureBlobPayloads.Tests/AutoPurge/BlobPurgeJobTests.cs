@@ -111,6 +111,97 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
+    public async Task Create_WhenAlreadyActive_AndBatchSizeUnchanged_DoesNotMoveLastModifiedAt()
+    {
+        // Arrange - the steady state. Create runs on every host start, and almost every one of those carries
+        // the same configured batch size the job already has. If that rewrote LastModifiedAt, the field would
+        // degrade to "time of the last host start" and say nothing about the job.
+        DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
+        BlobPurgeJobState existing = new()
+        {
+            Status = BlobPurgeJobStatus.Active,
+            LastModifiedAt = configuredAt,
+            PurgeBatchSize = 250,
+        };
+        TestEntityOperation operation = new(
+            nameof(BlobPurgeJob.Create),
+            new TestEntityState(existing),
+            250);
+
+        // Act
+        await this.job.RunAsync(operation);
+
+        // Assert - the sibling test below is the positive control: identical wiring, differing only in the
+        // batch size passed in, and it proves this same path does move the field when something changes.
+        BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
+            operation.State.GetState(typeof(BlobPurgeJobState)));
+        state.LastModifiedAt.Should().Be(configuredAt);
+        state.PurgeBatchSize.Should().Be(250);
+    }
+
+    [Fact]
+    public async Task Create_WhenAlreadyActive_AndBatchSizeChanged_MovesLastModifiedAt()
+    {
+        // Arrange - a real configuration change reaching an active job, which is the one thing this path
+        // exists to deliver and the one case that must be recorded.
+        DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
+        BlobPurgeJobState existing = new()
+        {
+            Status = BlobPurgeJobStatus.Active,
+            LastModifiedAt = configuredAt,
+            PurgeBatchSize = 250,
+        };
+        TestEntityOperation operation = new(
+            nameof(BlobPurgeJob.Create),
+            new TestEntityState(existing),
+            500);
+
+        // Act
+        await this.job.RunAsync(operation);
+
+        // Assert
+        BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
+            operation.State.GetState(typeof(BlobPurgeJobState)));
+        state.PurgeBatchSize.Should().Be(500);
+        state.LastModifiedAt.Should().BeAfter(configuredAt);
+    }
+
+    [Fact]
+    public async Task Run_DoesNotMoveLastModifiedAt()
+    {
+        // Arrange - Run schedules an orchestrator and changes nothing about the job. It is signalled by every
+        // Create, so writing here would move the field on every host start and undo the conditional write
+        // above.
+        DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
+        BlobPurgeJobState existing = new()
+        {
+            Status = BlobPurgeJobStatus.Active,
+            LastModifiedAt = configuredAt,
+            PurgeBatchSize = 250,
+        };
+        TestEntityOperation operation = new(
+            nameof(BlobPurgeJob.Run),
+            new TestEntityState(existing),
+            null);
+
+        // Act
+        await this.job.RunAsync(operation);
+
+        // Assert - scheduling is asserted first as the positive control. Without it a misdispatched operation
+        // would write nothing and pass this test for entirely the wrong reason.
+        Mock.Get(operation.Context).Verify(
+            c => c.ScheduleNewOrchestration(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>()),
+            Times.Once);
+
+        BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
+            operation.State.GetState(typeof(BlobPurgeJobState)));
+        state.LastModifiedAt.Should().Be(configuredAt);
+    }
+
+    [Fact]
     public async Task Run_WhenActive_SchedulesOrchestratorAtTheFixedInstanceId()
     {
         // Arrange - the fixed instance ID is the mechanism the whole restart story rests on. It is what lets the
@@ -206,9 +297,10 @@ public class BlobPurgeJobTests
     [Fact]
     public async Task Stop_WhenNotActive_LeavesStateUntouched()
     {
-        // Arrange - a job that is already stopped. Every host with auto-purge disabled signals Stop on each
-        // start, so the repeat is the common case; rewriting LastModifiedAt each time would destroy its only
-        // useful meaning, which is when the job actually stopped.
+        // Arrange - a job that is already stopped. The starter's client-side pre-check normally suppresses a
+        // redundant stop, so this is the signal that races past it: the job stopped between that read and this
+        // signal landing. Rewriting LastModifiedAt here would report the losing side of that race as if it
+        // were the moment the job stopped.
         DateTimeOffset stoppedAt = DateTimeOffset.UtcNow.AddHours(-6);
         BlobPurgeJobState existing = new()
         {

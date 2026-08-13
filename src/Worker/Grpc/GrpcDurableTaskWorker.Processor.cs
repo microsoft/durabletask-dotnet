@@ -616,8 +616,8 @@ sealed partial class GrpcDurableTaskWorker
 
                 if (executionStartedEvent is not null)
                 {
-                    // Build lookups once per work item instead of rescanning PastEvents for every new event.
-                    TraceHistoryEventLookup historyLookup = new(request.PastEvents);
+                    // Index only correlation IDs referenced by this work item's new events in one lazy history pass.
+                    TraceHistoryEventLookup historyLookup = new(request.PastEvents, request.NewEvents);
 
                     foreach (var newEvent in request.NewEvents)
                     {

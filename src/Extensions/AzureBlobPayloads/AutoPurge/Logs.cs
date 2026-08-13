@@ -54,4 +54,10 @@ static partial class Logs
 
     [LoggerMessage(EventId = 824, Level = LogLevel.Information, Message = "Blob payload auto-purge is disabled, so a stop was requested for the singleton job. A job left running by an earlier configuration exits after its current cycle.")]
     public static partial void BlobPurgeJobStopRequested(this ILogger logger);
+
+    [LoggerMessage(EventId = 825, Level = LogLevel.Debug, Message = "Blob payload auto-purge is disabled and no running singleton job was found, so no stop was requested.")]
+    public static partial void BlobPurgeJobNotRunning(this ILogger logger);
+
+    [LoggerMessage(EventId = 826, Level = LogLevel.Warning, Message = "Blob payload auto-purge is disabled but the singleton job's state could not be read; requesting a stop anyway. Stopping a job that may be deleting payloads matters more than avoiding a redundant stop request, which the job ignores.")]
+    public static partial void BlobPurgeJobStateUnknown(this ILogger logger, Exception exception);
 }

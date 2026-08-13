@@ -96,14 +96,19 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     {
         if (this.State.Status != BlobPurgeJobStatus.Active)
         {
-            // Idempotent, and the repeat is the common case rather than the exception: a host with auto-purge
-            // disabled signals Stop on every start, including for an app that never enabled auto-purge at all.
-            // Returning here leaves the state exactly as it was found.
+            // Load-bearing, and NOT redundant with the client-side pre-check in BlobPurgeJobStarter that
+            // normally prevents this operation from being signalled at all. That pre-check reads the job state
+            // and then signals: two separate round trips with nothing holding the state still between them, so
+            // the job can stop - or never have existed - in the gap. This guard is what makes losing that race
+            // harmless, which is the only reason the pre-check is allowed to be a plain read. Deleting it
+            // because "the caller already checked" would reintroduce exactly the window it was written to
+            // absorb. Concurrent hosts signalling at once land here for the same reason.
             //
-            // This does not avoid materializing the entity - the framework persists entity state after every
-            // operation, so a stop signal to an entity that does not exist yet creates it with default state.
-            // What the guard preserves is LastModifiedAt: rewriting it on every host restart would destroy its
-            // only useful meaning, which is when the job actually stopped.
+            // Returning here also leaves the state exactly as it was found. That preserves LastModifiedAt,
+            // whose only useful meaning is when the job actually stopped; rewriting it on a redundant stop
+            // would destroy that. It does not avoid materializing the entity - the framework persists entity
+            // state after every operation, so a stop signal to an entity that does not exist yet creates it
+            // with default state. Not creating it is the pre-check's job, not this guard's.
             logger.BlobPurgeJobAlreadyStopped(context.Id.Key);
             return;
         }

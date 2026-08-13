@@ -39,6 +39,65 @@ public class TracingIntegrationTests : IntegrationTestBase
     static readonly ActivitySource TestActivitySource = new(TestActivitySourceName);
 
     [Fact]
+    public async Task HistoryEventLookupCorrelatesDistinctScheduledOperations()
+    {
+        // Arrange
+        ConcurrentBag<Activity> activities = new();
+        using ActivityListener listener = CreateListener(ActivitySourceNames, activities);
+
+        string orchestratorName = nameof(HistoryEventLookupCorrelatesDistinctScheduledOperations);
+        string firstActivityName = "FirstActivity";
+        string secondActivityName = "SecondActivity";
+        string subOrchestratorName = "SubOrchestration";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<bool, bool>(
+                    orchestratorName,
+                    async (ctx, input) =>
+                    {
+                        await ctx.CallActivityAsync(firstActivityName, input);
+                        await ctx.CallActivityAsync(secondActivityName, input);
+                        await ctx.CallSubOrchestratorAsync(subOrchestratorName, input: input);
+                        return true;
+                    })
+                .AddOrchestratorFunc<bool, bool>(subOrchestratorName, (ctx, input) => input)
+                .AddActivityFunc<bool, bool>(firstActivityName, (ctx, input) => input)
+                .AddActivityFunc<bool, bool>(secondActivityName, (ctx, input) => input));
+        });
+
+        // Act
+        OrchestrationMetadata metadata;
+        using (TestActivitySource.StartActivity("Test"))
+        {
+            string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+                orchestratorName,
+                input: true,
+                cancellation: this.TimeoutToken);
+            metadata = await server.Client.WaitForInstanceCompletionAsync(
+                instanceId,
+                getInputsAndOutputs: true,
+                this.TimeoutToken);
+        }
+
+        // Assert
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        activities.Should().ContainSingle(
+            activity => activity.Kind == ActivityKind.Client
+                && activity.Source.Name == CoreActivitySourceName
+                && activity.OperationName == $"activity:{firstActivityName}");
+        activities.Should().ContainSingle(
+            activity => activity.Kind == ActivityKind.Client
+                && activity.Source.Name == CoreActivitySourceName
+                && activity.OperationName == $"activity:{secondActivityName}");
+        activities.Should().ContainSingle(
+            activity => activity.Kind == ActivityKind.Client
+                && activity.Source.Name == CoreActivitySourceName
+                && activity.OperationName == $"orchestration:{subOrchestratorName}");
+    }
+
+    [Fact]
     public async Task MultiTaskOrchestration()
     {
         var activities = new ConcurrentBag<Activity>();

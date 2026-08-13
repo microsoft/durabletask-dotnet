@@ -10,9 +10,9 @@ namespace Microsoft.DurableTask.Tracing;
 /// events (e.g. "TaskCompleted") back to the history event that scheduled them (e.g. "TaskScheduled").
 /// </summary>
 /// <remarks>
-/// The indexes are built lazily, at most once per instance, and cached for the lifetime of the instance. This
-/// avoids re-scanning the full set of past events for every new event being processed in a work item, which
-/// would otherwise be O(new events x past events) for work items with many new events.
+/// The indexes are built lazily, at most once per event type, and cached for the lifetime of the orchestrator
+/// work item. This avoids re-scanning the full set of past events for every new event being processed in a work
+/// item, which would otherwise be O(new events x past events) for work items with many new events.
 /// </remarks>
 sealed class TraceHistoryEventLookup
 {
@@ -35,14 +35,13 @@ sealed class TraceHistoryEventLookup
     /// </summary>
     /// <param name="eventId">The event ID to look up.</param>
     /// <returns>The matching event, or <see langword="null"/> if none is found.</returns>
-    /// <remarks>
-    /// If more than one "TaskScheduled" event shares the given event ID, the last one encountered (in history
-    /// order) is returned, matching the original <c>LastOrDefault</c> lookup semantics.
-    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when more than one "TaskScheduled" event has the same event ID.
+    /// </exception>
     public P.HistoryEvent? GetTaskScheduledEvent(int eventId)
     {
         this.taskScheduledEventsByEventId ??= BuildIndex(
-            this.pastEvents, P.HistoryEvent.EventTypeOneofCase.TaskScheduled, keepFirst: false);
+            this.pastEvents, P.HistoryEvent.EventTypeOneofCase.TaskScheduled);
         return this.taskScheduledEventsByEventId.TryGetValue(eventId, out P.HistoryEvent? historyEvent)
             ? historyEvent
             : null;
@@ -53,21 +52,20 @@ sealed class TraceHistoryEventLookup
     /// </summary>
     /// <param name="eventId">The event ID to look up.</param>
     /// <returns>The matching event, or <see langword="null"/> if none is found.</returns>
-    /// <remarks>
-    /// If more than one "SubOrchestrationInstanceCreated" event shares the given event ID, the first one
-    /// encountered (in history order) is returned, matching the original <c>FirstOrDefault</c> lookup semantics.
-    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when more than one "SubOrchestrationInstanceCreated" event has the same event ID.
+    /// </exception>
     public P.HistoryEvent? GetSubOrchestrationInstanceCreatedEvent(int eventId)
     {
         this.subOrchestrationInstanceCreatedEventsByEventId ??= BuildIndex(
-            this.pastEvents, P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated, keepFirst: true);
+            this.pastEvents, P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated);
         return this.subOrchestrationInstanceCreatedEventsByEventId.TryGetValue(eventId, out P.HistoryEvent? historyEvent)
             ? historyEvent
             : null;
     }
 
     static Dictionary<int, P.HistoryEvent> BuildIndex(
-        IEnumerable<P.HistoryEvent> events, P.HistoryEvent.EventTypeOneofCase eventType, bool keepFirst)
+        IEnumerable<P.HistoryEvent> events, P.HistoryEvent.EventTypeOneofCase eventType)
     {
         Dictionary<int, P.HistoryEvent> index = new();
         foreach (P.HistoryEvent historyEvent in events)
@@ -77,14 +75,17 @@ sealed class TraceHistoryEventLookup
                 continue;
             }
 
-            if (keepFirst && index.ContainsKey(historyEvent.EventId))
+            try
             {
-                // Preserve first-match-wins semantics for duplicate event IDs.
-                continue;
+                index.Add(historyEvent.EventId, historyEvent);
             }
-
-            // Last write wins for duplicate event IDs, preserving last-match-wins semantics.
-            index[historyEvent.EventId] = historyEvent;
+            catch (ArgumentException exception)
+            {
+                throw new InvalidOperationException(
+                    $"Past orchestration history contains multiple '{eventType}' events with event ID "
+                    + $"'{historyEvent.EventId}'.",
+                    exception);
+            }
         }
 
         return index;

@@ -370,10 +370,10 @@ public class GrpcDurableTaskWorkerTests
     // TraceHelper, so they are kept in this class (whose test methods xunit runs sequentially by default) to
     // avoid flaky interference between them.
     [Fact]
-    public async Task DispatchWorkItem_OrchestratorRequest_NoActivityListeners_SkipsTracingWorkAndCompletes()
+    public async Task DispatchWorkItem_OrchestratorRequest_NoActivityListeners_DoesNotBuildHistoryIndexes()
     {
-        // Arrange: verify no listener is registered for the Durable Task ActivitySource, so that
-        // OnRunOrchestratorAsync takes the fast path that skips all trace-event lookup work.
+        // Arrange: duplicate event IDs cause TraceHistoryEventLookup to throw when it builds an index. If this
+        // invalid history still completes, the no-listener fast path did not invoke either lookup method.
         TraceHelper.HasListeners.Should().BeFalse();
 
         P.WorkItem orchestratorWorkItem = CreateOrchestratorWorkItemWithDuplicateEventIds();
@@ -402,54 +402,48 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public async Task DispatchWorkItem_OrchestratorRequest_WithActivityListener_UsesFirstAndLastWinsSemantics()
+    public async Task DispatchWorkItem_OrchestratorRequest_WithActivityListener_DuplicateEventIds_AbandonsWorkItem()
     {
-        // Arrange: register a listener so OnRunOrchestratorAsync performs the tracing-correlation work, and
-        // craft history containing duplicate event IDs to verify the last/first-wins lookup semantics are
-        // preserved by the new indexed TraceHistoryEventLookup.
-        ConcurrentQueue<Activity> stoppedActivities = new();
+        // Arrange
         using ActivityListener listener = new()
         {
             ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
             Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = activity => stoppedActivities.Enqueue(activity),
         };
         ActivitySource.AddActivityListener(listener);
         TraceHelper.HasListeners.Should().BeTrue();
 
         P.WorkItem orchestratorWorkItem = CreateOrchestratorWorkItemWithDuplicateEventIds();
 
-        TaskCompletionSource completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource abandoned = new(TaskCreationOptions.RunContinuationsAsynchronously);
         GrpcDurableTaskWorker worker = CreateActivityWorker(new GrpcDurableTaskWorkerOptions());
         Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
             MockBehavior.Strict,
             new object[] { Mock.Of<CallInvoker>() });
         clientMock
-            .Setup(client => client.CompleteOrchestratorTaskAsync(
-                It.IsAny<P.OrchestratorResponse>(),
+            .Setup(client => client.AbandonTaskOrchestratorWorkItemAsync(
+                It.Is<P.AbandonOrchestrationTaskRequest>(
+                    request => request.CompletionToken == orchestratorWorkItem.CompletionToken),
                 It.IsAny<Metadata>(),
                 It.IsAny<DateTime?>(),
                 It.IsAny<CancellationToken>()))
-            .Callback(() => completed.TrySetResult())
-            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+            .Callback(() => abandoned.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.AbandonOrchestrationTaskResponse())));
         object processor = CreateProcessor(worker, clientMock.Object);
 
         // Act
         InvokeDispatchWorkItem(processor, orchestratorWorkItem, CancellationToken.None);
-        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await abandoned.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        // Assert: the "TaskScheduled" event with EventId=1 was duplicated; the last one (by history order)
-        // should win, matching the original LastOrDefault lookup semantics.
-        Activity taskActivity = stoppedActivities.Should().ContainSingle(
-            a => a.GetTagItem(Schema.Task.Type) as string == TraceActivityConstants.Activity).Subject;
-        taskActivity.GetTagItem(Schema.Task.Name).Should().Be("SecondScheduled");
-
-        // The "SubOrchestrationInstanceCreated" event with EventId=2 was duplicated; the first one (by history
-        // order) should win, matching the original FirstOrDefault lookup semantics.
-        Activity subOrchestrationActivity = stoppedActivities.Should().ContainSingle(
-            a => a.GetTagItem(Schema.Task.Type) as string == TraceActivityConstants.Orchestration
-                && a.OperationName.Contains("FirstSub", StringComparison.Ordinal)).Subject;
-        subOrchestrationActivity.GetTagItem(Schema.Task.Name).Should().Be("FirstSub");
+        // Assert
+        clientMock.VerifyAll();
+        clientMock.Verify(
+            client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     static P.WorkItem CreateOrchestratorWorkItemWithDuplicateEventIds()

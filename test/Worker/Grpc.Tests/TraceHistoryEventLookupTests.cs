@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 public class TraceHistoryEventLookupTests
 {
     [Fact]
-    public void GetTaskScheduledEvent_DuplicateEventIds_ReturnsLastMatch()
+    public void GetTaskScheduledEvent_DuplicateEventIds_Throws()
     {
         // Arrange
         List<P.HistoryEvent> pastEvents =
@@ -20,15 +20,15 @@ public class TraceHistoryEventLookupTests
         TraceHistoryEventLookup lookup = new(pastEvents);
 
         // Act
-        P.HistoryEvent? result = lookup.GetTaskScheduledEvent(1);
+        Action act = () => lookup.GetTaskScheduledEvent(1);
 
         // Assert
-        result.Should().NotBeNull();
-        result!.TaskScheduled.Name.Should().Be("SecondScheduled");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'TaskScheduled'*event ID '1'*");
     }
 
     [Fact]
-    public void GetSubOrchestrationInstanceCreatedEvent_DuplicateEventIds_ReturnsFirstMatch()
+    public void GetSubOrchestrationInstanceCreatedEvent_DuplicateEventIds_Throws()
     {
         // Arrange
         List<P.HistoryEvent> pastEvents =
@@ -39,11 +39,11 @@ public class TraceHistoryEventLookupTests
         TraceHistoryEventLookup lookup = new(pastEvents);
 
         // Act
-        P.HistoryEvent? result = lookup.GetSubOrchestrationInstanceCreatedEvent(2);
+        Action act = () => lookup.GetSubOrchestrationInstanceCreatedEvent(2);
 
         // Assert
-        result.Should().NotBeNull();
-        result!.SubOrchestrationInstanceCreated.Name.Should().Be("FirstSub");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'SubOrchestrationInstanceCreated'*event ID '2'*");
     }
 
     [Fact]

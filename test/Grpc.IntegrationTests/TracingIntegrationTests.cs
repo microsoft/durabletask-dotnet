@@ -46,9 +46,9 @@ public class TracingIntegrationTests : IntegrationTestBase
         using ActivityListener listener = CreateListener(ActivitySourceNames, activities);
 
         string orchestratorName = nameof(HistoryEventLookupCorrelatesDistinctScheduledOperations);
-        string firstActivityName = "FirstActivity";
-        string secondActivityName = "SecondActivity";
-        string subOrchestratorName = "SubOrchestration";
+        string firstActivityName = $"{orchestratorName}.FirstActivity";
+        string secondActivityName = $"{orchestratorName}.SecondActivity";
+        string subOrchestratorName = $"{orchestratorName}.SubOrchestration";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {

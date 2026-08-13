@@ -33,8 +33,9 @@ public class BlobPurgeJobTests
         state.CreatedAt.Should().NotBeNull();
         state.LastModifiedAt.Should().NotBeNull();
 
-        // Starting the job means signalling Run. Asserted here so that the Times.Never assertion in the
-        // already-active test below is meaningful rather than passing because the mock records nothing.
+        // Starting the job means signalling Run, and this path has always done so. Asserted explicitly because
+        // the already-active path now signals Run too, which makes this the case that would silently stop being
+        // covered if the two branches were ever collapsed.
         Mock.Get(operation.Context).Verify(
             c => c.SignalEntity(
                 It.IsAny<EntityInstanceId>(),
@@ -45,11 +46,10 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task Create_WhenAlreadyActive_UpdatesBatchSizeWithoutRestarting()
+    public async Task Create_WhenAlreadyActive_UpdatesBatchSizeAndReSignalsRun()
     {
         // Arrange - the job is already running and the configured batch size has changed. Create is the only
-        // path by which a new batch size can reach an active job, so it must be taken even though the job is
-        // not restarted.
+        // path by which a new batch size can reach an active job, so it must be taken.
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
@@ -69,14 +69,105 @@ public class BlobPurgeJobTests
         state.Status.Should().Be(BlobPurgeJobStatus.Active);
         state.PurgeBatchSize.Should().Be(999);
 
-        // Run is not re-signalled: the orchestrator is already up, and scheduling a second one over a live one
-        // would terminate and replace it mid-work.
+        // Run is re-signalled even though the job is already active. That is what lets a job whose orchestrator
+        // has died be rebuilt at the next host start, and it is safe because the backend discards the resulting
+        // start while the orchestrator is alive rather than replacing it.
         Mock.Get(operation.Context).Verify(
             c => c.SignalEntity(
                 It.IsAny<EntityInstanceId>(),
-                It.IsAny<string>(),
+                nameof(BlobPurgeJob.Run),
                 It.IsAny<object?>(),
                 It.IsAny<SignalEntityOptions?>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Create_WhenAlreadyActive_SignalsNothingOtherThanRun()
+    {
+        // Arrange - pins that re-signalling Run is the only signal the already-active path emits. Verifying the
+        // Run signal alone would still pass if a second, different signal were added beside it.
+        BlobPurgeJobState existing = new()
+        {
+            Status = BlobPurgeJobStatus.Active,
+            PurgeBatchSize = 100,
+        };
+        TestEntityOperation operation = new(
+            nameof(BlobPurgeJob.Create),
+            new TestEntityState(existing),
+            999);
+
+        // Act
+        await this.job.RunAsync(operation);
+
+        // Assert - the Times.Once above is the positive control for this Times.Never: both target the same
+        // four-argument overload on the same mock, so this cannot be passing because nothing was recorded.
+        Mock.Get(operation.Context).Verify(
+            c => c.SignalEntity(
+                It.IsAny<EntityInstanceId>(),
+                It.Is<string>(name => name != nameof(BlobPurgeJob.Run)),
+                It.IsAny<object?>(),
+                It.IsAny<SignalEntityOptions?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Run_WhenActive_SchedulesOrchestratorAtTheFixedInstanceId()
+    {
+        // Arrange - the fixed instance ID is the mechanism the whole restart story rests on. It is what lets the
+        // backend recognize a start as targeting the existing orchestrator, and therefore discard it while that
+        // orchestrator is alive instead of running a second one alongside it.
+        BlobPurgeJobState existing = new()
+        {
+            Status = BlobPurgeJobStatus.Active,
+            PurgeBatchSize = 250,
+        };
+        TestEntityOperation operation = new(
+            nameof(BlobPurgeJob.Run),
+            new TestEntityState(existing),
+            null);
+        Mock.Get(operation.Context)
+            .Setup(c => c.Id)
+            .Returns(new EntityInstanceId(nameof(BlobPurgeJob), BlobPurgeConstants.JobId));
+
+        // Act
+        await this.job.RunAsync(operation);
+
+        // Assert
+        Mock.Get(operation.Context).Verify(
+            c => c.ScheduleNewOrchestration(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.Is<StartOrchestrationOptions>(o =>
+                    o.InstanceId == BlobPurgeConstants.GetOrchestratorInstanceId(BlobPurgeConstants.JobId))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Run_WhenNotActive_SchedulesNothing()
+    {
+        // Arrange - a Run signal arriving after the job was stopped. Create signals Run rather than starting the
+        // orchestrator itself, so a Stop landing between the two leaves this signal in flight against a job that
+        // must no longer purge. This guard is what makes the stop win instead of the stale signal restarting it.
+        BlobPurgeJobState existing = new()
+        {
+            Status = BlobPurgeJobStatus.Pending,
+            PurgeBatchSize = 250,
+        };
+        TestEntityOperation operation = new(
+            nameof(BlobPurgeJob.Run),
+            new TestEntityState(existing),
+            null);
+
+        // Act
+        await this.job.RunAsync(operation);
+
+        // Assert - the Times.Once above is the positive control: same mocked type, same three-argument overload,
+        // so this cannot be passing merely because the mock records nothing.
+        Mock.Get(operation.Context).Verify(
+            c => c.ScheduleNewOrchestration(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>()),
             Times.Never);
     }
 

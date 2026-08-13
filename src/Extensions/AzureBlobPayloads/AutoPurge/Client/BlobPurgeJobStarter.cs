@@ -172,14 +172,15 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                 // permanently; making it replaceable means the next host start re-runs Create, which finds the
                 // entity not Active and rebuilds the job.
                 //
-                // This deliberately does NOT recover the case where the perpetual orchestrator dies while the
-                // entity is still Active: the bridge re-runs, Create no-ops on the Active state, and the
-                // orchestrator stays down. That is a deliberate non-goal rather than an oversight. The only
-                // available restart is signalling the entity's Run, which schedules the orchestrator on the
-                // entity path with no dedupe policy available to it, so signalling a healthy orchestrator would
-                // terminate and replace it mid-work. Deciding it is safe to signal requires a check-then-act on
-                // the orchestrator's status, which is exactly the non-atomic pattern this call replaced.
-                // Recovery is therefore a supervised manual step.
+                // This also recovers the case where the perpetual orchestrator dies while the entity is still
+                // Active. Create leaves the entity's status alone in that case, but it re-signals Run, and the
+                // resulting start is resolved by the backend: discarded outright while the orchestrator is
+                // alive, and allowed to replace it once it has completed, terminated, failed or been canceled.
+                // So a healthy job is left untouched and a dead one is rebuilt, without this side ever having to
+                // ask which of the two it is looking at.
+                //
+                // Recovery is bounded by host starts rather than being continuous: nothing re-signals Run
+                // between them, so an orchestrator that dies mid-lifetime stays down until the next Create.
                 await client.ScheduleNewOrchestrationInstanceAsync(
                     new TaskName(nameof(ExecuteBlobPurgeJobOperationOrchestrator)),
                     request,

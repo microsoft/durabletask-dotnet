@@ -13,7 +13,7 @@ static partial class Logs
     [LoggerMessage(EventId = 810, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' created.")]
     public static partial void BlobPurgeJobCreated(this ILogger logger, string? jobId);
 
-    [LoggerMessage(EventId = 811, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' is already running; ignoring the create request.")]
+    [LoggerMessage(EventId = 811, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' is already active. Its batch size was updated from the current configuration, and its orchestrator was re-signalled, which starts one only if none is running.")]
     public static partial void BlobPurgeJobAlreadyRunning(this ILogger logger, string? jobId);
 
     [LoggerMessage(EventId = 812, Level = LogLevel.Information, Message = "Blob payload auto-purge orchestrator for job '{jobId}' stopping; job status is {status}.")]

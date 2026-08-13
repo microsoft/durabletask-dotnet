@@ -581,6 +581,36 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ContinueAsNewWithNewVersion()
+    {
+        TaskName orchestratorName = nameof(ContinueAsNewWithNewVersion);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, string>(orchestratorName, async (ctx, input) =>
+            {
+                if (input == 0)
+                {
+                    // First generation: migrate to "v2"
+                    await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
+                    ctx.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "v2", NewInput = input + 1 });
+                    return string.Empty;
+                }
+
+                // Second generation: return the version to verify it changed
+                return ctx.Version;
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 0);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("v2", metadata.ReadOutputAs<string>());
+    }
+
+    [Fact]
     public async Task SubOrchestration()
     {
         TaskName orchestratorName = nameof(SubOrchestration);
@@ -759,6 +789,34 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         Assert.NotNull(output);
         Assert.Equal(output, $"Orchestration version: {version}");
+    }
+
+    [Fact]
+    public async Task ActivityVersionPassedThroughContext()
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", input);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Activity version: {ctx.Version}";
+                }));
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal(output, $"Activity version: {version}");
     }
 
     [Fact]

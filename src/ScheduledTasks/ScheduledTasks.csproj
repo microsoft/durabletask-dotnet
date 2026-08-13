@@ -4,7 +4,7 @@
     <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
     <PackageDescription>Durable Task Scheduled Tasks Client</PackageDescription>
     <EnableStyleCop>true</EnableStyleCop>
-    <VersionSuffix>preview.1</VersionSuffix>
+    <VersionSuffix>preview.2</VersionSuffix>
   </PropertyGroup>
 
   <ItemGroup>

@@ -131,7 +131,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                     {
                         string attributeName = attribute.Name.ToString();
                         if ((kind == DurableFunctionKind.Activity && attributeName == "ActivityTrigger") ||
-                            (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger") ||
+                            (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestrationTrigger") ||
                             (kind == DurableFunctionKind.Entity && attributeName == "EntityTrigger"))
                         {
                             TypeInfo info = model.GetTypeInfo(methodParam.Type);

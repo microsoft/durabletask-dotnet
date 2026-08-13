@@ -581,7 +581,9 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>Returns an empty ack back to the remote SDK that we've received the completion.</returns>
     public override Task<P.CompleteTaskResponse> CompleteOrchestratorTask(P.OrchestratorResponse request, ServerCallContext context)
     {
+#pragma warning disable CS0612 // isPartial is deprecated but still required for chunked response wire compatibility.
         if (request.IsPartial)
+#pragma warning restore CS0612
         {
             // This is a partial chunk - accumulate actions but don't complete yet
             PartialOrchestratorChunk partialChunk = this.partialOrchestratorChunks.GetOrAdd(
@@ -815,7 +817,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 totalBytes += ev.CalculateSize();
             }
 
-            if (this.supportsHistoryStreaming && totalBytes > (1024))
+            const int HistoryStreamingThresholdBytes = 1024 * 1024; // 1 MiB
+            if (this.supportsHistoryStreaming && totalBytes > HistoryStreamingThresholdBytes)
             {
                 orkRequest.RequiresHistoryStreaming = true;
                 // Store past events to serve via StreamInstanceHistory
@@ -855,7 +858,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
-            await this.SendWorkItemToClientAsync(new P.WorkItem
+            P.WorkItem workItem = new()
             {
                 ActivityRequest = new P.ActivityRequest
                 {
@@ -876,7 +879,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                         }
                         : null,
                 },
-            });
+            };
+
+            if (activityEvent.Tags is not null)
+            {
+                workItem.ActivityRequest.Tags.Add(activityEvent.Tags);
+            }
+
+            await this.SendWorkItemToClientAsync(workItem);
         }
         catch
         {
@@ -901,8 +911,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         lock (this.isConnectedSignal)
         {
             outputStream = this.workerToClientStream ??
-                // CA2201: Use specific exception types
-                throw new InvalidOperationException("No client is connected. Need to wait until a client connects before executing.");
+                throw new RpcException(new Status(StatusCode.Unavailable, "No client is connected."));
         }
 
         // The gRPC channel can only handle one message at a time, so we need to serialize access to it.
@@ -910,6 +919,31 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         try
         {
             await outputStream.WriteAsync(workItem);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("request is complete", StringComparison.OrdinalIgnoreCase))
+        {
+            // The client disconnected or canceled the GetWorkItems stream.
+            // Reset the connection state so the dispatcher pauses naturally
+            // (via the traffic signal) until a new client connects.
+            //
+            // IMPORTANT: only clear our cached stream/signal if it still refers to
+            // the stream that just failed. A new client may have already connected
+            // (and set workerToClientStream / signaled isConnectedSignal) between
+            // the failed WriteAsync and this catch block. Unconditionally clearing
+            // would silently kill that new connection's state, hanging the dispatcher.
+            lock (this.isConnectedSignal)
+            {
+                if (ReferenceEquals(this.workerToClientStream, outputStream))
+                {
+                    this.workerToClientStream = null;
+                    this.isConnectedSignal.Reset();
+                }
+            }
+
+            // Must throw so callers (ExecuteOrchestrator/ExecuteActivity) can clean up
+            // their pending TCS. The dispatcher catches this, abandons the work item,
+            // and releases it back to the queue for retry.
+            throw new OperationCanceledException("Work-item stream closed by client.", ex);
         }
         finally
         {
@@ -919,7 +953,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     TaskCompletionSource<GrpcOrchestratorExecutionResult> CreateTaskCompletionSourceForOrchestrator(string instanceId)
     {
-        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs = new();
+        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         this.pendingOrchestratorTasks.TryAdd(instanceId, tcs);
         return tcs;
     }
@@ -933,7 +967,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     TaskCompletionSource<ActivityExecutionResult> CreateTaskCompletionSourceForActivity(string instanceId, int taskId)
     {
         string taskIdKey = GetTaskIdKey(instanceId, taskId);
-        TaskCompletionSource<ActivityExecutionResult> tcs = new();
+        TaskCompletionSource<ActivityExecutionResult> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         this.pendingActivityTasks.TryAdd(taskIdKey, tcs);
         return tcs;
     }

@@ -9,25 +9,53 @@ namespace Microsoft.DurableTask;
 public readonly struct TaskVersion : IEquatable<TaskVersion>
 {
     /// <summary>
+    /// A sentinel value representing an unversioned task. Equivalent to <c>default(TaskVersion)</c> and
+    /// <c>new TaskVersion(string.Empty)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Use this on <see cref="TaskOptions.Version"/> to explicitly request the unversioned task
+    /// implementation from a versioned orchestration. <c>null</c> on the same property means the activity
+    /// inherits the orchestration instance version.
+    /// </remarks>
+    public static readonly TaskVersion Unversioned = default;
+
+    readonly string? versionValue;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TaskVersion"/> struct.
     /// </summary>
-    /// <param name="version">The version of the task. Providing <c>null</c> will result in the default struct.</param>
-    public TaskVersion(string version)
+    /// <param name="version">The version of the task. <c>null</c> or <see cref="string.Empty"/> produces
+    /// an unversioned <see cref="TaskVersion"/> equal to <see cref="Unversioned"/>.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="version"/> is non-empty but contains only whitespace. Pass <c>null</c>,
+    /// <see cref="string.Empty"/>, or use <see cref="Unversioned"/> to represent an unversioned task.
+    /// </exception>
+    public TaskVersion(string? version)
     {
-        if (version == null)
+        // Normalize null/empty to string.Empty so default(TaskVersion), TaskVersion.Unversioned, and
+        // new TaskVersion("") all compare and hash identically. The Version getter additionally coalesces
+        // for default-constructed structs (which skip this constructor and zero-initialize the field).
+        if (string.IsNullOrEmpty(version))
         {
-            this.Version = null!;
+            this.versionValue = string.Empty;
+            return;
         }
-        else
+
+        if (string.IsNullOrWhiteSpace(version))
         {
-            this.Version = version;
+            throw new ArgumentException(
+                "Version must not be whitespace-only. Pass null, an empty string, or use TaskVersion.Unversioned to represent an unversioned task.",
+                nameof(version));
         }
+
+        this.versionValue = version;
     }
 
     /// <summary>
-    /// Gets the version of a task.
+    /// Gets the version of a task. Returns <see cref="string.Empty"/> for an unversioned task, including
+    /// <c>default(TaskVersion)</c> and <see cref="Unversioned"/>; never returns <c>null</c>.
     /// </summary>
-    public string Version { get; }
+    public string Version => this.versionValue ?? string.Empty;
 
     /// <summary>
     /// Implicitly converts a <see cref="TaskVersion"/> into a <see cref="string"/> of the <see cref="Version"/> property value.
@@ -36,10 +64,11 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     public static implicit operator string(TaskVersion value) => value.Version;
 
     /// <summary>
-    /// Implicitly converts a <see cref="string"/> into a <see cref="TaskVersion"/>.
+    /// Implicitly converts a <see cref="string"/> into a <see cref="TaskVersion"/>. A <c>null</c>
+    /// value produces <see cref="Unversioned"/>.
     /// </summary>
     /// <param name="value">The <see cref="string"/> to convert into a <see cref="TaskVersion"/>.</param>
-    public static implicit operator TaskVersion(string value) => new TaskVersion(value);
+    public static implicit operator TaskVersion(string? value) => new TaskVersion(value);
 
     /// <summary>
     /// Compares two <see cref="TaskVersion"/> structs for equality.

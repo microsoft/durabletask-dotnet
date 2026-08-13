@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- Must match the $(AssemblyName).Tests InternalsVisibleTo generated for the product assembly. -->
+    <AssemblyName>Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests</AssemblyName>
+    <RootNamespace>$(AssemblyName)</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(SrcRoot)Extensions/AzureBlobPayloads/AzureBlobPayloads.csproj" />
+  </ItemGroup>
+
+</Project>

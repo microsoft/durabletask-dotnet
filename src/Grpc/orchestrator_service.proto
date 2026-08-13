@@ -25,6 +25,7 @@ message ActivityRequest {
     OrchestrationInstance orchestrationInstance = 4;
     int32 taskId = 5;
     TraceContext parentTraceContext = 6;
+    map<string, string> tags = 7;
 }
 
 message ActivityResponse {
@@ -324,6 +325,10 @@ message SendEntityMessageAction {
     TraceContext parentTraceContext = 5;
 }
 
+message RewindOrchestrationAction {
+    repeated HistoryEvent newHistory = 1;
+}
+
 message OrchestratorAction {
     int32 id = 1;
     oneof orchestratorActionType {
@@ -334,6 +339,7 @@ message OrchestratorAction {
         CompleteOrchestrationAction completeOrchestration = 6;
         TerminateOrchestrationAction terminateOrchestration = 7;
         SendEntityMessageAction sendEntityMessage = 8;
+        RewindOrchestrationAction rewindOrchestration = 9;
     }
 }
 
@@ -368,12 +374,14 @@ message OrchestratorResponse {
     // Whether or not a history is required to complete the original OrchestratorRequest and none was provided.
     bool requiresHistory = 7;
 
+    /* Chunking logic has since been deprecated and fields related to it are marked as such */
+
     // True if this is a partial (chunked) completion. The backend must keep the work item open until the final chunk (isPartial=false).
-    bool isPartial = 8;
+    bool isPartial = 8 [deprecated=true];
 
     // Zero-based position of the current chunk within a chunked completion sequence.
     // This field is omitted for non-chunked completions.
-    google.protobuf.Int32Value chunkIndex = 9;
+    google.protobuf.Int32Value chunkIndex = 9 [deprecated=true];
 }
 
 message CreateInstanceRequest {
@@ -521,6 +529,7 @@ message PurgeInstanceFilter {
     google.protobuf.Timestamp createdTimeFrom = 1;
     google.protobuf.Timestamp createdTimeTo = 2;
     repeated OrchestrationStatus runtimeStatus = 3;
+    google.protobuf.Duration timeout = 4;
 }
 
 message PurgeInstancesResponse {

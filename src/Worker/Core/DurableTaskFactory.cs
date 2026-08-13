@@ -9,11 +9,13 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// A factory for creating orchestrators and activities.
 /// </summary>
-sealed class DurableTaskFactory : IDurableTaskFactory2
+sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
 {
-    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
-    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
+    readonly IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities;
+    readonly IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
+    readonly HashSet<string> versionedOrchestratorNames;
+    readonly HashSet<string> versionedActivityNames;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
@@ -22,21 +24,52 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
     /// <param name="orchestrators">The orchestrator factories.</param>
     /// <param name="entities">The entity factories.</param>
     internal DurableTaskFactory(
-        IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
-        IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
+        IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
+        IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
         IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
         this.entities = Check.NotNull(entities);
+
+        // Snapshot the set of logical names that have at least one versioned registration. Used to gate the
+        // unversioned-fallback path: when a logical name has any versioned registration, we refuse to fall
+        // back to its unversioned registration for an unmatched versioned request — that would silently
+        // route the call to a different implementation than the caller asked for.
+        this.versionedOrchestratorNames = new HashSet<string>(
+            this.orchestrators.Keys
+                .Where(k => !string.IsNullOrWhiteSpace(k.Version))
+                .Select(k => k.Name),
+            StringComparer.OrdinalIgnoreCase);
+        this.versionedActivityNames = new HashSet<string>(
+            this.activities.Keys
+                .Where(k => !string.IsNullOrWhiteSpace(k.Version))
+                .Select(k => k.Name),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc/>
     public bool TryCreateActivity(
-        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
+        TaskName name,
+        TaskVersion version,
+        IServiceProvider serviceProvider,
+        [NotNullWhen(true)] out ITaskActivity? activity)
     {
         Check.NotNull(serviceProvider);
-        if (this.activities.TryGetValue(name, out Func<IServiceProvider, ITaskActivity>? factory))
+        TaskVersionKey key = new(name, version);
+        if (this.activities.TryGetValue(key, out Func<IServiceProvider, ITaskActivity>? factory))
+        {
+            activity = factory.Invoke(serviceProvider);
+            return true;
+        }
+
+        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
+        // no versioned registration exists for the same logical name. This mirrors the orchestrator rule:
+        // once a name has any versioned registration, an unmatched versioned request returns "not found"
+        // rather than silently routing to a catch-all the caller did not ask for.
+        if (!string.IsNullOrWhiteSpace(version.Version)
+            && !this.versionedActivityNames.Contains(name.Name)
+            && this.activities.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             activity = factory.Invoke(serviceProvider);
             return true;
@@ -47,10 +80,32 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
     }
 
     /// <inheritdoc/>
+    public bool TryCreateActivity(
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
+        => this.TryCreateActivity(name, default(TaskVersion), serviceProvider, out activity);
+
+    /// <inheritdoc/>
     public bool TryCreateOrchestrator(
-        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
+        TaskName name,
+        TaskVersion version,
+        IServiceProvider serviceProvider,
+        [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
     {
-        if (this.orchestrators.TryGetValue(name, out Func<IServiceProvider, ITaskOrchestrator>? factory))
+        Check.NotNull(serviceProvider);
+        TaskVersionKey key = new(name, version);
+        if (this.orchestrators.TryGetValue(key, out Func<IServiceProvider, ITaskOrchestrator>? factory))
+        {
+            orchestrator = factory.Invoke(serviceProvider);
+            return true;
+        }
+
+        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
+        // no versioned registration exists for the same logical name. If any versioned registration is present
+        // (e.g., v1 and v2 are registered, request asks for v3), we refuse to silently route the call to a
+        // catch-all registration the caller did not ask for.
+        if (!string.IsNullOrWhiteSpace(version.Version)
+            && !this.versionedOrchestratorNames.Contains(name.Name)
+            && this.orchestrators.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             orchestrator = factory.Invoke(serviceProvider);
             return true;
@@ -59,6 +114,11 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
         orchestrator = null;
         return false;
     }
+
+    /// <inheritdoc/>
+    public bool TryCreateOrchestrator(
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
+        => this.TryCreateOrchestrator(name, default(TaskVersion), serviceProvider, out orchestrator);
 
     /// <inheritdoc/>
     public bool TryCreateEntity(

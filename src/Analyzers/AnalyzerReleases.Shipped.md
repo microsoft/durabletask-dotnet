@@ -1,6 +1,14 @@
 ﻿; Shipped analyzer releases
 ; https://github.com/dotnet/roslyn/blob/main/src/RoslynAnalyzers/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
+## Release 1.22.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+DURABLE0011 | Orchestration | Warning | **ContinueAsNewOrchestrationAnalyzer**: Warns when an unbounded `while (true)` orchestration loop does not call ContinueAsNew.
+
 ## Release 0.3.0
 
 ### New Rules

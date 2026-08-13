@@ -133,6 +133,12 @@ public static class ProtobufUtils
                         TraceState = taskScheduledEvent.ParentTraceContext.TraceState,
                     },
                 };
+
+                if (taskScheduledEvent.Tags is not null)
+                {
+                    payload.TaskScheduled.Tags.Add(taskScheduledEvent.Tags);
+                }
+
                 break;
             case EventType.TaskCompleted:
                 var taskCompletedEvent = (TaskCompletedEvent)e;
@@ -273,6 +279,9 @@ public static class ProtobufUtils
                     Id = a.Id,
                     Input = a.ScheduleTask.Input,
                     Name = a.ScheduleTask.Name,
+                    Tags = a.ScheduleTask.Tags.Count > 0
+                        ? new Dictionary<string, string>(a.ScheduleTask.Tags, StringComparer.Ordinal)
+                        : null,
                     Version = a.ScheduleTask.Version,
                     ParentTraceContext = a.ScheduleTask.ParentTraceContext is not null
                         ? new DistributedTraceContext(a.ScheduleTask.ParentTraceContext.TraceParent, a.ScheduleTask.ParentTraceContext.TraceState)
@@ -288,7 +297,9 @@ public static class ProtobufUtils
                     ParentTraceContext = a.CreateSubOrchestration.ParentTraceContext is not null
                         ? new DistributedTraceContext(a.CreateSubOrchestration.ParentTraceContext.TraceParent, a.CreateSubOrchestration.ParentTraceContext.TraceState)
                         : null,
-                    Tags = a.CreateSubOrchestration.Tags,
+                    Tags = a.CreateSubOrchestration.Tags.Count > 0
+                        ? new Dictionary<string, string>(a.CreateSubOrchestration.Tags, StringComparer.Ordinal)
+                        : null,
                     Version = a.CreateSubOrchestration.Version,
                 };
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateTimer:

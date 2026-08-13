@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
@@ -39,6 +39,7 @@ public record TaskOptions
         Check.NotNull(options);
         this.Retry = options.Retry;
         this.Tags = options.Tags;
+        this.Version = options.Version;
     }
 
     /// <summary>
@@ -50,6 +51,23 @@ public record TaskOptions
     /// Gets the tags to associate with the task.
     /// </summary>
     public IDictionary<string, string>? Tags { get; init; }
+
+    /// <summary>
+    /// Gets the version to associate with the scheduled task.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When <c>null</c> (the default), the task inherits the version of the orchestration instance that is
+    /// scheduling it.
+    /// </para>
+    /// <para>
+    /// When non-<c>null</c> (including <see cref="TaskVersion.Unversioned"/>), the task is scheduled with the
+    /// specified version explicitly. The worker dispatches to the registered <c>(name, version)</c> exactly;
+    /// when no exact match exists, it falls back to an unversioned registration only when the name has no
+    /// versioned registrations at all.
+    /// </para>
+    /// </remarks>
+    public TaskVersion? Version { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.
@@ -107,14 +125,9 @@ public record SubOrchestrationOptions : TaskOptions
         : base(options)
     {
         this.InstanceId = instanceId;
-        if (options is SubOrchestrationOptions derived)
+        if (options is SubOrchestrationOptions derived && instanceId is null)
         {
-            if (instanceId is null)
-            {
-                this.InstanceId = derived.InstanceId;
-            }
-
-            this.Version = derived.Version;
+            this.InstanceId = derived.InstanceId;
         }
     }
 
@@ -127,7 +140,6 @@ public record SubOrchestrationOptions : TaskOptions
     {
         Check.NotNull(options);
         this.InstanceId = options.InstanceId;
-        this.Version = options.Version;
     }
 
     /// <summary>
@@ -138,7 +150,17 @@ public record SubOrchestrationOptions : TaskOptions
     /// <summary>
     /// Gets the version to associate with the sub-orchestration instance.
     /// </summary>
-    public TaskVersion? Version { get; init; }
+    /// <remarks>
+    /// Forwards to <see cref="TaskOptions.Version"/>. This property is declared on the derived
+    /// record to preserve binary compatibility with assemblies compiled against earlier SDK versions
+    /// that declared <c>SubOrchestrationOptions.Version</c> directly. New code should prefer
+    /// <see cref="TaskOptions.Version"/>.
+    /// </remarks>
+    public new TaskVersion? Version
+    {
+        get => base.Version;
+        init => base.Version = value;
+    }
 }
 
 /// <summary>

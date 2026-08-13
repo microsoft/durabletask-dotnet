@@ -39,7 +39,7 @@ jobs:
     steps:
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
       with:
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
@@ -49,23 +49,28 @@ jobs:
         # Details on CodeQL's query packs refer to : https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
         # queries: security-extended,security-and-quality
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         submodules: true
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+    - name: Setup .NET 6.0
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Setup .NET from global.json
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
       with:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $solution
+      run: dotnet restore "$env:solution" --configfile "$env:GITHUB_WORKSPACE\nuget.config"
 
     - name: Build
-      run: dotnet build $solution #--configuration $config #--no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
+      run: dotnet build "$env:solution" --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
 
     # Run CodeQL analysis
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
       with:
         category: "/language:${{matrix.language}}"

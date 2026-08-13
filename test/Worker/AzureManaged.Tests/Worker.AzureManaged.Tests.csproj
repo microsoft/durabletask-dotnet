@@ -5,11 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Grpc.Core" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../../src/Worker/AzureManaged/Worker.AzureManaged.csproj" />
+    <ProjectReference Include="../../../src/Worker/AzureManaged.Sandboxes/Worker.AzureManaged.Sandboxes.csproj" />
     <ProjectReference Include="../../TestHelpers/TestHelpers.csproj" />
   </ItemGroup>
 

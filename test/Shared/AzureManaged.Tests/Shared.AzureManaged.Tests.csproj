@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Grpc\Grpc.csproj" />
     <ProjectReference Include="..\..\TestHelpers\TestHelpers.csproj" />
   </ItemGroup>
 </Project>

@@ -13,7 +13,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" VersionOverride="3.33.5" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" />
     <SharedSection Include="Core" />
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />

@@ -35,28 +35,41 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         ClientInterceptorContext<TRequest, TResponse> context,
         AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
     {
-        // Build the underlying call lazily after async externalization
-        Task<AsyncUnaryCall<TResponse>> startCallTask = Task.Run(async () =>
+        // Build the underlying call lazily after async externalization. Avoid a thread-pool hop in
+        // the normal server path, but preserve isolation for callers with a custom context/scheduler:
+        // public interceptor and payload-store implementations may capture either before returning.
+        Task<AsyncUnaryCall<TResponse>> startCallTask = RequiresSchedulerIsolation()
+            ? Task.Run(StartCallAsync)
+            : StartCallAsync();
+
+        static bool RequiresSchedulerIsolation()
+            => SynchronizationContext.Current is not null || TaskScheduler.Current != TaskScheduler.Default;
+
+        async Task<AsyncUnaryCall<TResponse>> StartCallAsync()
         {
-            // Externalize first; if this fails, do not proceed to send the gRPC call
-            await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken);
+            // Externalize first; if this fails, do not proceed to send the gRPC call.
+            await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken)
+                .ConfigureAwait(false);
 
             // Only if externalization succeeds, proceed with the continuation
             return continuation(request, context);
-        });
+        }
 
         async Task<TResponse> ResponseAsync()
         {
-            AsyncUnaryCall<TResponse> innerCall = await startCallTask;
-            TResponse response = await innerCall.ResponseAsync;
-            await this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken);
+            AsyncUnaryCall<TResponse> innerCall = await startCallTask.ConfigureAwait(false);
+            TResponse response = await innerCall.ResponseAsync.ConfigureAwait(false);
+            Task resolveTask = RequiresSchedulerIsolation()
+                ? Task.Run(() => this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken))
+                : this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken);
+            await resolveTask.ConfigureAwait(false);
             return response;
         }
 
         async Task<Metadata> ResponseHeadersAsync()
         {
-            AsyncUnaryCall<TResponse> innerCall = await startCallTask;
-            return await innerCall.ResponseHeadersAsync;
+            AsyncUnaryCall<TResponse> innerCall = await startCallTask.ConfigureAwait(false);
+            return await innerCall.ResponseHeadersAsync.ConfigureAwait(false);
         }
 
         Status GetStatus()
@@ -168,26 +181,12 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// <returns>A task that returns the externalized token or the original value.</returns>
     protected async Task<string?> MaybeExternalizeAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value))
+        if (!this.TryGetExternalizationSize(value, out int size))
         {
             return value;
         }
 
-        int size = Encoding.UTF8.GetByteCount(value);
-        if (size < this.options.ExternalizeThresholdBytes)
-        {
-            return value;
-        }
-
-        // Enforce a hard cap to prevent unbounded payload sizes
-        if (size > this.options.MaxExternalizedPayloadBytes)
-        {
-            throw new InvalidOperationException(
-                $"Payload size {size / 1024} kb exceeds the configured maximum of {this.options.MaxExternalizedPayloadBytes / 1024} kb. " +
-                "Consider reducing the payload or increase MaxExternalizedPayloadBytes setting.");
-        }
-
-        return await this.payloadStore.UploadAsync(value!, cancellation);
+        return await this.ExternalizePayloadAsync(value!, size, cancellation);
     }
 
     /// <summary>
@@ -198,12 +197,63 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// <returns>The resolved value or the original value if it's not a known payload token.</returns>
     protected async Task<string?> MaybeResolveAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value) || !this.payloadStore.IsKnownPayloadToken(value ?? string.Empty))
+        if (!this.RequiresResolution(value))
         {
             return value;
         }
 
         return await this.payloadStore.DownloadAsync(value!, cancellation);
+    }
+
+    /// <summary>
+    /// Externalizes a payload whose UTF-8 size has already been calculated.
+    /// </summary>
+    /// <param name="value">The value to externalize.</param>
+    /// <param name="size">The UTF-8 size of <paramref name="value"/>.</param>
+    /// <param name="cancellation">Cancellation token.</param>
+    /// <returns>A task that returns the externalized token.</returns>
+    private protected async Task<string> ExternalizePayloadAsync(
+        string value,
+        int size,
+        CancellationToken cancellation)
+    {
+        // Enforce a hard cap to prevent unbounded payload sizes
+        if (size > this.options.MaxPayloadBytes)
+        {
+            throw new PayloadStorageException(
+                $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
+                "Reduce the payload size or increase the max payload size limit.");
+        }
+
+        return await this.payloadStore.UploadAsync(value, cancellation);
+    }
+
+    /// <summary>
+    /// Calculates a value's UTF-8 size and determines whether it requires externalization.
+    /// </summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <param name="size">The calculated UTF-8 size, or zero when <paramref name="value"/> is empty.</param>
+    /// <returns><c>true</c> when the value meets the configured externalization threshold.</returns>
+    private protected bool TryGetExternalizationSize(string? value, out int size)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            size = 0;
+            return false;
+        }
+
+        size = Encoding.UTF8.GetByteCount(value);
+        return size >= this.options.ThresholdBytes;
+    }
+
+    /// <summary>
+    /// Determines whether a value requires resolution.
+    /// </summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <returns><c>true</c> when the payload store recognizes the value as a token.</returns>
+    private protected bool RequiresResolution(string? value)
+    {
+        return !string.IsNullOrEmpty(value) && this.payloadStore.IsKnownPayloadToken(value!);
     }
 
     sealed class TransformingStreamReader<T>(

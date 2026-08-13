@@ -301,6 +301,161 @@ public class ShimDurableTaskClientTests
     }
 
     [Fact]
+    public async Task WaitForInstanceStart_MultiplePendingPolls_EventuallyReturnsTerminalMetadata()
+    {
+        // arrange
+        DateTimeOffset start = DateTimeOffset.UtcNow;
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = Guid.NewGuid().ToString(),
+            ExecutionId = Guid.NewGuid().ToString(),
+        };
+
+        Core.OrchestrationState pending1 = CreateState("input", start: start);
+        pending1.OrchestrationInstance = instance;
+        pending1.OrchestrationStatus = Core.OrchestrationStatus.Pending;
+        Core.OrchestrationState pending2 = CreateState("input", start: start);
+        pending2.OrchestrationInstance = instance;
+        pending2.OrchestrationStatus = Core.OrchestrationStatus.Pending;
+        Core.OrchestrationState terminal = CreateState("input", start: start);
+        terminal.OrchestrationInstance = instance;
+
+        this.orchestrationClient.SetupSequence(m => m.GetOrchestrationStateAsync(instance.InstanceId, false))
+            .ReturnsAsync([pending1])
+            .ReturnsAsync([pending2])
+            .ReturnsAsync([terminal]);
+
+        // act
+        OrchestrationMetadata metadata = await this.client.WaitForInstanceStartAsync(
+            instance.InstanceId, false, default);
+
+        // assert -- multiple polling iterations (exercising the polling loop, including its one-time
+        // initial phase offset followed by fixed-interval delays) still converge on the terminal state
+        // once observed.
+        this.orchestrationClient.Verify(
+            m => m.GetOrchestrationStateAsync(instance.InstanceId, false), Times.Exactly(3));
+        Validate(metadata, terminal, false);
+    }
+
+    [Fact]
+    public void ComputeNextPollingDelay_InitialDelay_NeverExceedsHistoricalOneSecondCadence()
+    {
+        // assert -- across many samples, the randomized initial-phase-offset delay must always be
+        // non-negative and never exceed the historical 1-second polling cadence, enforcing the max
+        // detection-latency contract for the very first delay of a WaitForInstanceStartAsync call.
+        for (int i = 0; i < 1000; i++)
+        {
+            TimeSpan delay = ShimDurableTaskClient.ComputeNextPollingDelay(isInitialDelay: true);
+            delay.Should().BeGreaterThanOrEqualTo(TimeSpan.Zero);
+            delay.Should().BeLessThan(TimeSpan.FromSeconds(1));
+        }
+    }
+
+    [Fact]
+    public void ComputeNextPollingDelay_SteadyState_ReturnsFixedHistoricalIntervalWithNoJitter()
+    {
+        // assert -- every delay after the initial phase offset must be exactly the fixed historical
+        // 1-second cadence with no jitter and no growth, so steady-state polling volume never exceeds
+        // (or falls below) the historical rate. This guards against a regression to either unconstrained
+        // backoff growth or a per-iteration jitter reduction that would increase polling frequency.
+        for (int i = 0; i < 100; i++)
+        {
+            TimeSpan delay = ShimDurableTaskClient.ComputeNextPollingDelay(isInitialDelay: false);
+            delay.Should().Be(TimeSpan.FromSeconds(1));
+        }
+    }
+
+    [Fact]
+    public async Task WaitForInstanceStart_InstanceNotFound_ThrowsImmediatelyWithoutPolling()
+    {
+        // arrange
+        string instanceId = Guid.NewGuid().ToString();
+        this.orchestrationClient.Setup(m => m.GetOrchestrationStateAsync(instanceId, false))
+            .ReturnsAsync([]);
+
+        // act
+        Func<Task> act = () => this.client.WaitForInstanceStartAsync(instanceId, false, default);
+
+        // assert -- not-found behavior is preserved: no retry/polling delay before throwing.
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>()
+            .WithMessage($"Orchestration with instanceId '{instanceId}' does not exist");
+        this.orchestrationClient.Verify(
+            m => m.GetOrchestrationStateAsync(instanceId, false), Times.Once);
+    }
+
+    [Fact]
+    public async Task WaitForInstanceStart_CancelledDuringPollingDelay_ThrowsTaskCanceledException()
+    {
+        // arrange
+        DateTimeOffset start = DateTimeOffset.UtcNow;
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = Guid.NewGuid().ToString(),
+            ExecutionId = Guid.NewGuid().ToString(),
+        };
+
+        Core.OrchestrationState pending = CreateState("input", start: start);
+        pending.OrchestrationInstance = instance;
+        pending.OrchestrationStatus = Core.OrchestrationStatus.Pending;
+
+        this.orchestrationClient.Setup(m => m.GetOrchestrationStateAsync(instance.InstanceId, false))
+            .ReturnsAsync([pending]);
+
+        using CancellationTokenSource cts = new();
+        DelayObservingShimDurableTaskClient client = new(
+            "test", new ShimDurableTaskClientOptions { Client = this.orchestrationClient.Object });
+
+        // act -- deterministically coordinate cancellation with the polling delay itself (no wall-clock
+        // guess, no real timer): wait until the fake delay seam confirms it has been entered for this
+        // loop iteration, THEN cancel. The fake delay never completes on its own -- it only completes
+        // when the *exact* cancellation token passed by production code is cancelled -- so this proves
+        // that token, and not some other code path (e.g. a later poll's own cancellation check), is what
+        // ends the wait.
+        Task waitTask = client.WaitForInstanceStartAsync(instance.InstanceId, false, cts.Token);
+        await client.DelayEntered.WaitAsync(TimeSpan.FromSeconds(10));
+        cts.Cancel();
+
+        Task completedTask = await Task.WhenAny(waitTask, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        // assert -- the wait must end (via cancellation) promptly, without ever performing a second poll.
+        // Because the fake delay never completes unless the supplied token is cancelled, a regression that
+        // passes the wrong (or no) token into the delay would leave the delay -- and thus the wait --
+        // pending forever, causing this assertion to time out and fail instead of passing vacuously.
+        completedTask.Should().Be(waitTask, "the wait should be cancelled during the polling delay, not time out");
+        Func<Task> act = () => waitTask;
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        this.orchestrationClient.Verify(
+            m => m.GetOrchestrationStateAsync(instance.InstanceId, false), Times.Once);
+    }
+
+    /// <summary>
+    /// A <see cref="ShimDurableTaskClient"/> test double whose <see cref="DelayAsync"/> override replaces
+    /// the real polling delay with a fully controlled fake: it signals <see cref="DelayEntered"/> as soon
+    /// as it is called, then returns a task that never completes on its own (no real timer) and completes
+    /// -- via cancellation -- only when the *exact* <see cref="CancellationToken"/> supplied by the caller
+    /// is cancelled. This lets tests deterministically coordinate cancellation with the delay without any
+    /// wall-clock timing, and proves that cancelling the caller's token is what actually interrupts the
+    /// pending wait, rather than some unrelated code path (such as a subsequent poll's own cancellation
+    /// check) coincidentally producing the same observable outcome.
+    /// </summary>
+    sealed class DelayObservingShimDurableTaskClient(string name, ShimDurableTaskClientOptions options)
+        : ShimDurableTaskClient(name, options)
+    {
+        readonly TaskCompletionSource delayEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Gets a task that completes once <see cref="DelayAsync"/> has been called.</summary>
+        public Task DelayEntered => this.delayEntered.Task;
+
+        internal override Task DelayAsync(TimeSpan delay, CancellationToken cancellation)
+        {
+            TaskCompletionSource pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            cancellation.Register(() => pending.TrySetCanceled(cancellation));
+            this.delayEntered.TrySetResult();
+            return pending.Task;
+        }
+    }
+
+    [Fact]
     public Task ScheduleNewOrchestrationInstance_IdGenerated_NoInput()
         => this.RunScheduleNewOrchestrationInstanceAsync("test", null, null);
 

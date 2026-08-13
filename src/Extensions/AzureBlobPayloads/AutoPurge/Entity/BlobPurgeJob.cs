@@ -32,10 +32,10 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             // rejects would wedge it permanently.
             //
             // Written only when the value actually differs, which is what keeps LastModifiedAt tracking real
-            // configuration changes. Create runs on every host start, so an unconditional write would reduce
-            // the field to "time of the last host start". An entity written by a build that predates this
-            // field carries zero, which differs from any configured size, so the first Create after an upgrade
-            // still repairs it.
+            // configuration changes. Create runs on every reconciliation pass, not only at host start, so an
+            // unconditional write would reduce the field to "time of the last pass". An entity written by a
+            // build that predates this field carries zero, which differs from any configured size, so the
+            // first Create after an upgrade still repairs it.
             if (this.State.PurgeBatchSize != purgeBatchSize)
             {
                 this.State.PurgeBatchSize = purgeBatchSize;
@@ -45,8 +45,9 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             logger.BlobPurgeJobAlreadyRunning(context.Id.Key);
 
             // Run is re-signalled even though the job is already active, and this is what makes the job
-            // self-heal: Create runs on every host start, so a job whose orchestrator has died is rebuilt at the
-            // next one. The signal is deliberately blind. An entity-initiated start carries no reuse policy, so
+            // self-heal: Create runs on every reconciliation pass, so a job whose orchestrator has died is
+            // rebuilt within roughly one interval rather than waiting for the next host start. The signal is
+            // deliberately blind. An entity-initiated start carries no reuse policy, so
             // the backend decides its fate: it discards the start while the target instance exists in any
             // non-completed status, and purges and replaces it once the instance has completed, terminated,
             // failed or been canceled. A healthy orchestrator is therefore left strictly alone and only a dead
@@ -86,8 +87,8 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// </para>
     /// <para>
     /// This operation deliberately writes no state. It schedules an orchestrator and nothing more, and it runs
-    /// on every host start, so touching <see cref="BlobPurgeJobState.LastModifiedAt"/> here would overwrite a
-    /// real change with the time of a start that changed nothing.
+    /// on every reconciliation pass, so touching <see cref="BlobPurgeJobState.LastModifiedAt"/> here would
+    /// overwrite a real change with the time of a pass that changed nothing.
     /// </para>
     /// </remarks>
     /// <param name="context">The entity context.</param>

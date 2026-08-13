@@ -16,7 +16,8 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// resolved options. It is registered unconditionally by UseExternalizedPayloads and decides what to do at
 /// startup, once options are fully resolved: it ensures the job exists when auto-purge is enabled, stops a
 /// running job when it is disabled, and no-ops with an error log when the registered store cannot delete. It
-/// never blocks host startup - the work runs on a background task that retries until the backend is reachable.
+/// never blocks host startup - the work runs on a background task that retries until the backend is reachable
+/// and then, on the enabled path, keeps reconciling on a fixed interval for the lifetime of the process.
 /// The job is a per-task-hub singleton, so racing client processes converge on the same result.
 /// </summary>
 sealed class BlobPurgeJobStarter : IHostedService, IDisposable
@@ -54,6 +55,33 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
         this.builderName = Check.NotNull(builderName);
         this.logger = Check.NotNull(logger);
     }
+
+    /// <summary>
+    /// Gets or sets the interval between reconciliation passes on the enabled path. Settable only so tests can
+    /// drive the loop without waiting on wall-clock time; nothing in the product ever assigns it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value is the worst-case time a dead job stays dead. Nothing else re-signals the job's orchestrator,
+    /// so recovery cannot be faster than one pass. What it buys that back with is one schedule call per host
+    /// per interval, forever - so it trades a bounded recovery time against a standing, fleet-sized cost, and
+    /// shortening it makes that cost grow in proportion.
+    /// </para>
+    /// <para>
+    /// That cost is per host, not per task hub. Hosts start at different times, so their intervals are
+    /// staggered, and a pass almost always finds the previous bridge already Completed - which this call leaves
+    /// replaceable on purpose - so it schedules and runs a bridge of its own. The
+    /// <see cref="OrchestrationAlreadyExistsException"/> path only absorbs passes that overlap a bridge which is
+    /// still Pending or Running, and that window is narrow because a bridge makes one entity call and exits. So
+    /// a fleet of N hosts costs roughly N bridge runs and N entity calls per interval, not one.
+    /// </para>
+    /// <para>
+    /// What keeps the actual purge work single is not that dedupe policy but the fixed orchestrator instance id:
+    /// every bridge run signals Run, and the backend discards a start aimed at an orchestrator that is still
+    /// alive. One perpetual orchestrator therefore serves the whole fleet however many bridges ran.
+    /// </para>
+    /// </remarks>
+    internal TimeSpan ReconcileInterval { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
@@ -102,7 +130,7 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
         int batchSize = opts.PayloadPurgeBatchSize;
 
         // Do not block host startup; ensure the job on a background task with basic retry until the backend
-        // is reachable.
+        // is reachable, and keep reconciling it from there.
         this.cts = new CancellationTokenSource();
         this.backgroundTask = Task.Run(() => this.EnsureJobAsync(client, batchSize, this.cts.Token), CancellationToken.None);
         return Task.CompletedTask;
@@ -141,6 +169,8 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            TimeSpan delay;
+
             try
             {
                 BlobPurgeJobOperationRequest request = new(
@@ -163,13 +193,13 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                 //
                 // Re-running a bridge that already finished is safe and close to free: the bridge's only effect
                 // is calling Create, which no-ops while the entity is Active, so the cost is one instance
-                // replacement plus one entity call per host start.
+                // replacement plus one entity call per reconciliation pass.
                 //
                 // Re-running is also what lets the job self-heal after the entity is removed, for example by
                 // CleanEntityStorageAsync. The perpetual orchestrator exits cleanly when it reads back a null
                 // entity state, and a removed entity is back to its default Pending status, so the job is left
                 // dead with a Completed bridge behind it. Keeping Completed deduped would keep it dead
-                // permanently; making it replaceable means the next host start re-runs Create, which finds the
+                // permanently; making it replaceable means the next pass re-runs Create, which finds the
                 // entity not Active and rebuilds the job.
                 //
                 // This also recovers the case where the perpetual orchestrator dies while the entity is still
@@ -179,8 +209,13 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                 // So a healthy job is left untouched and a dead one is rebuilt, without this side ever having to
                 // ask which of the two it is looking at.
                 //
-                // Recovery is bounded by host starts rather than being continuous: nothing re-signals Run
-                // between them, so an orchestrator that dies mid-lifetime stays down until the next Create.
+                // Recovery repeats on a fixed interval rather than being bounded by host starts. This loop runs
+                // for the lifetime of the process and re-issues the same call every ReconcileInterval, so an
+                // orchestrator that dies mid-lifetime is rebuilt within roughly one interval instead of staying
+                // down until the next deployment. Repeating it costs nothing extra to reason about, because a
+                // pass that finds everything healthy is already a no-op at both hops: the bridge's Create
+                // no-ops while the entity is Active, and the Run it signals is discarded by the backend while
+                // the orchestrator is alive.
                 await client.ScheduleNewOrchestrationInstanceAsync(
                     new TaskName(nameof(ExecuteBlobPurgeJobOperationOrchestrator)),
                     request,
@@ -191,7 +226,7 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                     cancellationToken);
 
                 this.logger.BlobPurgeJobEnsured();
-                return;
+                delay = this.ReconcileInterval;
             }
             catch (OrchestrationAlreadyExistsException)
             {
@@ -199,12 +234,12 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                 // policy it means another host scheduled the bridge and it is still Pending or Running. That is
                 // exactly the concurrent-start race this replaced a status check to close: one create wins and
                 // the loser lands here. Either way the singleton is already being set up, so treat it as
-                // ensured and stop.
+                // ensured and wait for the next pass.
                 //
                 // Note this is NOT the steady-state path. A bridge that already finished is Completed, which is
-                // replaceable, so a later host start re-runs it rather than landing here.
+                // replaceable, so a later pass re-runs it rather than landing here.
                 this.logger.BlobPurgeJobEnsured();
-                return;
+                delay = this.ReconcileInterval;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -212,15 +247,23 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {
+                // Deliberately the short delay and not the reconcile interval. A backend that is unreachable
+                // when the host starts has to be retried quickly, because until one pass succeeds the job may
+                // not exist at all; the long interval is only the price of keeping a job that already exists
+                // healthy.
                 this.logger.BlobPurgeStarterRetry(ex);
-                try
-                {
-                    await Task.Delay(RetryDelay, cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
+                delay = RetryDelay;
+            }
+
+            try
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutdown. This is the only thing that ends the loop on the success path, which is why
+                // StopAsync can cancel a pass that is parked here instead of waiting out the interval.
+                return;
             }
         }
     }

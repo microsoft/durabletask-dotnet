@@ -24,9 +24,10 @@ public sealed class BlobPurgeJobState
     /// when it last recorded a non-zero number of purged blobs.
     /// </summary>
     /// <remarks>
-    /// This is not a liveness or heartbeat signal, and it must not be read as one. Starting a host does not
-    /// move it, and an active job whose cycles keep finding nothing to purge leaves it untouched indefinitely,
-    /// so a value far in the past is equally consistent with a healthy idle job and a dead one.
+    /// This is not a liveness or heartbeat signal, and it must not be read as one. Neither starting a host nor
+    /// a reconciliation pass moves it, and an active job whose cycles keep finding nothing to purge leaves it
+    /// untouched indefinitely, so a value far in the past is equally consistent with a healthy idle job and a
+    /// dead one.
     /// </remarks>
     public DateTimeOffset? LastModifiedAt { get; set; }
 

@@ -13,7 +13,7 @@ static partial class Logs
     [LoggerMessage(EventId = 810, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' created.")]
     public static partial void BlobPurgeJobCreated(this ILogger logger, string? jobId);
 
-    [LoggerMessage(EventId = 811, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' is already active. Its batch size was updated from the current configuration, and its orchestrator was re-signalled, which starts one only if none is running.")]
+    [LoggerMessage(EventId = 811, Level = LogLevel.Debug, Message = "Blob payload auto-purge job '{jobId}' is already active. Its batch size was reconciled against the current configuration, and its orchestrator was re-signalled, which starts one only if none is running.")]
     public static partial void BlobPurgeJobAlreadyRunning(this ILogger logger, string? jobId);
 
     [LoggerMessage(EventId = 812, Level = LogLevel.Information, Message = "Blob payload auto-purge orchestrator for job '{jobId}' stopping; job status is {status}.")]
@@ -31,7 +31,7 @@ static partial class Logs
     [LoggerMessage(EventId = 816, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' stopped. The perpetual orchestrator is not terminated; it reads the job state at the start of its next cycle and exits on its own.")]
     public static partial void BlobPurgeJobStopped(this ILogger logger, string? jobId);
 
-    [LoggerMessage(EventId = 817, Level = LogLevel.Information, Message = "Blob payload auto-purge singleton job ensured.")]
+    [LoggerMessage(EventId = 817, Level = LogLevel.Debug, Message = "Blob payload auto-purge singleton job ensured.")]
     public static partial void BlobPurgeJobEnsured(this ILogger logger);
 
     [LoggerMessage(EventId = 818, Level = LogLevel.Warning, Message = "Blob payload auto-purge starter could not reach the singleton job; retrying.")]

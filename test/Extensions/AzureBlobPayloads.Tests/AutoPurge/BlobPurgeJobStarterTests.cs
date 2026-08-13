@@ -212,9 +212,80 @@ public class BlobPurgeJobStarterTests
         options!.InstanceId.Should().Be(BlobPurgeConstants.StarterInstanceId);
 
         // Every status other than Pending and Running is replaceable, so a finished bridge is re-run on the
-        // next host start. That is what lets the job rebuild itself after the entity is removed. The set is
-        // asserted exactly, never as a superset, because the hazard is a silent omission.
+        // next reconciliation pass. That is what lets the job rebuild itself after the entity is removed. The
+        // set is asserted exactly, never as a superset, because the hazard is a silent omission.
         options.DedupeStatuses.Should().BeEquivalentTo(["Pending", "Running"]);
+    }
+
+    [Fact]
+    public async Task EnsureJob_AfterSuccessfulSchedule_KeepsReconciling()
+    {
+        // Arrange - the loop used to return as soon as one schedule succeeded, which left recovery bounded by
+        // host starts: this call is the only thing that re-signals the job's Run, so an orchestrator that died
+        // mid-lifetime stayed down until the process was restarted. It has to keep re-issuing the call instead.
+        Mock<DurableTaskClient> client = new("test");
+        TaskCompletionSource<bool> secondSchedule = new();
+        int schedules = 0;
+        client
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                if (Interlocked.Increment(ref schedules) >= 2)
+                {
+                    secondSchedule.TrySetResult(true);
+                }
+            })
+            .ReturnsAsync(BlobPurgeConstants.StarterInstanceId);
+
+        // A short interval rather than a fake clock. The test still gates on the second call happening, never
+        // on time having passed, so it neither sleeps nor assumes anything about how long a pass takes.
+        BlobPurgeJobStarter starter = EnabledStarterFor(client.Object);
+        starter.ReconcileInterval = TimeSpan.FromMilliseconds(10);
+
+        // Act
+        await starter.StartAsync(CancellationToken.None);
+        Task completed = await Task.WhenAny(secondSchedule.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        await starter.StopAsync(CancellationToken.None);
+
+        // Assert - a loop that returned after its first success leaves this waiting until the timeout fires.
+        completed.Should().BeSameAs(
+            secondSchedule.Task, "reconciliation must repeat rather than ending after the first success");
+    }
+
+    [Fact]
+    public async Task StopAsync_WhileWaitingForNextReconcile_ReturnsPromptly()
+    {
+        // Arrange - the default interval, so the loop parks in a five-minute wait once its first pass succeeds.
+        // StopAsync awaits the background task, so a wait that did not observe cancellation would hold host
+        // shutdown for the rest of the interval. That is the one real regression risk in making the loop
+        // periodic, and it is invisible in the other tests because they would simply hang.
+        Mock<DurableTaskClient> client = new("test");
+        TaskCompletionSource<bool> scheduled = new();
+        client
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => scheduled.TrySetResult(true))
+            .ReturnsAsync(BlobPurgeConstants.StarterInstanceId);
+
+        BlobPurgeJobStarter starter = EnabledStarterFor(client.Object);
+
+        // Act - waiting for the first schedule is the positive control. Without it a prompt StopAsync would
+        // also be what a starter that never reached the loop at all produces.
+        await starter.StartAsync(CancellationToken.None);
+        Task firstPass = await Task.WhenAny(scheduled.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        Task stop = starter.StopAsync(CancellationToken.None);
+        Task stopped = await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(30)));
+
+        // Assert
+        firstPass.Should().BeSameAs(scheduled.Task, "the loop must have reached the wait being cancelled here");
+        stopped.Should().BeSameAs(stop, "shutdown must cancel the wait rather than sit out the interval");
     }
 
     static IOptionsMonitor<LargePayloadStorageOptions> OptionsFor(LargePayloadStorageOptions options)
@@ -222,6 +293,24 @@ public class BlobPurgeJobStarterTests
         Mock<IOptionsMonitor<LargePayloadStorageOptions>> monitor = new();
         monitor.Setup(m => m.Get(It.IsAny<string>())).Returns(options);
         return monitor.Object;
+    }
+
+    /// <summary>
+    /// Builds a starter with auto-purge enabled over the given client. The real blob store is used because the
+    /// store-capability gate refuses to start the job for any other kind, so a stub would never reach the
+    /// ensure loop. UseDevelopmentStorage=true constructs it offline, with no network I/O.
+    /// </summary>
+    static BlobPurgeJobStarter EnabledStarterFor(DurableTaskClient client)
+    {
+        Mock<IDurableTaskClientProvider> provider = new();
+        provider.Setup(p => p.GetClient(It.IsAny<string>())).Returns(client);
+
+        return new BlobPurgeJobStarter(
+            provider.Object,
+            new BlobPayloadStore(new LargePayloadStorageOptions("UseDevelopmentStorage=true")),
+            OptionsFor(new LargePayloadStorageOptions("UseDevelopmentStorage=true") { AutoPurge = true }),
+            "test",
+            new TestLogger<BlobPurgeJobStarter>());
     }
 
     /// <summary>

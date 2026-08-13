@@ -70,8 +70,8 @@ public class BlobPurgeJobTests
         state.PurgeBatchSize.Should().Be(999);
 
         // Run is re-signalled even though the job is already active. That is what lets a job whose orchestrator
-        // has died be rebuilt at the next host start, and it is safe because the backend discards the resulting
-        // start while the orchestrator is alive rather than replacing it.
+        // has died be rebuilt at the next reconciliation pass, and it is safe because the backend discards the
+        // resulting start while the orchestrator is alive rather than replacing it.
         Mock.Get(operation.Context).Verify(
             c => c.SignalEntity(
                 It.IsAny<EntityInstanceId>(),
@@ -113,9 +113,9 @@ public class BlobPurgeJobTests
     [Fact]
     public async Task Create_WhenAlreadyActive_AndBatchSizeUnchanged_DoesNotMoveLastModifiedAt()
     {
-        // Arrange - the steady state. Create runs on every host start, and almost every one of those carries
-        // the same configured batch size the job already has. If that rewrote LastModifiedAt, the field would
-        // degrade to "time of the last host start" and say nothing about the job.
+        // Arrange - the steady state. Create runs on every reconciliation pass, and almost every one of those
+        // carries the same configured batch size the job already has. If that rewrote LastModifiedAt, the field
+        // would degrade to "time of the last pass" and say nothing about the job.
         DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
         BlobPurgeJobState existing = new()
         {
@@ -170,8 +170,8 @@ public class BlobPurgeJobTests
     public async Task Run_DoesNotMoveLastModifiedAt()
     {
         // Arrange - Run schedules an orchestrator and changes nothing about the job. It is signalled by every
-        // Create, so writing here would move the field on every host start and undo the conditional write
-        // above.
+        // Create, so writing here would move the field on every reconciliation pass and undo the conditional
+        // write above.
         DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
         BlobPurgeJobState existing = new()
         {

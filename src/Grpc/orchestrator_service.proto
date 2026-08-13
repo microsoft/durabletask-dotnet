@@ -893,7 +893,7 @@ message LargePayloadPurgeResult {
     // The only field the backend acts on. Deliberately the only outcome field on this message:
     // anything finer would be write-only. Failure detail stays in the worker's own telemetry, which
     // holds the full exception rather than a lossy classification, and a row is correlated to it by
-    // (partitionId, instanceKey, payloadId) plus the ledger's LastAttemptAt.
+    // (partitionId, instanceKey, payloadId).
     LargePayloadPurgeDisposition disposition = 5;
 }
 

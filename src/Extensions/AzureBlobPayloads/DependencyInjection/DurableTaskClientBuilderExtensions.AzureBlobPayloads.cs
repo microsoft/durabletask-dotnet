@@ -87,6 +87,19 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 }
             });
 
+        // The auto-purge job is entity-driven: BlobPurgeJobStarter reaches the singleton job through
+        // client.Entities on BOTH paths - the enabled path creates and drives the job, and the disabled path
+        // signals it Stop - so entity support must be on whenever externalized payloads are configured, not only
+        // when AutoPurge is enabled. Gating it on AutoPurge would break the off-switch: flipping AutoPurge from
+        // true to false would disable entities exactly when the stop signal needs client.Entities, leaving a
+        // running job deleting blobs forever. Set it on the base options so an explicit UseGrpc client that
+        // disables entity support still wins (DurableTaskClientOptions.ApplyTo copies this value only when the
+        // derived options did not set it explicitly).
+        builder.Configure(options =>
+        {
+            options.EnableEntitySupport = true;
+        });
+
         // Always register the auto-purge starter. Whether auto-purge is actually enabled can only be known once
         // options are fully resolved - the flag can be set by the inline configure delegate, services.Configure,
         // configuration binding or PostConfigure, none of which are visible here at registration time - so the

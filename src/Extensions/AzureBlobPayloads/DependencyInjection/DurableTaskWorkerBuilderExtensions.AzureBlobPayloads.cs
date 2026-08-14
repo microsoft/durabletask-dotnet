@@ -91,6 +91,17 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 opt.LargePayloadAutoPurgeEnabled = opts.AutoPurge;
             });
 
+        // The auto-purge job is entity-driven: its orchestrator drives the BlobPurgeJob entity, and an
+        // orchestrator that touches entities with support off throws (TaskOrchestrationContextWrapper). Enable
+        // it whenever externalized payloads are configured - mirroring the client side, and not gated on
+        // AutoPurge - so the job can be both driven (enabled path) and stopped (disabled path) either way.
+        builder.Services
+            .AddOptions<DurableTaskWorkerOptions>(builder.Name)
+            .Configure(options =>
+            {
+                options.EnableEntitySupport = true;
+            });
+
         // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
         // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
         // execute here. The purge activities fetch/report via the injected DurableTaskClient.

@@ -154,4 +154,46 @@ public class UseExternalizedPayloadsTests
         // Assert - an explicit true/false, never left absent, because calling this extension IS the choice.
         grpcOptions.LargePayloadAutoPurgeEnabled.Should().Be(autoPurge);
     }
+
+    [Fact]
+    public void UseExternalizedPayloads_Client_EnablesEntitySupport()
+    {
+        // Arrange - the auto-purge starter reaches the singleton job through client.Entities on BOTH the enabled
+        // and disabled paths, so the client must turn entity support on whenever externalized payloads are
+        // configured. It must not be gated on AutoPurge, so leave AutoPurge at its default (false) here.
+        ServiceCollection services = new();
+        Mock<IDurableTaskClientBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(string.Empty);
+
+        // Act
+        builder.Object.UseExternalizedPayloads(options => { });
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskClientOptions options =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskClientOptions>>().Get(string.Empty);
+
+        // Assert
+        options.EnableEntitySupport.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UseExternalizedPayloads_Worker_EnablesEntitySupport()
+    {
+        // Arrange - the purge orchestrator drives the BlobPurgeJob entity, and an orchestrator that touches
+        // entities with support off throws, so the worker must turn entity support on whenever externalized
+        // payloads are configured. Not gated on AutoPurge, so leave AutoPurge at its default (false) here.
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(string.Empty);
+
+        // Act
+        builder.Object.UseExternalizedPayloads(options => { });
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskWorkerOptions options =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>().Get(string.Empty);
+
+        // Assert
+        options.EnableEntitySupport.Should().BeTrue();
+    }
 }

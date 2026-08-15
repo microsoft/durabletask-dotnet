@@ -205,11 +205,17 @@ public class UseExternalizedPayloadsTests
         // used to inject a concrete DurableTaskClient, which a worker-only host never registers, so they threw at
         // dispatch time - and only at dispatch, because DurableTaskRegistry stores a lazy
         // ActivatorUtilities.GetServiceOrCreateInstance factory - leaving auto-purge silently broken. They now
-        // inject the worker's own ILargePayloadPurgeClient, so they construct with no DurableTaskClient present.
+        // inject the worker's own TaskHubSidecarServiceClient (built from the worker's GrpcDurableTaskWorkerOptions),
+        // so they construct with no DurableTaskClient present. A real worker configures a transport, so UseGrpc
+        // supplies one here - without it the worker's PostConfigure would throw for having neither Channel nor
+        // CallInvoker.
         ServiceCollection services = new();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
-        services.AddDurableTaskWorker(
-            builder => builder.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true"));
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.UseGrpc(options => options.CallInvoker = Mock.Of<CallInvoker>());
+            builder.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true");
+        });
 
         using ServiceProvider provider = services.BuildServiceProvider();
 

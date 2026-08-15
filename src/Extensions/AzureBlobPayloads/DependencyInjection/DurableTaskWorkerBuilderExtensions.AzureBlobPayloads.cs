@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Worker;
@@ -8,6 +9,7 @@ using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
@@ -102,20 +104,23 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 options.EnableEntitySupport = true;
             });
 
-        // The purge activities fetch tombstones and report results over the worker's OWN gRPC transport, so a
-        // worker-only host (which never registers a DurableTaskClient) can still run the job. Resolve the
-        // transport from the same named GrpcDurableTaskWorkerOptions the worker uses, capturing builder.Name so a
-        // named worker binds to its own options.
-        builder.Services.TryAddSingleton<ILargePayloadPurgeClient>(sp =>
+        // The purge activities talk to the backend over the worker's OWN transport, so a worker-only host
+        // (which never registers a DurableTaskClient) can still run the job. This resolves the same CallInvoker
+        // the worker itself uses, so the RPCs ride its channel and interceptor - no second connection.
+        builder.Services.TryAddSingleton(sp =>
         {
-            IOptionsMonitor<GrpcDurableTaskWorkerOptions> options =
-                sp.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
-            return new GrpcLargePayloadPurgeClient(options, builder.Name);
+            GrpcDurableTaskWorkerOptions options =
+                sp.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(builder.Name);
+            CallInvoker invoker = options.CallInvoker
+                ?? options.Channel?.CreateCallInvoker()
+                ?? throw new InvalidOperationException(
+                    "A gRPC Channel or CallInvoker must be configured on the worker to purge externalized payloads.");
+            return new TaskHubSidecarServiceClient(invoker);
         });
 
         // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
         // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
-        // execute here. The purge activities fetch/report via the injected ILargePayloadPurgeClient above.
+        // execute here. The purge activities fetch/report via the worker's TaskHubSidecarServiceClient above.
         builder.AddTasks(r =>
         {
             r.AddEntity<BlobPurgeJob>();

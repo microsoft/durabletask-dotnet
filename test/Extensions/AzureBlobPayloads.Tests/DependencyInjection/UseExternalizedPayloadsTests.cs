@@ -196,4 +196,31 @@ public class UseExternalizedPayloadsTests
         // Assert
         options.EnableEntitySupport.Should().BeTrue();
     }
+
+    [Fact]
+    public void UseExternalizedPayloads_WorkerOnly_PurgeActivitiesAreConstructible()
+    {
+        // Arrange - a WORKER-ONLY host: AddDurableTaskWorker + UseExternalizedPayloads, with no AddDurableTaskClient
+        // anywhere. This is the split-deployment shape ("client triggers, worker executes"). The purge activities
+        // used to inject a concrete DurableTaskClient, which a worker-only host never registers, so they threw at
+        // dispatch time - and only at dispatch, because DurableTaskRegistry stores a lazy
+        // ActivatorUtilities.GetServiceOrCreateInstance factory - leaving auto-purge silently broken. They now
+        // inject the worker's own ILargePayloadPurgeClient, so they construct with no DurableTaskClient present.
+        ServiceCollection services = new();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddDurableTaskWorker(
+            builder => builder.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true"));
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act - construct both activities through the exact reflection path DurableTaskRegistry uses at dispatch.
+        Action constructGet = () =>
+            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(GetLargePayloadTombstonesActivity));
+        Action constructReport = () =>
+            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(ReportLargePayloadPurgeResultsActivity));
+
+        // Assert - both must resolve without a client in the container. This throws on the pre-fix code.
+        constructGet.Should().NotThrow();
+        constructReport.Should().NotThrow();
+    }
 }

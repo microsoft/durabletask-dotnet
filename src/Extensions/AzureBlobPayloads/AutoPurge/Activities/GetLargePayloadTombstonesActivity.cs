@@ -10,15 +10,15 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// Activity that fetches a bounded batch of due large-payload tombstones from the backend for the auto-purge
 /// job to delete.
 /// </summary>
-/// <param name="client">The Durable Task client used to query the backend for tombstones.</param>
+/// <param name="client">The purge client used to query the backend for tombstones.</param>
 /// <param name="logger">The logger instance.</param>
 [DurableTask]
-public class GetLargePayloadTombstonesActivity(
-    DurableTaskClient client,
+internal sealed class GetLargePayloadTombstonesActivity(
+    ILargePayloadPurgeClient client,
     ILogger<GetLargePayloadTombstonesActivity> logger)
     : TaskActivity<int, List<LargePayloadTombstone>>
 {
-    readonly DurableTaskClient client = Check.NotNull(client);
+    readonly ILargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<GetLargePayloadTombstonesActivity> logger = Check.NotNull(logger);
 
     /// <inheritdoc/>

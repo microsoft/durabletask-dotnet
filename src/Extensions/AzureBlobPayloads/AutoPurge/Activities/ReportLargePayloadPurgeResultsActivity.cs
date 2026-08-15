@@ -12,15 +12,15 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// reported, not only the successful ones: the backend owns retry scheduling, so a row it hears nothing about
 /// would simply be re-served unchanged on the next cycle.
 /// </summary>
-/// <param name="client">The Durable Task client used to report purge results to the backend.</param>
+/// <param name="client">The purge client used to report purge results to the backend.</param>
 /// <param name="logger">The logger instance.</param>
 [DurableTask]
-public class ReportLargePayloadPurgeResultsActivity(
-    DurableTaskClient client,
+internal sealed class ReportLargePayloadPurgeResultsActivity(
+    ILargePayloadPurgeClient client,
     ILogger<ReportLargePayloadPurgeResultsActivity> logger)
     : TaskActivity<List<LargePayloadPurgeResult>, object?>
 {
-    readonly DurableTaskClient client = Check.NotNull(client);
+    readonly ILargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<ReportLargePayloadPurgeResultsActivity> logger = Check.NotNull(logger);
 
     /// <inheritdoc/>

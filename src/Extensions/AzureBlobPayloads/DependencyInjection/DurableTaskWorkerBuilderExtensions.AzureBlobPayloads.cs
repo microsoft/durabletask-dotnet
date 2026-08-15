@@ -102,9 +102,20 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 options.EnableEntitySupport = true;
             });
 
+        // The purge activities fetch tombstones and report results over the worker's OWN gRPC transport, so a
+        // worker-only host (which never registers a DurableTaskClient) can still run the job. Resolve the
+        // transport from the same named GrpcDurableTaskWorkerOptions the worker uses, capturing builder.Name so a
+        // named worker binds to its own options.
+        builder.Services.TryAddSingleton<ILargePayloadPurgeClient>(sp =>
+        {
+            IOptionsMonitor<GrpcDurableTaskWorkerOptions> options =
+                sp.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+            return new GrpcLargePayloadPurgeClient(options, builder.Name);
+        });
+
         // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
         // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
-        // execute here. The purge activities fetch/report via the injected DurableTaskClient.
+        // execute here. The purge activities fetch/report via the injected ILargePayloadPurgeClient above.
         builder.AddTasks(r =>
         {
             r.AddEntity<BlobPurgeJob>();

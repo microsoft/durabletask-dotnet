@@ -168,6 +168,14 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? ChannelRecreator { get; set; }
 
         /// <summary>
+        /// Gets or sets an optional decorator applied to every <see cref="CallInvoker"/> the worker builds
+        /// from its configured transport, including invokers rebuilt after a channel recreate. Extensions
+        /// use this to attach interceptors without taking ownership of
+        /// <see cref="GrpcDurableTaskWorkerOptions.Channel"/>, which would otherwise disable recreation.
+        /// </summary>
+        public Func<CallInvoker, CallInvoker>? CallInvokerDecorator { get; set; }
+
+        /// <summary>
         /// Gets or sets a callback that is invoked when activity work items are received or finished.
         /// </summary>
         public Action<ActivityNotificationPhase>? NotifyActivity { get; set; }

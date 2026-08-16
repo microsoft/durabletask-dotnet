@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -26,6 +28,56 @@ public class GrpcDurableTaskWorkerOptionsInternalTests
         internalOptions.TransientRetryMaxAttempts.Should().Be(10);
         internalOptions.SilentDisconnectTimeout.Should().Be(TimeSpan.FromSeconds(120));
         internalOptions.ChannelRecreator.Should().BeNull();
+        internalOptions.CallInvokerDecorator.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetCallInvokerDecorator_NullCallback_Throws()
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+
+        // Act
+        Action act = () => options.SetCallInvokerDecorator(null!);
+
+        // Assert
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ApplyCallInvokerDecorator_NoDecorator_ReturnsOriginalInvoker()
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+        CallInvoker invoker = GrpcChannel.ForAddress("http://localhost:9101").CreateCallInvoker();
+
+        // Act
+        CallInvoker result = options.ApplyCallInvokerDecorator(invoker);
+
+        // Assert
+        result.Should().BeSameAs(invoker);
+    }
+
+    [Fact]
+    public void ApplyCallInvokerDecorator_WithDecorator_ReturnsDecoratedInvoker()
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+        CallInvoker invoker = GrpcChannel.ForAddress("http://localhost:9102").CreateCallInvoker();
+        CallInvoker decorated = GrpcChannel.ForAddress("http://localhost:9103").CreateCallInvoker();
+        CallInvoker? observed = null;
+        options.SetCallInvokerDecorator(inner =>
+        {
+            observed = inner;
+            return decorated;
+        });
+
+        // Act
+        CallInvoker result = options.ApplyCallInvokerDecorator(invoker);
+
+        // Assert
+        result.Should().BeSameAs(decorated);
+        observed.Should().BeSameAs(invoker);
     }
 
     [Fact]

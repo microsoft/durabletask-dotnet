@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -126,7 +127,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                     // The recreator owns the replacement channel lifetime. Return a default disposable
                     // so the caller disposes the previous worker-owned channel exactly once without
                     // carrying that ownership forward to the recreated state.
-                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, default, newChannel);
+                    return new ChannelRecreateResult(
+                        true,
+                        this.grpcOptions.ApplyCallInvokerDecorator(newChannel.CreateCallInvoker()),
+                        newChannel.Target,
+                        default,
+                        newChannel);
                 }
 
                 // Recreator returned the same instance — nothing to swap.
@@ -154,7 +160,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 // This new channel is worker-owned, so hand back a disposable that will shut it down
                 // (and dispose it on frameworks where GrpcChannel implements IDisposable).
                 AsyncDisposable newDisposable = CreateOwnedChannelDisposable(newChannel);
-                return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable, newChannel);
+                return new ChannelRecreateResult(
+                    true,
+                    this.grpcOptions.ApplyCallInvokerDecorator(newChannel.CreateCallInvoker()),
+                    newChannel.Target,
+                    newDisposable,
+                    newChannel);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -293,6 +304,13 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     }
 
     AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
+    {
+        AsyncDisposable disposable = this.GetCallInvokerCore(out CallInvoker undecorated, out address);
+        callInvoker = this.grpcOptions.ApplyCallInvokerDecorator(undecorated);
+        return disposable;
+    }
+
+    AsyncDisposable GetCallInvokerCore(out CallInvoker callInvoker, out string address)
     {
         if (this.grpcOptions.Channel is GrpcChannel c)
         {

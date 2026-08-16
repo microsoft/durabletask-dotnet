@@ -4,8 +4,8 @@
 using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
+using Microsoft.DurableTask.Client.Grpc.Internal;
 using Microsoft.DurableTask.Converters;
-using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -37,23 +37,12 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
             .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
-                if (opt.Channel is not null)
-                {
-                    Grpc.Core.CallInvoker invoker = opt.Channel.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
-                    opt.CallInvoker = invoker;
 
-                    // Ensure client uses the intercepted invoker path
-                    opt.Channel = null;
-                }
-                else if (opt.CallInvoker is not null)
-                {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
-                }
-                else
-                {
-                    throw new ArgumentException(
-                        "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature");
-                }
+                // Register a decorator rather than moving Channel onto an intercepted CallInvoker.
+                // Clearing Channel would disable the client's gRPC channel recreation, and requiring a
+                // pre-built Channel/CallInvoker would rule out the Address-only configuration.
+                opt.SetCallInvokerDecorator(
+                    invoker => invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts)));
             });
 
         return builder;

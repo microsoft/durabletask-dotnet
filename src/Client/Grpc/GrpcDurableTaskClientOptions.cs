@@ -57,5 +57,13 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
         /// old channel so in-flight RPCs from peer clients are not interrupted.
         /// </summary>
         public Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? ChannelRecreator { get; set; }
+
+        /// <summary>
+        /// Gets or sets an optional decorator applied to every <see cref="CallInvoker"/> the client builds
+        /// from its configured transport. Extensions use this to attach interceptors without taking
+        /// ownership of <see cref="GrpcDurableTaskClientOptions.Channel"/>, which would otherwise disable
+        /// recreation.
+        /// </summary>
+        public Func<CallInvoker, CallInvoker>? CallInvokerDecorator { get; set; }
     }
 }

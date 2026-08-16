@@ -8,6 +8,7 @@ using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Client.Grpc.Internal;
 using Microsoft.DurableTask.Tracing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -625,6 +626,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
+    {
+        AsyncDisposable disposable = GetCallInvokerCore(options, logger, out CallInvoker undecorated);
+
+        // Decorate outside any ChannelRecreatingCallInvoker so the wrapper's internal channel swaps
+        // stay transparent to the decorator (and to any interceptor it installs).
+        callInvoker = options.ApplyCallInvokerDecorator(undecorated);
+        return disposable;
+    }
+
+    static AsyncDisposable GetCallInvokerCore(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
         Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = options.Internal.ChannelRecreator;
         int threshold = options.Internal.ChannelRecreateFailureThreshold;

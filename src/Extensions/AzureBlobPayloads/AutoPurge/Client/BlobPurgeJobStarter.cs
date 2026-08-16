@@ -180,6 +180,38 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
 
     async Task EnsureJobAsync(DurableTaskClient client, int batchSize, CancellationToken cancellationToken)
     {
+        // Clear a stale "unsupported" disable exactly once per process start, before the reconcile loop begins.
+        // If an earlier run of this process disabled the job because the backend lacked the purge RPCs, the
+        // entity is still Unsupported and Create keeps no-opping (that guard is what makes the disable real).
+        // Reset moves it back to Pending so the first reconcile pass can re-check a possibly-upgraded backend,
+        // giving a cheap, discoverable recovery: upgrade the backend / re-pull the emulator, then restart.
+        //
+        // Reset is guarded in the entity to touch only an Unsupported job, so this blind startup signal is a
+        // no-op against a healthy Active job - it can never stop one. Signalled rather than driven through the
+        // bridge orchestration, matching SignalJobStopAsync: unlike Create it needs no fixed-instance dedupe and
+        // is idempotent in the entity.
+        //
+        // Known, benign race: this signal and the first pass's Create below are two independent round trips with
+        // nothing ordering them. If Create lands first it sees the entity still Unsupported and no-ops, and the
+        // job comes back on the NEXT reconcile pass (within one ReconcileInterval). That is harmless and
+        // self-correcting; this comment exists so a future reader does not "fix" it by adding coordination.
+        try
+        {
+            await client.Entities.SignalEntityAsync(
+                this.entityId, nameof(BlobPurgeJob.Reset), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Never let a failed reset prevent the reconcile loop from starting. A lost reset only delays
+            // recovery from a prior unsupported disable by one process lifetime; not starting the loop would
+            // mean the job is never (re)created at all. Log and fall through.
+            this.logger.BlobPurgeStarterRetry(ex);
+        }
+
         while (!cancellationToken.IsCancellationRequested)
         {
             TimeSpan delay;

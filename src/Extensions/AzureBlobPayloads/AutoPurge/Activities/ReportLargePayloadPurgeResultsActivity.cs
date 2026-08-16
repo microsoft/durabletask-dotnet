@@ -66,6 +66,18 @@ internal sealed class ReportLargePayloadPurgeResultsActivity(
             throw new OperationCanceledException(
                 "The ReportLargePayloadPurgeResultsAsync operation was canceled.", e);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            // Mixed-rollout guard: an older backend build (or a stale local emulator image) does not implement
+            // this RPC. Surfacing NotImplementedException lets the orchestrator disable the job instead of
+            // retrying an operation that can never succeed - see BlobPurgeJobOrchestrator's handling of it.
+            throw new NotImplementedException(
+                "The Durable Task backend does not implement the ReportLargePayloadPurgeResults RPC required " +
+                "for large-payload auto-purge. Upgrade the backend (or re-pull " +
+                "'mcr.microsoft.com/dts/dts-emulator'), then restart the app. Auto-purge is now disabled until " +
+                $"the process restarts. Backend detail: {e.Status.Detail}",
+                e);
+        }
 
         this.logger.BlobPurgeReportedResults(input.Count);
         return null;

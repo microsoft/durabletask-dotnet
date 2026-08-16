@@ -35,7 +35,13 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         maxNumberOfAttempts: 3,
         firstRetryInterval: TimeSpan.FromSeconds(15),
         backoffCoefficient: 2.0,
-        maxRetryInterval: TimeSpan.FromSeconds(60));
+        maxRetryInterval: TimeSpan.FromSeconds(60))
+    {
+        // A NotImplementedException means the backend does not implement the purge RPCs (mixed rollout / stale
+        // emulator). That cannot be fixed by retrying, so short-circuit the ~45s retry budget and let the
+        // failure surface on the first attempt. RunAsync catches it and disables the job instead of looping.
+        HandleFailure = details => !details.IsCausedBy<NotImplementedException>(),
+    };
 
     /// <inheritdoc/>
     public override async Task<object?> RunAsync(TaskOrchestrationContext context, BlobPurgeJobRunRequest input)
@@ -127,6 +133,19 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                     // as the outage lasts, so back off before the next cycle.
                     await context.CreateTimer(ErrorBackoff, default);
                 }
+            }
+            catch (TaskFailedException ex) when (ex.FailureDetails.IsCausedBy<NotImplementedException>())
+            {
+                // The backend does not implement the large-payload purge RPCs (an older backend build or a
+                // stale local emulator image). Retrying cannot help, so disable the job durably and exit the
+                // perpetual loop cleanly instead of logging a generic failure and backing off forever.
+                // MarkUnsupported is AWAITED, not signalled, so the disable is committed to the entity before we
+                // return; the client-side starter will not resurrect an Unsupported job until the process
+                // restarts. This is deliberately a distinct diagnostic from BlobPurgeCycleFailed below.
+                logger.BlobPurgeBackendUnsupported(jobId, ex.FailureDetails.ErrorMessage);
+                await context.Entities.CallEntityAsync(
+                    input.JobEntityId, nameof(BlobPurgeJob.MarkUnsupported), ex.FailureDetails.ErrorMessage);
+                return null;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {

@@ -60,4 +60,16 @@ static partial class Logs
 
     [LoggerMessage(EventId = 826, Level = LogLevel.Warning, Message = "Blob payload auto-purge is disabled but the singleton job's state could not be read; requesting a stop anyway. Stopping a job that may be deleting payloads matters more than avoiding a redundant stop request, which the job ignores.")]
     public static partial void BlobPurgeJobStateUnknown(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 827, Level = LogLevel.Warning, Message = "Blob payload auto-purge job '{jobId}' was disabled because the backend does not implement the large-payload purge RPCs: {detail}. This is expected against an older backend build or a stale local emulator image. Upgrade the Durable Task backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator'), then restart the app; the job stays disabled until the process restarts.")]
+    public static partial void BlobPurgeJobMarkedUnsupported(this ILogger logger, string? jobId, string detail);
+
+    [LoggerMessage(EventId = 828, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' was reset from the unsupported state on process start, so it will be created again and re-check whether the backend now implements the purge RPCs.")]
+    public static partial void BlobPurgeJobReset(this ILogger logger, string? jobId);
+
+    [LoggerMessage(EventId = 829, Level = LogLevel.Debug, Message = "Blob payload auto-purge job '{jobId}' is marked unsupported, so the create request was ignored. The job stays disabled until the process restarts and clears the unsupported state.")]
+    public static partial void BlobPurgeJobCreateSkippedUnsupported(this ILogger logger, string? jobId);
+
+    [LoggerMessage(EventId = 830, Level = LogLevel.Error, Message = "Blob payload auto-purge for job '{jobId}' stopped because the backend does not implement the large-payload purge RPCs: {detail}. The job is now disabled and will not delete blobs. Upgrade the Durable Task backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator'), then restart the app to resume auto-purge.")]
+    public static partial void BlobPurgeBackendUnsupported(this ILogger logger, string? jobId, string detail);
 }

@@ -641,6 +641,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 new P.GetLargePayloadTombstonesRequest { Limit = limit },
                 cancellationToken: cancellation);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
+        }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
@@ -692,6 +696,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         try
         {
             await this.sidecarClient.ReportLargePayloadPurgeResultsAsync(request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {

@@ -71,6 +71,64 @@ public class BlobPurgeJobOrchestratorTests
         this.logger.Logs.Should().Contain(entry => entry.Message.Contains("stopping"));
     }
 
+    [Fact]
+    public async Task RunAsync_WhenBackendDoesNotImplementPurgeRpcs_DisablesJobAndExits()
+    {
+        // Arrange - the fetch activity surfaced a gRPC Unimplemented as NotImplementedException (mixed rollout /
+        // stale emulator). The orchestrator must disable the job durably and exit its perpetual loop, rather
+        // than logging a generic cycle failure and retrying on every backoff forever.
+        Mock<TaskOrchestrationContext> context = new();
+        Mock<TaskOrchestrationEntityFeature> entities = new();
+
+        context.Setup(c => c.Entities).Returns(entities.Object);
+        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
+        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        entities
+            .Setup(e => e.CallEntityAsync<BlobPurgeJobState?>(
+                It.IsAny<EntityInstanceId>(),
+                nameof(BlobPurgeJob.Get),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250 });
+
+        entities
+            .Setup(e => e.CallEntityAsync(
+                It.IsAny<EntityInstanceId>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        context
+            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
+                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .ThrowsAsync(new TaskFailedException(
+                nameof(GetLargePayloadTombstonesActivity),
+                1,
+                new NotImplementedException("backend does not implement GetLargePayloadTombstones")));
+
+        // Act
+        object? result = await new BlobPurgeJobOrchestrator().RunAsync(
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+
+        // Assert - disabled through an AWAITED MarkUnsupported so the write is durable before the loop exits, a
+        // dedicated diagnostic is logged (not the generic cycle-failed one), and RunAsync returns rather than
+        // continuing. The awaited call, not a signal, is what guarantees the disable is committed here.
+        result.Should().BeNull();
+        entities.Verify(
+            e => e.CallEntityAsync(
+                JobEntityId,
+                nameof(BlobPurgeJob.MarkUnsupported),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()),
+            Times.Once);
+        this.logger.Logs.Should().Contain(
+            entry => entry.Message.Contains("does not implement the large-payload purge RPCs"));
+        this.AssertNoCycleFailed();
+    }
+
     /// <summary>
     /// Guards against the whole test passing through the orchestrator's catch-all cycle handler, which would
     /// leave every observation empty and make the assertions vacuous.

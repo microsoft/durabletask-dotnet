@@ -24,6 +24,17 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// </param>
     public void Create(TaskEntityContext context, int purgeBatchSize)
     {
+        if (this.State.Status == BlobPurgeJobStatus.Unsupported)
+        {
+            // This guard is the ONLY thing that makes the "unsupported" stop real. BlobPurgeJobStarter re-issues
+            // Create on every reconciliation pass (roughly every ReconcileInterval), so any status Create is
+            // willing to revive would have the job back within minutes and it would spin against the missing RPC
+            // forever - the disable would be theater. Recovery is deliberately by process restart, which signals
+            // Reset before the first Create; do NOT signal Run here.
+            logger.BlobPurgeJobCreateSkippedUnsupported(context.Id.Key);
+            return;
+        }
+
         if (this.State.Status == BlobPurgeJobStatus.Active)
         {
             // The batch size is taken because this is the only path by which a changed configuration reaches an
@@ -154,6 +165,63 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
         this.State.LastModifiedAt = DateTimeOffset.UtcNow;
 
         logger.BlobPurgeJobStopped(context.Id.Key);
+    }
+
+    /// <summary>
+    /// Marks the job <see cref="BlobPurgeJobStatus.Unsupported"/> because the backend does not implement the
+    /// large-payload purge RPCs.
+    /// </summary>
+    /// <remarks>
+    /// This is a genuine terminal stop, not a pause. The orchestrator reaches it after the fetch or report
+    /// activity surfaces a gRPC <c>Unimplemented</c> as a <see cref="NotImplementedException"/>, and unlike
+    /// <see cref="Stop"/> the resulting status is one that <see cref="Create"/> refuses to re-activate. That is
+    /// the whole point: the client-side starter re-issues <c>Create</c> every reconcile interval, so any status
+    /// <c>Create</c> is willing to revive would have the job back within minutes. Recovery is by process
+    /// restart, which re-checks the backend and clears this via <see cref="Reset"/>.
+    /// </remarks>
+    /// <param name="context">The entity context.</param>
+    /// <param name="detail">A human-readable description of why the backend is unsupported.</param>
+    public void MarkUnsupported(TaskEntityContext context, string detail)
+    {
+        if (this.State.Status == BlobPurgeJobStatus.Unsupported)
+        {
+            // Idempotent no-op. The orchestrator awaits this call and then exits, but concurrent orchestrators
+            // (one per replica, all hitting the same unsupported backend) can each report before the others
+            // exit. Leaving the state untouched on the repeat keeps LastModifiedAt meaning "when the job was
+            // disabled" rather than "when the last replica noticed", mirroring the guard discipline on Stop.
+            return;
+        }
+
+        this.State.Status = BlobPurgeJobStatus.Unsupported;
+        this.State.LastError = detail;
+        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+
+        logger.BlobPurgeJobMarkedUnsupported(context.Id.Key, detail);
+    }
+
+    /// <summary>
+    /// Clears an <see cref="BlobPurgeJobStatus.Unsupported"/> disable so the job can be created again after the
+    /// process restarts against a backend that may now implement the purge RPCs.
+    /// </summary>
+    /// <remarks>
+    /// The guard is load-bearing. The client-side starter signals this blind exactly once per process start,
+    /// before it knows the job's state, so it must be incapable of disturbing anything other than an unsupported
+    /// job. In particular a signal landing on a healthy <see cref="BlobPurgeJobStatus.Active"/> job must be a
+    /// no-op: without the guard, a routine host restart would stop a running job every time.
+    /// </remarks>
+    /// <param name="context">The entity context.</param>
+    public void Reset(TaskEntityContext context)
+    {
+        if (this.State.Status != BlobPurgeJobStatus.Unsupported)
+        {
+            return;
+        }
+
+        this.State.Status = BlobPurgeJobStatus.Pending;
+        this.State.LastError = null;
+        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+
+        logger.BlobPurgeJobReset(context.Id.Key);
     }
 
     /// <summary>

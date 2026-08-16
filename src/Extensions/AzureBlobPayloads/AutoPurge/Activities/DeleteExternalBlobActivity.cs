@@ -10,10 +10,11 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
-/// Activity that deletes a single externalized payload blob given its token, and classifies the attempt as
+/// Activity that deletes a chunk of externalized payload blobs given their tokens, classifying each attempt as
 /// <see cref="LargePayloadPurgeDisposition.Deleted"/>, <see cref="LargePayloadPurgeDisposition.Retry"/>, or
-/// <see cref="LargePayloadPurgeDisposition.Quarantined"/>. Deletion is idempotent, so re-delivered tokens and
-/// concurrent workers are safe.
+/// <see cref="LargePayloadPurgeDisposition.Quarantined"/> and returning one outcome per token, positionally
+/// aligned to the input. Deleting a whole chunk in a single activity call is what keeps orchestration history
+/// small. Deletion is idempotent, so re-delivered tokens, a retried chunk, and concurrent workers are all safe.
 /// </summary>
 /// <remarks>
 /// The split between retry and quarantine is whether the failure can self-heal, verified against the
@@ -50,17 +51,66 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 public class DeleteExternalBlobActivity(
     PayloadStore store,
     ILogger<DeleteExternalBlobActivity> logger)
-    : TaskActivity<string, BlobPurgeOutcome>
+    : TaskActivity<List<string>, List<BlobPurgeOutcome>>
 {
+    // Concurrency cap for the deletes WITHIN one chunk. The orchestrator runs at most
+    // BlobPurgeJobOrchestrator.MaxParallelChunkActivities (4) of these activities at once, so the total number
+    // of storage deletes in flight across the worker is 4 x 8 = 32 - identical to the flat cap this chunked
+    // design replaced. That product is the real budget: if either factor changes the other must move to keep it
+    // at 32, or the worker will either starve throughput or multiply into hundreds of concurrent storage calls
+    // (e.g. 20 chunks x 32 = 640).
+    const int MaxParallelDeletesPerChunk = 8;
+
     readonly PayloadStore store = Check.NotNull(store);
     readonly ILogger<DeleteExternalBlobActivity> logger = Check.NotNull(logger);
 
-    /// <inheritdoc/>
-    public override async Task<BlobPurgeOutcome> RunAsync(TaskActivityContext context, string input)
-    {
-        Check.NotNullOrEmpty(input, nameof(input));
+    /// <summary>
+    /// Gets or sets the wall-clock ceiling for a single blob delete. The store's own retry policy allows up to
+    /// 8 attempts against a 2-minute network timeout (~18 minutes worst case) for one blob, and a chunk awaits
+    /// its slowest delete, so without a bound one hung blob would hold a concurrency slot for many minutes and
+    /// stall the whole wave. Capping it well under the activity's own 15s/30s/60s retry cadence means a stuck
+    /// delete gives up, surfaces as <see cref="OperationCanceledException"/>, and is classified
+    /// <see cref="LargePayloadPurgeDisposition.Retry"/> for the backend to defer - rather than pinning the slot.
+    /// It is settable only so a test can shrink it; it is never reconfigured at runtime.
+    /// </summary>
+    internal TimeSpan SingleDeleteTimeout { get; set; } = TimeSpan.FromSeconds(60);
 
-        return await this.DeleteAsync(input);
+    /// <inheritdoc/>
+    public override async Task<List<BlobPurgeOutcome>> RunAsync(TaskActivityContext context, List<string> input)
+    {
+        Check.NotNull(input, nameof(input));
+
+        // Write each outcome at its token's INDEX, never in completion order: the deletes below run
+        // concurrently and the orchestrator zips these back onto tombstones positionally, so a delete finishing
+        // out of order must not shift a disposition onto the wrong row.
+        BlobPurgeOutcome[] outcomes = new BlobPurgeOutcome[input.Count];
+
+        // A single bad token never fails its peers: DeleteAsync returns a disposition on every branch instead
+        // of throwing (its catch-all absorbs everything but OutOfMemory/StackOverflow), so Task.WhenAll never
+        // observes a fault from a classified failure and the other tokens in the chunk still complete and report.
+        using SemaphoreSlim gate = new(MaxParallelDeletesPerChunk, MaxParallelDeletesPerChunk);
+        Task[] deletes = new Task[input.Count];
+        for (int i = 0; i < input.Count; i++)
+        {
+            deletes[i] = DeleteAtAsync(i);
+        }
+
+        await Task.WhenAll(deletes);
+
+        return new List<BlobPurgeOutcome>(outcomes);
+
+        async Task DeleteAtAsync(int index)
+        {
+            await gate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                outcomes[index] = await this.DeleteAsync(input[index]).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
     }
 
     /// <summary>
@@ -109,7 +159,13 @@ public class DeleteExternalBlobActivity(
 
         try
         {
-            PayloadDeleteOutcome outcome = await this.store.DeleteAsync(token, CancellationToken.None);
+            // Bound the delete's wall-clock time (see SingleDeleteTimeout). If it elapses, the token cancels the
+            // store call, which surfaces as OperationCanceledException and is classified retryable by the
+            // catch-all below - so a hung blob yields to the backend's deferral instead of pinning its slot.
+            // TaskActivityContext exposes no ambient cancellation token to link, so this timeout is the only
+            // cancellation source; host shutdown is handled by the worker tearing the activity down.
+            using CancellationTokenSource timeout = new(this.SingleDeleteTimeout);
+            PayloadDeleteOutcome outcome = await this.store.DeleteAsync(token, timeout.Token);
 
             // The blob exists but this store never wrote it, so it was left untouched. That is an expected
             // outcome, not a defect - the token text merely matched the v2 grammar - and quarantining it would

@@ -28,7 +28,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert - quarantined (evidence preserved), never a success-shaped discard. The sanitized storage
         // error code is logged alongside the cause and is what distinguishes this from the parse failures.
@@ -46,7 +46,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
@@ -65,7 +65,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
@@ -82,8 +82,8 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(
-            null!, "blob:v2:https://other.blob.core.windows.net/c/abc123");
+        BlobPurgeOutcome outcome = (await activity.RunAsync(
+            null!, ["blob:v2:https://other.blob.core.windows.net/c/abc123"]))[0];
 
         // Assert - the cause is what separates this from the other retryable storage failures, which the
         // contract no longer distinguishes.
@@ -101,7 +101,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store.Object, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, "blob:v1:payloads:abc123");
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, ["blob:v1:payloads:abc123"]))[0];
 
         // Assert - quarantined by the gate, and the store's DeleteAsync was never invoked.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
@@ -118,7 +118,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store.Object, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, "blob:v9:https://acct.blob.core.windows.net/c/x");
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, ["blob:v9:https://acct.blob.core.windows.net/c/x"]))[0];
 
         // Assert - retried, NOT quarantined: quarantine is terminal and requires an operator to unwind, while a
         // deferral only leaves the row idle and visible. This branch and the token branches that quarantine are
@@ -139,7 +139,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, "blob:v2:not-a-uri");
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, ["blob:v2:not-a-uri"]))[0];
 
         // Assert - contrast with the unknown-prefix case above, which is retried.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
@@ -157,7 +157,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store.Object, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert - an ordinary success is silent; any log here would mean a failure branch was taken.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Deleted);
@@ -176,7 +176,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store.Object, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Deleted);
@@ -194,7 +194,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store.Object, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert - the tombstone is still resolved: a blob the store does not own is not the store's to delete,
         // and re-serving the row forever would never make it deletable. The reported result is now identical to
@@ -212,7 +212,7 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert - retried (tombstone preserved): resolving it would destroy the backend's cleanup ledger while
         // the blob survives.
@@ -229,11 +229,93 @@ public class DeleteExternalBlobActivityTests
         DeleteExternalBlobActivity activity = new(store, logger);
 
         // Act
-        BlobPurgeOutcome outcome = await activity.RunAsync(null!, V2Token);
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
         // Assert - storage reported no code here, so the exception's type name is what identifies the failure.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
         logger.Logs.Should().ContainSingle(l => l.Message.Contains("UnexpectedFailure:TimeoutException"));
+    }
+
+    [Fact]
+    public async Task RunAsync_MixedChunk_AttributesEachOutcomeToItsOwnTokenByIndex()
+    {
+        // Arrange - one chunk whose five tokens resolve to deliberately different dispositions and complete in
+        // the REVERSE of their input order. Adjacent indices differ, so a driver that recorded results in
+        // completion order (or shifted by one) would misattribute at least one row. Index 3 throws a raw
+        // exception from the store to prove that a single failing token neither faults its peers nor escapes the
+        // activity.
+        string[] tokens =
+        [
+            "blob:v2:https://acct.blob.core.windows.net/payloads/0",
+            "blob:v2:https://acct.blob.core.windows.net/payloads/1",
+            "blob:v2:https://acct.blob.core.windows.net/payloads/2",
+            "blob:v2:https://acct.blob.core.windows.net/payloads/3",
+            "blob:v2:https://acct.blob.core.windows.net/payloads/4",
+        ];
+
+        Dictionary<string, TaskCompletionSource<PayloadDeleteOutcome>> gates = new();
+        foreach (string token in tokens)
+        {
+            // Synchronous continuations (the default) make completion strictly ordered: each Set* below resolves
+            // exactly one delete inline, in call order, so completion order is deterministically the reverse of
+            // input order. The index-based driver ignores completion order, but a regression to completion-order
+            // recording would then attribute deterministically wrong - which is what makes this test bite.
+            gates[token] = new TaskCompletionSource<PayloadDeleteOutcome>();
+        }
+
+        ControlledPayloadStore store = new(gates);
+        TestLogger<DeleteExternalBlobActivity> logger = new();
+        DeleteExternalBlobActivity activity = new(store, logger);
+
+        // Act - start the chunk (every delete is now parked on its gate), then release the tokens back-to-front
+        // so completion order is the exact reverse of input order.
+        Task<List<BlobPurgeOutcome>> run = activity.RunAsync(null!, [.. tokens]);
+
+        gates[tokens[4]].SetResult(PayloadDeleteOutcome.AlreadyAbsent);                              // -> Deleted
+        gates[tokens[3]].SetException(new TimeoutException());                                       // -> Retry
+        gates[tokens[2]].SetResult(PayloadDeleteOutcome.Deleted);                                    // -> Deleted
+        gates[tokens[1]].SetException(new RequestFailedException(503, "busy", "ServerBusy", null));  // -> Retry
+        gates[tokens[0]].SetException(
+            new RequestFailedException(400, "bad", "InvalidResourceName", null));                    // -> Quarantined
+
+        List<BlobPurgeOutcome> outcomes = await run;
+
+        // Assert - each disposition sits at its own token's index regardless of completion order, and the raw
+        // failure at index 3 left indices 0, 1, 2, and 4 untouched.
+        outcomes.Should().HaveCount(tokens.Length);
+        outcomes[0].Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
+        outcomes[1].Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
+        outcomes[2].Disposition.Should().Be(LargePayloadPurgeDisposition.Deleted);
+        outcomes[3].Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
+        outcomes[4].Disposition.Should().Be(LargePayloadPurgeDisposition.Deleted);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenSingleDeleteExceedsTimeout_ReturnsRetryInsteadOfHanging()
+    {
+        // Arrange - a store whose delete never completes on its own and only observes cancellation. With the
+        // per-delete timeout the activity must abandon it and classify it retryable, rather than pinning the
+        // concurrency slot for the store's full multi-minute retry budget.
+        BlockingPayloadStore store = new();
+        TestLogger<DeleteExternalBlobActivity> logger = new();
+        DeleteExternalBlobActivity activity = new(store, logger)
+        {
+            SingleDeleteTimeout = TimeSpan.FromMilliseconds(50),
+        };
+
+        // Act - guard the await so a regression (an unbounded delete) surfaces as a bounded assertion failure
+        // instead of hanging the whole test run.
+        Task<List<BlobPurgeOutcome>> run = activity.RunAsync(null!, [V2Token]);
+        Task first = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(10)));
+        first.Should().BeSameAs(run, "the delete must yield to its timeout rather than run unbounded");
+
+        List<BlobPurgeOutcome> outcomes = await run;
+
+        // Assert - the timeout surfaced as a cancellation and was classified retryable by the catch-all, exactly
+        // as a network timeout would be; no exception escaped RunAsync.
+        outcomes.Should().ContainSingle();
+        outcomes[0].Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
+        logger.Logs.Should().ContainSingle(l => l.Message.Contains("UnexpectedFailure:TaskCanceledException"));
     }
 
     sealed class StubPayloadStore : PayloadStore
@@ -246,6 +328,43 @@ public class DeleteExternalBlobActivityTests
             this.deleteError is null
                 ? Task.FromResult(PayloadDeleteOutcome.Deleted)
                 : throw this.deleteError;
+
+        public override Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public override Task<string> DownloadAsync(string token, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public override bool IsKnownPayloadToken(string value) => true;
+    }
+
+    sealed class ControlledPayloadStore : PayloadStore
+    {
+        readonly IReadOnlyDictionary<string, TaskCompletionSource<PayloadDeleteOutcome>> gates;
+
+        public ControlledPayloadStore(
+            IReadOnlyDictionary<string, TaskCompletionSource<PayloadDeleteOutcome>> gates) => this.gates = gates;
+
+        public override Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken) =>
+            this.gates[token].Task;
+
+        public override Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public override Task<string> DownloadAsync(string token, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public override bool IsKnownPayloadToken(string value) => true;
+    }
+
+    sealed class BlockingPayloadStore : PayloadStore
+    {
+        public override async Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken)
+        {
+            // Never completes on its own; only cancellation (the activity's per-delete timeout) ends the wait.
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return PayloadDeleteOutcome.Deleted;
+        }
 
         public override Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

@@ -129,6 +129,103 @@ public class BlobPurgeJobOrchestratorTests
         this.AssertNoCycleFailed();
     }
 
+    [Fact]
+    public async Task RunAsync_DeletesLargeBatch_InChunksNotOneActivityPerToken()
+    {
+        // Arrange - a full 1000-row batch. The whole point of chunking is that a batch this size fans out to a
+        // HANDFUL of delete-activity calls (ceil(1000 / 50) = 20), not one per token (1000), which is what
+        // bloated the orchestration history. The activity contract is one outcome per token, so the mock returns
+        // exactly that; the orchestrator asserts the count before zipping.
+        const int batchSize = 1000;
+        List<LargePayloadTombstone> tombstones = [];
+        for (int i = 0; i < batchSize; i++)
+        {
+            tombstones.Add(new LargePayloadTombstone(
+                PartitionId: 1,
+                InstanceKey: i,
+                PayloadId: i,
+                Token: $"blob:v2:https://acct.blob.core.windows.net/c/{i}",
+                Revision: 1));
+        }
+
+        Mock<TaskOrchestrationContext> context = new();
+        Mock<TaskOrchestrationEntityFeature> entities = new();
+
+        context.Setup(c => c.Entities).Returns(entities.Object);
+        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
+        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // Active on the first read, stopped on the second, so the perpetual loop runs exactly one cycle.
+        entities
+            .SetupSequence(e => e.CallEntityAsync<BlobPurgeJobState?>(
+                It.IsAny<EntityInstanceId>(),
+                nameof(BlobPurgeJob.Get),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = batchSize })
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
+
+        entities
+            .Setup(e => e.CallEntityAsync(
+                It.IsAny<EntityInstanceId>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        context
+            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
+                It.Is<TaskName>(n => n.Name == nameof(GetLargePayloadTombstonesActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(tombstones);
+
+        int chunkActivityCalls = 0;
+        int tokensDeleted = 0;
+        context
+            .Setup(c => c.CallActivityAsync<List<BlobPurgeOutcome>>(
+                It.Is<TaskName>(n => n.Name == nameof(DeleteExternalBlobActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                List<string> chunk = (List<string>)input!;
+                Interlocked.Increment(ref chunkActivityCalls);
+                Interlocked.Add(ref tokensDeleted, chunk.Count);
+
+                // One outcome per token, positionally aligned - the shape the orchestrator asserts before zipping.
+                List<BlobPurgeOutcome> outcomes = new(chunk.Count);
+                foreach (string _ in chunk)
+                {
+                    outcomes.Add(new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted));
+                }
+
+                return Task.FromResult(outcomes);
+            });
+
+        List<LargePayloadPurgeResult>? reported = null;
+        context
+            .Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ReportLargePayloadPurgeResultsActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => reported = (List<LargePayloadPurgeResult>)input!)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await new BlobPurgeJobOrchestrator().RunAsync(
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: batchSize));
+
+        // Assert - 20 chunk activities for the whole batch, not 1000; every token was still handled exactly once;
+        // and one result is reported per row so the backend hears about all 1000.
+        this.AssertNoCycleFailed();
+        chunkActivityCalls.Should().Be(20);
+        tokensDeleted.Should().Be(batchSize);
+        reported.Should().NotBeNull();
+        reported!.Should().HaveCount(batchSize);
+    }
+
     /// <summary>
     /// Guards against the whole test passing through the orchestrator's catch-all cycle handler, which would
     /// leave every observation empty and make the assertions vacuous.

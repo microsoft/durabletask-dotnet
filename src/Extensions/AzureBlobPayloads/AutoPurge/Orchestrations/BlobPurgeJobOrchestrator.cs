@@ -26,7 +26,18 @@ public sealed record BlobPurgeJobRunRequest(
 public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest, object?>
 {
     const int ContinueAsNewFrequency = 5;
-    const int MaxParallelDeletes = 32;
+
+    // Tombstones are deleted a chunk at a time: one activity call handles DeleteChunkSize tokens instead of a
+    // single token, which is what keeps orchestration history small. A full 1000-row cycle becomes 1000 / 50 =
+    // 20 activity calls (~40 history events) instead of 1000 calls (~2000 events) - a 50x reduction - and drains
+    // in ceil(20 / 4) = 5 waves instead of 32.
+    const int DeleteChunkSize = 50;
+
+    // How many chunk-delete activities run concurrently. TOTAL concurrent storage deletes are this times the
+    // activity's own MaxParallelDeletesPerChunk (8): 4 x 8 = 32, exactly the flat cap the per-token design used.
+    // The product is the budget - moving one factor without the other either starves throughput or multiplies
+    // into hundreds of concurrent storage calls.
+    const int MaxParallelChunkActivities = 4;
     static readonly TimeSpan IdleDelay = TimeSpan.FromMinutes(1);
     static readonly TimeSpan ErrorBackoff = TimeSpan.FromMinutes(1);
 
@@ -174,53 +185,82 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
     }
 
     static async Task DrainAsync(
-        List<Task<LargePayloadPurgeResult>> tasks, List<LargePayloadPurgeResult> results)
+        List<Task<List<LargePayloadPurgeResult>>> tasks, List<LargePayloadPurgeResult> results)
     {
-        LargePayloadPurgeResult[] completed = await Task.WhenAll(tasks);
-        results.AddRange(completed);
+        List<LargePayloadPurgeResult>[] completed = await Task.WhenAll(tasks);
+        foreach (List<LargePayloadPurgeResult> chunkResults in completed)
+        {
+            results.AddRange(chunkResults);
+        }
     }
 
     async Task<List<LargePayloadPurgeResult>> DeleteBatchAsync(
         TaskOrchestrationContext context, List<LargePayloadTombstone> tombstones)
     {
         List<LargePayloadPurgeResult> results = new(tombstones.Count);
-        List<Task<LargePayloadPurgeResult>> tasks = new();
+        List<Task<List<LargePayloadPurgeResult>>> inFlight = new();
 
-        foreach (LargePayloadTombstone tombstone in tombstones)
+        for (int start = 0; start < tombstones.Count; start += DeleteChunkSize)
         {
-            tasks.Add(this.DeleteOneAsync(context, tombstone));
+            int count = Math.Min(DeleteChunkSize, tombstones.Count - start);
+            List<LargePayloadTombstone> chunk = tombstones.GetRange(start, count);
+            inFlight.Add(this.DeleteChunkAsync(context, chunk));
 
-            if (tasks.Count >= MaxParallelDeletes)
+            if (inFlight.Count >= MaxParallelChunkActivities)
             {
-                await DrainAsync(tasks, results);
-                tasks.Clear();
+                await DrainAsync(inFlight, results);
+                inFlight.Clear();
             }
         }
 
-        if (tasks.Count > 0)
+        if (inFlight.Count > 0)
         {
-            await DrainAsync(tasks, results);
+            await DrainAsync(inFlight, results);
         }
 
         return results;
     }
 
-    async Task<LargePayloadPurgeResult> DeleteOneAsync(
-        TaskOrchestrationContext context, LargePayloadTombstone tombstone)
+    async Task<List<LargePayloadPurgeResult>> DeleteChunkAsync(
+        TaskOrchestrationContext context, List<LargePayloadTombstone> chunk)
     {
-        BlobPurgeOutcome outcome = await context.CallActivityAsync<BlobPurgeOutcome>(
+        List<string> tokens = new(chunk.Count);
+        foreach (LargePayloadTombstone tombstone in chunk)
+        {
+            tokens.Add(tombstone.Token);
+        }
+
+        List<BlobPurgeOutcome> outcomes = await context.CallActivityAsync<List<BlobPurgeOutcome>>(
             nameof(DeleteExternalBlobActivity),
-            tombstone.Token,
+            tokens,
             new TaskOptions(PurgeActivityRetryPolicy));
 
-        // The revision is echoed back unchanged so the backend can detect a tombstone that was rewritten while
-        // this attempt was in flight and ignore the stale result. Retry scheduling is the backend's job, so no
-        // next-attempt time is computed here.
-        return new LargePayloadPurgeResult(
-            tombstone.PartitionId,
-            tombstone.InstanceKey,
-            tombstone.PayloadId,
-            tombstone.Revision,
-            outcome.Disposition);
+        // The activity contract is one outcome per input token, positionally aligned. Assert that before zipping
+        // so a broken contract fails loudly here instead of silently pinning each disposition onto the wrong row
+        // - which would tell the backend to delete, retry, or quarantine the wrong payloads.
+        if (outcomes is null || outcomes.Count != chunk.Count)
+        {
+            throw new InvalidOperationException(
+                $"The blob delete activity returned {outcomes?.Count ?? 0} outcomes for a chunk of {chunk.Count} " +
+                "tokens; expected exactly one per token. Refusing to attribute dispositions to the wrong rows.");
+        }
+
+        List<LargePayloadPurgeResult> results = new(chunk.Count);
+        for (int i = 0; i < chunk.Count; i++)
+        {
+            LargePayloadTombstone tombstone = chunk[i];
+
+            // The revision is echoed back unchanged so the backend can detect a tombstone that was rewritten
+            // while this attempt was in flight and ignore the stale result. Retry scheduling is the backend's
+            // job, so no next-attempt time is computed here.
+            results.Add(new LargePayloadPurgeResult(
+                tombstone.PartitionId,
+                tombstone.InstanceKey,
+                tombstone.PayloadId,
+                tombstone.Revision,
+                outcomes[i].Disposition));
+        }
+
+        return results;
     }
 }

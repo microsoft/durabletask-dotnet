@@ -302,10 +302,12 @@ public sealed class BlobPayloadStore : PayloadStore
         // IncludeSnapshots removes the blob's snapshots along with the base blob, but it does NOT delete blob
         // *versions*: with versioning enabled, deleting the base blob turns the current version into a retained
         // previous version. Versions are deliberately not enumerated and deleted here - doing so still would not
-        // guarantee the bytes are reclaimed, because soft delete is a container-level policy that retains deleted
-        // content for its retention period regardless of how the delete was issued. Immediate reclamation is
-        // therefore unobtainable client-side and belongs to a lifecycle-management policy or the retention
-        // expiry, so Deleted means "accepted by storage", not "bytes reclaimed" (see PayloadDeleteOutcome.Deleted).
+        // guarantee the bytes are reclaimed, because blob soft delete is a storage-account-level policy that
+        // retains deleted content for its retention period regardless of how the delete was issued and regardless
+        // of which container the blob lives in. Immediate reclamation is therefore unobtainable client-side and
+        // belongs to an account lifecycle-management policy (whose rule can be scoped to the payload container's
+        // blob prefix) or the retention expiry, so Deleted means "accepted by storage", not "bytes reclaimed"
+        // (see PayloadDeleteOutcome.Deleted).
         Response<bool> deleted = await blob.DeleteIfExistsAsync(
             DeleteSnapshotsOption.IncludeSnapshots,
             conditions: new BlobRequestConditions { IfMatch = properties.ETag },

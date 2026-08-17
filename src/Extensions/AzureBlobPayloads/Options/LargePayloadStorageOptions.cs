@@ -134,11 +134,12 @@ public sealed class LargePayloadStorageOptions
     /// tokens makes newly-externalized payloads eligible.
     /// </para>
     /// <para>
-    /// When the payload container has blob versioning or soft delete enabled, auto-purge deletes the current
-    /// base blob, but retained previous versions and soft-deleted blobs continue to consume storage until a
-    /// lifecycle-management policy or the configured retention period reclaims them. No client-side delete can
-    /// guarantee immediate reclamation under those policies. Configure a lifecycle-management policy on the
-    /// payload container if immediate reclamation matters.
+    /// When the storage account holding the payload container has blob versioning or blob soft delete enabled,
+    /// auto-purge deletes the current base blob, but retained previous versions and soft-deleted blobs continue
+    /// to consume storage until a lifecycle-management policy or the configured retention period reclaims them.
+    /// Both settings are account-level, so a single container cannot opt out of them, and no client-side delete
+    /// can guarantee immediate reclamation under those policies. Configure an account lifecycle-management policy
+    /// with a rule scoped to the payload container's blob prefix if immediate reclamation matters.
     /// </para>
     /// </remarks>
     public bool AutoPurge { get; set; }

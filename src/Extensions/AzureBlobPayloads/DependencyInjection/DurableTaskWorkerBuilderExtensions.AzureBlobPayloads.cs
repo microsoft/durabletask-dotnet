@@ -17,6 +17,14 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Extension methods to enable externalized payloads using Azure Blob Storage for Durable Task Worker.
 /// </summary>
+/// <remarks>
+/// Externalized payloads are configured per host, not per named builder. The <c>PayloadStore</c> and the
+/// purge <c>TaskHubSidecarServiceClient</c> are registered as container-wide singletons, so the first builder
+/// in the host that calls <c>UseExternalizedPayloads</c> supplies the configuration that both of them use.
+/// Configuring multiple named workers in the same host with different storage accounts or different backends
+/// is therefore not supported: later builders silently share the first builder's registration. A single named
+/// worker, or several named workers that share one configuration, is fully supported.
+/// </remarks>
 public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 {
     /// <summary>
@@ -107,6 +115,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         // The purge activities talk to the backend over the worker's OWN transport, so a worker-only host
         // (which never registers a DurableTaskClient) can still run the job. This resolves the same CallInvoker
         // the worker itself uses, so the RPCs ride its channel and interceptor - no second connection.
+        // TryAddSingleton (rather than a keyed/named registration) is deliberate: the consumers -
+        // GetLargePayloadTombstonesActivity and ReportLargePayloadPurgeResultsActivity - are constructed from
+        // the plain IServiceProvider at dispatch with no worker name in scope, so a keyed registration would
+        // have no resolvable consumer. This is the per-host single-configuration constraint documented on the
+        // class remarks: in a multi-named-worker host the first builder's options win here. Do not "fix" this
+        // into keyed DI - without a worker-name-aware consumer there is nothing to resolve the keyed client.
         builder.Services.TryAddSingleton(sp =>
         {
             GrpcDurableTaskWorkerOptions options =

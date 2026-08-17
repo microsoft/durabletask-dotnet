@@ -18,6 +18,14 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Extension methods to enable externalized payloads using Azure Blob Storage for Durable Task Client.
 /// </summary>
+/// <remarks>
+/// Externalized payloads are configured per host, not per named builder. The <c>PayloadStore</c> is registered
+/// as a container-wide singleton (shared with the worker builder in the same host), so the first builder that
+/// calls <c>UseExternalizedPayloads</c> supplies the configuration the whole host uses. Configuring multiple
+/// named clients in the same host with different storage accounts or different backends is therefore not
+/// supported: later builders silently share the first builder's registration. A single named client, or
+/// several named clients that share one configuration, is fully supported.
+/// </remarks>
 public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 {
     /// <summary>

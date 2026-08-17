@@ -35,6 +35,10 @@ public abstract class PayloadStore
     /// Implementations must delete only objects they created; an object that carries no proof of the
     /// store's ownership must be left untouched and reported as
     /// <see cref="PayloadDeleteOutcome.NotStoreOwned"/>.
+    /// A <see cref="PayloadDeleteOutcome.Deleted"/> result means the store no longer references the object
+    /// and the underlying storage accepted the delete; it does not guarantee that the bytes have been
+    /// reclaimed. Storage-level retention features such as versioning, soft delete, or retention policies
+    /// may keep the content for a policy-defined period, and implementations are not expected to defeat them.
     /// </remarks>
     /// <param name="token">The opaque reference token.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

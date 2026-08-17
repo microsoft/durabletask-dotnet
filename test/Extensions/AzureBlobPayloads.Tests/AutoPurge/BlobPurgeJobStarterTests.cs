@@ -172,6 +172,61 @@ public class BlobPurgeJobStarterTests
     }
 
     [Fact]
+    public async Task StartAsync_WhenAutoPurgeDisabled_KeepsReconciling()
+    {
+        // Arrange - the disable path used to signal once and return, which does not converge during a rolling
+        // deployment: AutoPurge is per-host config, so a peer still on the enabled path re-creates the job every
+        // interval, and a disabled host that stopped it a single time would let it come straight back. The
+        // disable path has to keep reconciling on the same interval, exactly like the enabled path. A short
+        // interval rather than a fake clock; the test gates on the second read happening, never on time passing.
+        Mock<DurableEntityClient> entities = new("test");
+        TaskCompletionSource<bool> secondRead = new();
+        int reads = 0;
+        entities
+            .Setup(e => e.GetEntityAsync<BlobPurgeJobState>(
+                It.IsAny<EntityInstanceId>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                if (Interlocked.Increment(ref reads) >= 2)
+                {
+                    secondRead.TrySetResult(true);
+                }
+
+                return Task.FromResult<EntityMetadata<BlobPurgeJobState>?>(MetadataFor(BlobPurgeJobStatus.Active));
+            });
+        entities
+            .Setup(e => e.SignalEntityAsync(
+                It.IsAny<EntityInstanceId>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<SignalEntityOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        Mock<DurableTaskClient> client = new("test");
+        client.Setup(c => c.Entities).Returns(entities.Object);
+        Mock<IDurableTaskClientProvider> provider = new();
+        provider.Setup(p => p.GetClient(It.IsAny<string>())).Returns(client.Object);
+
+        BlobPurgeJobStarter starter = new(
+            provider.Object,
+            new BlobPayloadStore(new LargePayloadStorageOptions("UseDevelopmentStorage=true")),
+            OptionsFor(new LargePayloadStorageOptions("UseDevelopmentStorage=true") { AutoPurge = false }),
+            "test",
+            new TestLogger<BlobPurgeJobStarter>());
+        starter.ReconcileInterval = TimeSpan.FromMilliseconds(10);
+
+        // Act
+        await starter.StartAsync(CancellationToken.None);
+        Task completed = await Task.WhenAny(secondRead.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        await starter.StopAsync(CancellationToken.None);
+
+        // Assert - a loop that returned after the first pass leaves this waiting until the timeout fires.
+        completed.Should().BeSameAs(
+            secondRead.Task, "the disable path must keep reconciling rather than stopping after one pass");
+    }
+
+    [Fact]
     public async Task EnsureJob_SchedulesBridge_DedupingOnlyPendingAndRunning()
     {
         // Arrange - the dedupe list is an inverted whitelist: the wire policy is (all statuses - dedupe), so a

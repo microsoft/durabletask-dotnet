@@ -17,7 +17,9 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// startup, once options are fully resolved: it ensures the job exists when auto-purge is enabled, stops a
 /// running job when it is disabled, and no-ops with an error log when the registered store cannot delete. It
 /// never blocks host startup - the work runs on a background task that retries until the backend is reachable
-/// and then, on the enabled path, keeps reconciling on a fixed interval for the lifetime of the process.
+/// and then keeps reconciling on a fixed interval for the lifetime of the process. Both paths reconcile: the
+/// disabled path must also repeat, because AutoPurge is per-host config and a peer still on the enabled path
+/// keeps re-creating the job, so a disabled host that signalled Stop only once would never converge the fleet.
 /// The job is a per-task-hub singleton, so racing client processes converge on the same result.
 /// </summary>
 sealed class BlobPurgeJobStarter : IHostedService, IDisposable
@@ -97,7 +99,9 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
         {
             // Turning auto-purge off has to reach the backend to mean anything. The job is a perpetual
             // orchestrator owned by the task hub, not by this process, so a job created while the flag was on
-            // keeps deleting blobs forever no matter how many hosts start with it off. Stop a running one.
+            // keeps deleting blobs forever no matter how many hosts start with it off. Stop a running one - and
+            // keep reconciling, so a peer still on the enabled path cannot quietly re-create it and leave the
+            // fleet non-convergent; see SignalJobStopAsync.
             //
             // The store gate below deliberately does NOT apply to this path. Stopping a job requires no ability
             // to delete anything, and a user who has switched to a store that cannot delete is precisely
@@ -317,6 +321,8 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            TimeSpan delay;
+
             try
             {
                 // Resolved inside this loop's try, not in StartAsync's body. A builder name that matches no
@@ -381,23 +387,33 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
                     this.logger.BlobPurgeJobStateUnknown(ex);
                 }
 
-                if (!stopNeeded)
+                if (stopNeeded)
                 {
-                    return;
+                    // Signalled rather than driven through the bridge orchestration: unlike Create, Stop needs no
+                    // fixed-instance dedupe. It is idempotent in the entity, so concurrent hosts converge on the
+                    // same state and a repeat costs nothing beyond the signal itself.
+                    await entities.SignalEntityAsync(
+                        this.entityId,
+                        nameof(BlobPurgeJob.Stop),
+                        null,
+                        null,
+                        cancellationToken);
+
+                    this.logger.BlobPurgeJobStopRequested();
                 }
 
-                // Signalled rather than driven through the bridge orchestration: unlike Create, Stop needs no
-                // fixed-instance dedupe. It is idempotent in the entity, so concurrent hosts converge on the
-                // same state and a repeat costs nothing beyond the signal itself.
-                await entities.SignalEntityAsync(
-                    this.entityId,
-                    nameof(BlobPurgeJob.Stop),
-                    null,
-                    null,
-                    cancellationToken);
-
-                this.logger.BlobPurgeJobStopRequested();
-                return;
+                // Reconcile on a fixed interval rather than returning after one pass, mirroring the enabled path.
+                // AutoPurge is per-host config, so during a rolling deployment a replica still on the enabled path
+                // re-issues Create every ReconcileInterval and pulls the job back to Active; a disabled replica
+                // that signalled Stop once and returned would let that happen unopposed, and after the whole fleet
+                // is configured off the job could still be Active - it would never converge. Repeating the pass
+                // means that once nothing re-creates the job, the next read here finds it not Active, logs
+                // BlobPurgeJobNotRunning and signals nothing. This does not spin on shutdown: the loop is governed
+                // by cancellationToken exactly like the enabled path, so StopAsync/Dispose end it. Steady-state
+                // cost is one read-only GetEntityAsync per interval - strictly cheaper than the enabled path, which
+                // also schedules an orchestration - and BlobPurgeJob.Stop's guard absorbs a repeat signal as a
+                // no-op that does not touch LastModifiedAt.
+                delay = this.ReconcileInterval;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -406,14 +422,18 @@ sealed class BlobPurgeJobStarter : IHostedService, IDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {
                 this.logger.BlobPurgeStarterRetry(ex);
-                try
-                {
-                    await Task.Delay(RetryDelay, cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
+                delay = RetryDelay;
+            }
+
+            try
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutdown. This is the only thing that ends the loop on the success path, which is why
+                // StopAsync can cancel a pass that is parked here instead of waiting out the interval.
+                return;
             }
         }
     }

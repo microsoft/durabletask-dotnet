@@ -549,30 +549,6 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
             $"{this.GetType()} does not support listing orchestration instance IDs filtered by completed time.");
     }
 
-    /// <summary>
-    /// Gets a batch of due large-payload tombstones whose backing blobs a credentialed caller must delete.
-    /// </summary>
-    /// <param name="limit">The maximum number of tombstones to request.</param>
-    /// <param name="cancellation">The cancellation token.</param>
-    /// <returns>The batch of tombstones whose blobs should be deleted.</returns>
-    /// <exception cref="NotSupportedException">Thrown if this implementation does not support the operation.</exception>
-    public virtual Task<List<LargePayloadTombstone>> GetLargePayloadTombstonesAsync(
-        int limit, CancellationToken cancellation = default)
-        => throw new NotSupportedException($"{this.GetType()} does not support retrieving large-payload tombstones.");
-
-    /// <summary>
-    /// Reports the outcome of each attempted large-payload blob deletion so the backend can resolve,
-    /// reschedule, or quarantine the corresponding tombstones. Every attempted row is reported, not just the
-    /// successful ones; the backend owns retry scheduling.
-    /// </summary>
-    /// <param name="results">The per-row outcomes of the attempted deletions.</param>
-    /// <param name="cancellation">The cancellation token.</param>
-    /// <returns>A task that completes when the outcomes have been recorded.</returns>
-    /// <exception cref="NotSupportedException">Thrown if this implementation does not support the operation.</exception>
-    public virtual Task ReportLargePayloadPurgeResultsAsync(
-        IEnumerable<LargePayloadPurgeResult> results, CancellationToken cancellation = default)
-        => throw new NotSupportedException($"{this.GetType()} does not support reporting large-payload purge results.");
-
     // TODO: Create task hub
 
     // TODO: Delete task hub

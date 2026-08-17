@@ -43,9 +43,6 @@ static partial class Logs
     [LoggerMessage(EventId = 820, Level = LogLevel.Warning, Message = "Blob payload auto-purge cycle for job '{jobId}' failed; backing off before retrying so the job keeps running.")]
     public static partial void BlobPurgeCycleFailed(this ILogger logger, Exception exception, string? jobId);
 
-    [LoggerMessage(EventId = 821, Level = LogLevel.Warning, Message = "An externalized payload blob does not carry this store's ownership marker, so it was left untouched; the tombstone is still resolved. This is expected for payloads written before the marker shipped, and for blobs the store never created whose token text matches the payload token grammar.")]
-    public static partial void BlobPurgeBlobNotStoreOwned(this ILogger logger);
-
     [LoggerMessage(EventId = 822, Level = LogLevel.Debug, Message = "Blob payload auto-purge job '{jobId}' is already stopped; ignoring the stop request.")]
     public static partial void BlobPurgeJobAlreadyStopped(this ILogger logger, string? jobId);
 

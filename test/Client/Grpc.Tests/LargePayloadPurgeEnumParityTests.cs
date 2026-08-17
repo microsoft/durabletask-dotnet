@@ -8,7 +8,7 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask.Client.Grpc.Tests;
 
 /// <summary>
-/// <see cref="GrpcDurableTaskClient.ReportLargePayloadPurgeResultsAsync"/> maps the managed purge disposition
+/// <c>ReportLargePayloadPurgeResultsActivity</c> maps the managed purge disposition
 /// onto its protobuf counterpart by numeric value rather than by name, which is only correct while the two
 /// sides agree on every value. A silent drift would not fail to compile; it would send the backend a different
 /// disposition than the worker decided and delete or quarantine the wrong rows. These tests pin the mapping.
@@ -57,7 +57,7 @@ public class LargePayloadPurgeEnumParityTests
         // Assert
         enumMembers.Should().BeEmpty(
             "an enum on an inbound type invalidates the numeric enum cast in " +
-            "GrpcDurableTaskClient.ReportLargePayloadPurgeResultsAsync. The SDK would map a value chosen by the " +
+            "ReportLargePayloadPurgeResultsActivity. The SDK would map a value chosen by the " +
             "backend - including one a newer backend added that this SDK does not know - onto a managed member " +
             "by raw numeric value, silently mis-dispositioning rows. Map inbound enums explicitly instead, with " +
             "a switch that handles unknown values");

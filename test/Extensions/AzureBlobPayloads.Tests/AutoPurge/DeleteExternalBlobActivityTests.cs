@@ -184,7 +184,7 @@ public class DeleteExternalBlobActivityTests
     }
 
     [Fact]
-    public async Task RunAsync_WhenBlobNotStoreOwned_ResolvesTombstoneWithoutDeleting()
+    public async Task RunAsync_WhenBlobNotStoreOwned_Quarantines()
     {
         // Arrange - the blob exists but carries no ownership marker, so the store left it untouched.
         Mock<PayloadStore> store = new();
@@ -196,11 +196,12 @@ public class DeleteExternalBlobActivityTests
         // Act
         BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token]))[0];
 
-        // Assert - the tombstone is still resolved: a blob the store does not own is not the store's to delete,
-        // and re-serving the row forever would never make it deletable. The reported result is now identical to
-        // an ordinary delete, so the log is the only thing that records the difference.
-        outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Deleted);
-        logger.Logs.Should().ContainSingle(l => l.Message.Contains("ownership marker"));
+        // Assert - quarantined, not discarded as a success. The ownership marker is new in this PR, so every v2
+        // blob written before it shipped reaches this branch on upgrade; reporting Deleted would drop the
+        // tombstone row and orphan the blob permanently. Quarantine preserves the row and its token as evidence,
+        // and the logged cause is the only record of why the row reached that disposition.
+        outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
+        logger.Logs.Should().ContainSingle(l => l.Message.Contains("NotStoreOwned"));
     }
 
     [Fact]

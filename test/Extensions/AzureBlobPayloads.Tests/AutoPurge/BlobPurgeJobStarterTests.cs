@@ -425,9 +425,10 @@ public class BlobPurgeJobStarterTests
             "test",
             new TestLogger<BlobPurgeJobStarter>());
 
-        // The work runs on a background task, so wait for the read before shutting down. StopAsync then waits
-        // for that task to finish, which makes the observation deterministic: by the time it returns the
-        // starter has either signalled or decided not to, rather than being timed out mid-decision.
+        // The work runs on a background task, so wait for the read before shutting down. The loop is perpetual,
+        // so it no longer ends on its own: pass one reads and then signals or decides not to before parking in
+        // the reconcile delay. StopAsync cancels that parked wait and awaits the task, so by the time it returns
+        // pass one's decision has completed and is observable, rather than being sampled mid-decision.
         await starter.StartAsync(CancellationToken.None);
         await Task.WhenAny(readCalled.Task, Task.Delay(TimeSpan.FromSeconds(30)));
         await starter.StopAsync(CancellationToken.None);

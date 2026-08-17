@@ -226,6 +226,94 @@ public class BlobPurgeJobOrchestratorTests
         reported!.Should().HaveCount(batchSize);
     }
 
+    [Fact]
+    public async Task RunAsync_WhenFetchReturnsNoTombstones_IdlesWithoutDeletingOrReporting()
+    {
+        // Arrange - an Active job whose fetch comes back empty. Nothing is due, so the cycle must short-circuit
+        // to the idle timer and touch neither the delete activity nor the report activity: an empty backend
+        // response has to cost a wait and nothing else, or every quiet worker would hammer storage and the
+        // backend on every tick.
+        Mock<TaskOrchestrationContext> context = this.ContextFor(
+            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250 });
+
+        // Act
+        await new BlobPurgeJobOrchestrator().RunAsync(
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+
+        // Assert - the fetch ran (recording the batch size) and the idle timer was created, but neither the
+        // delete nor the report activity was ever invoked on the empty batch.
+        this.AssertNoCycleFailed();
+        this.requested.Should().Equal(250);
+        context.Verify(
+            c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+        context.Verify(
+            c => c.CallActivityAsync<List<BlobPurgeOutcome>>(
+                It.Is<TaskName>(n => n.Name == nameof(DeleteExternalBlobActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()),
+            Times.Never);
+        context.Verify(
+            c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ReportLargePayloadPurgeResultsActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RunAsync_ContinuesAsNewOnlyAfterConfiguredCycles()
+    {
+        // Arrange - a job that stays Active with nothing to purge, so the continue-as-new guard is the ONLY
+        // thing that can end the perpetual loop. That guard is the sole bound on history growth here: a fresh
+        // run must process exactly ContinueAsNewFrequency cycles and then continue-as-new with a reset count.
+        // Firing early would reset the job's progress window too often; never firing would let the orchestration
+        // history grow without bound until the instance died days later.
+        Mock<TaskOrchestrationContext> context = new();
+        Mock<TaskOrchestrationEntityFeature> entities = new();
+
+        context.Setup(c => c.Entities).Returns(entities.Object);
+        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
+        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // Always Active: the job never stops, so continue-as-new is the only exit from the loop.
+        entities
+            .Setup(e => e.CallEntityAsync<BlobPurgeJobState?>(
+                It.IsAny<EntityInstanceId>(),
+                nameof(BlobPurgeJob.Get),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250 });
+
+        context
+            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
+                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => this.requested.Add((int)input!))
+            .ReturnsAsync([]);
+
+        BlobPurgeJobRunRequest? restarted = null;
+        context
+            .Setup(c => c.ContinueAsNew(It.IsAny<object?>(), It.IsAny<bool>()))
+            .Callback<object?, bool>((input, _) => restarted = (BlobPurgeJobRunRequest)input!);
+
+        // Act - start fresh (zero processed cycles).
+        await new BlobPurgeJobOrchestrator().RunAsync(
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 250));
+
+        // Assert - five cycles ran (one empty fetch each) before a single continue-as-new that reset the cycle
+        // count while carrying the same job identity and batch size forward. The five recorded fetches are what
+        // prove it did not continue-as-new early; the single ContinueAsNew is what proves it does not grow the
+        // history forever.
+        this.AssertNoCycleFailed();
+        this.requested.Should().HaveCount(5);
+        context.Verify(c => c.ContinueAsNew(It.IsAny<object?>(), It.IsAny<bool>()), Times.Once);
+        restarted.Should().NotBeNull();
+        restarted!.JobEntityId.Should().Be(JobEntityId);
+        restarted.PurgeBatchSize.Should().Be(250);
+        restarted.ProcessedCycles.Should().Be(0);
+    }
+
     /// <summary>
     /// Guards against the whole test passing through the orchestrator's catch-all cycle handler, which would
     /// leave every observation empty and make the assertions vacuous.

@@ -5,6 +5,7 @@ using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
@@ -228,5 +229,150 @@ public class UseExternalizedPayloadsTests
         // Assert - both must resolve without a client in the container. This throws on the pre-fix code.
         constructGet.Should().NotThrow();
         constructReport.Should().NotThrow();
+    }
+
+    [Fact]
+    public void UseExternalizedPayloads_NamedClientBuilder_ResolvesEverythingUnderThatName()
+    {
+        // Arrange - every other test in this file drives builder.Name == string.Empty, so the entire named code
+        // path had no coverage: the storage options, the client's entity-support flip, the intercepted gRPC
+        // client options and the purge starter are ALL keyed on builder.Name. Drive a non-empty name end to end.
+        const string name = "client-hub";
+        ServiceCollection services = new();
+        services.AddSingleton<ILogger<BlobPurgeJobStarter>>(NullLogger<BlobPurgeJobStarter>.Instance);
+        services.AddSingleton(Mock.Of<IDurableTaskClientProvider>());
+        services.AddOptions<GrpcDurableTaskClientOptions>(name)
+            .Configure(o => o.CallInvoker = Mock.Of<CallInvoker>());
+
+        Mock<IDurableTaskClientBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(name);
+
+        // Act
+        builder.Object.UseExternalizedPayloads(options =>
+        {
+            options.ConnectionString = "UseDevelopmentStorage=true";
+            options.AutoPurge = true;
+        });
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Assert - the storage options, the entity-support flip and the intercepted gRPC client options all
+        // materialize under the builder name, and the starter and store resolve from the built provider.
+        provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(name)
+            .AutoPurge.Should().BeTrue();
+        provider.GetRequiredService<IOptionsMonitor<DurableTaskClientOptions>>().Get(name)
+            .EnableEntitySupport.Should().BeTrue();
+        provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>().Get(name)
+            .CallInvoker.Should().NotBeNull();
+        provider.GetServices<IHostedService>().OfType<BlobPurgeJobStarter>().Should().ContainSingle();
+        provider.GetRequiredService<PayloadStore>().Should().BeOfType<BlobPayloadStore>();
+    }
+
+    [Fact]
+    public void UseExternalizedPayloads_NamedWorkerBuilder_ResolvesEverythingUnderThatName()
+    {
+        // Arrange - the worker mirror of the named-client gap: the storage options, the worker's entity-support
+        // flip, the resolved auto-purge handshake flag and the sidecar client the activities inject are all keyed
+        // on builder.Name, and every existing worker test uses the empty name. Drive a non-empty name.
+        const string name = "worker-hub";
+        ServiceCollection services = new();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddOptions<GrpcDurableTaskWorkerOptions>(name)
+            .Configure(o => o.CallInvoker = Mock.Of<CallInvoker>());
+
+        Mock<IDurableTaskWorkerBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(name);
+
+        // Act
+        builder.Object.UseExternalizedPayloads(options =>
+        {
+            options.ConnectionString = "UseDevelopmentStorage=true";
+            options.AutoPurge = true;
+        });
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Assert - all three option sets resolve under the name, the store is blob-backed, and both purge
+        // activities construct through the exact reflection path DurableTaskRegistry uses at dispatch.
+        provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(name)
+            .AutoPurge.Should().BeTrue();
+        provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>().Get(name)
+            .EnableEntitySupport.Should().BeTrue();
+        provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(name)
+            .LargePayloadAutoPurgeEnabled.Should().BeTrue();
+        provider.GetRequiredService<PayloadStore>().Should().BeOfType<BlobPayloadStore>();
+
+        Action constructGet = () =>
+            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(GetLargePayloadTombstonesActivity));
+        Action constructReport = () =>
+            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(ReportLargePayloadPurgeResultsActivity));
+        constructGet.Should().NotThrow();
+        constructReport.Should().NotThrow();
+    }
+
+    [Fact]
+    public void UseExternalizedPayloads_NamedClientBuilder_DoesNotLeakOptionsToOtherNames()
+    {
+        // Arrange - configure ONLY the "client-hub" name. This is the assertion with teeth: a happy-path named
+        // test still passes even if every .Get(builder.Name) were hard-coded to Options.DefaultName, because the
+        // requested name and the default would resolve to the same populated instance. Asserting that OTHER names
+        // stay at their defaults is what actually pins the configuration to builder.Name.
+        const string name = "client-hub";
+        ServiceCollection services = new();
+        Mock<IDurableTaskClientBuilder> builder = new();
+        builder.Setup(b => b.Services).Returns(services);
+        builder.Setup(b => b.Name).Returns(name);
+
+        // Act
+        builder.Object.UseExternalizedPayloads(options =>
+        {
+            options.ConnectionString = "UseDevelopmentStorage=true";
+            options.AutoPurge = true;
+        });
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<LargePayloadStorageOptions> monitor =
+            provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>();
+
+        // Assert - neither a different name nor the default name observes "client-hub"'s configuration.
+        monitor.Get("other-hub").AutoPurge.Should().BeFalse();
+        monitor.Get("other-hub").ConnectionString.Should().NotBe("UseDevelopmentStorage=true");
+        monitor.Get(string.Empty).AutoPurge.Should().BeFalse();
+        monitor.Get(string.Empty).ConnectionString.Should().NotBe("UseDevelopmentStorage=true");
+    }
+
+    [Fact]
+    public async Task UseExternalizedPayloads_ClientAndWorkerInOneHost_ShareOneStoreAndOneStarter()
+    {
+        // Arrange - the combined "client triggers, worker executes" host: both AddDurableTaskClient and
+        // AddDurableTaskWorker call UseExternalizedPayloads in one ServiceCollection. PayloadStore is registered
+        // with TryAdd on both sides, so the container must hold exactly one; and only the client registers the
+        // purge starter, so there must be exactly one of those too - not one per builder.
+        ServiceCollection services = new();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddDurableTaskClient(builder =>
+        {
+            builder.UseGrpc(options => options.CallInvoker = Mock.Of<CallInvoker>());
+            builder.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true");
+        });
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.UseGrpc(options => options.CallInvoker = Mock.Of<CallInvoker>());
+            builder.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true");
+        });
+
+        // AddDurableTaskClient registers a ClientContainer that is IAsyncDisposable-only, so the provider must be
+        // disposed asynchronously.
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Assert - one shared store, one starter (client-registered), and the worker's purge activity still
+        // constructs in the combined container.
+        provider.GetServices<PayloadStore>().Should().ContainSingle()
+            .Which.Should().BeOfType<BlobPayloadStore>();
+        provider.GetServices<IHostedService>().OfType<BlobPurgeJobStarter>().Should().ContainSingle();
+
+        Action constructActivity = () =>
+            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(GetLargePayloadTombstonesActivity));
+        constructActivity.Should().NotThrow();
     }
 }

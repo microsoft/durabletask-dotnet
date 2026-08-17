@@ -27,10 +27,10 @@ internal sealed class GetLargePayloadTombstonesActivity(
     /// <inheritdoc/>
     public override async Task<List<LargePayloadTombstone>> RunAsync(TaskActivityContext context, int input)
     {
-        if (input <= 0 || input > 1000)
+        if (input <= 0 || input > LargePayloadTombstone.MaxRequestLimit)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(input), input, "Limit must be greater than 0 and less than or equal to 1000.");
+                nameof(input), input, $"Limit must be greater than 0 and less than or equal to {LargePayloadTombstone.MaxRequestLimit}.");
         }
 
         P.GetLargePayloadTombstonesResponse response;

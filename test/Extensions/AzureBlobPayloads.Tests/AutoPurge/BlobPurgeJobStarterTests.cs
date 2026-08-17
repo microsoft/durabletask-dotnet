@@ -79,7 +79,7 @@ public class BlobPurgeJobStarterTests
         // Assert
         run.Signal.Should().NotBeNull("the disable path must tell a running job to stop");
         run.Signal!.Value.Id.Should().Be(new EntityInstanceId(nameof(BlobPurgeJob), BlobPurgeConstants.JobId));
-        run.Signal.Value.Operation.Should().Be(nameof(BlobPurgeJob.Stop));
+        run.Signal!.Value.Operation.Should().Be(nameof(BlobPurgeJob.Stop));
     }
 
     [Fact]

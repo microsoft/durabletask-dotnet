@@ -125,12 +125,21 @@ public sealed class LargePayloadStorageOptions
     /// Defaults to <c>false</c> (opt-in).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Auto-purge reclaims only blobs referenced by self-describing <c>blob:v2:</c> tokens. Payloads written by
     /// SDK versions that emitted legacy <c>blob:v1:</c> tokens are not reclaimed, because a v1 token identifies
     /// the container by name only and not the storage account, so the delete cannot be verified. Their backing
     /// blobs remain in storage exactly as they did before auto-purge existed - this is not a new leak introduced
     /// by auto-purge - and the backend removes their rows normally. Upgrading to an SDK version that writes v2
     /// tokens makes newly-externalized payloads eligible.
+    /// </para>
+    /// <para>
+    /// When the payload container has blob versioning or soft delete enabled, auto-purge deletes the current
+    /// base blob, but retained previous versions and soft-deleted blobs continue to consume storage until a
+    /// lifecycle-management policy or the configured retention period reclaims them. No client-side delete can
+    /// guarantee immediate reclamation under those policies. Configure a lifecycle-management policy on the
+    /// payload container if immediate reclamation matters.
+    /// </para>
     /// </remarks>
     public bool AutoPurge { get; set; }
 

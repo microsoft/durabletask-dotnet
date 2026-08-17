@@ -20,4 +20,13 @@ namespace Microsoft.DurableTask.Client;
 /// a per-row lease.
 /// </param>
 public sealed record LargePayloadTombstone(
-    int PartitionId, long InstanceKey, long PayloadId, string Token, long Revision);
+    int PartitionId, long InstanceKey, long PayloadId, string Token, long Revision)
+{
+    /// <summary>
+    /// The maximum number of tombstones a single <c>GetLargePayloadTombstones</c> request may ask for. This is
+    /// the backend-imposed ceiling on the request limit - the backend rejects requests above it. Validators that
+    /// bound a caller-supplied limit compare against this shared value rather than a hard-coded literal so the
+    /// bound cannot drift between the client and the auto-purge extension.
+    /// </summary>
+    public const int MaxRequestLimit = 1000;
+}

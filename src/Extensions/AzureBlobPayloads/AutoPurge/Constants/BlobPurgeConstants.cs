@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Client;
+
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
@@ -21,10 +23,11 @@ static class BlobPurgeConstants
     public const int DefaultBatchSize = 500;
 
     /// <summary>
-    /// The maximum batch size the auto-purge job may request per cycle. Mirrors the gRPC
-    /// GetLargePayloadTombstones contract, which rejects limits greater than 1000.
+    /// The maximum batch size the auto-purge job may request per cycle. Delegates to
+    /// <see cref="LargePayloadTombstone.MaxRequestLimit"/>, the single authority for the gRPC
+    /// GetLargePayloadTombstones contract bound, so the two cannot drift.
     /// </summary>
-    public const int MaxBatchSize = 1000;
+    public const int MaxBatchSize = LargePayloadTombstone.MaxRequestLimit;
 
     /// <summary>
     /// The fixed instance ID of the client-to-entity bridge orchestration the starter schedules to ensure the

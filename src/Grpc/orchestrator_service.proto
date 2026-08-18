@@ -864,9 +864,8 @@ enum LargePayloadPurgeDisposition {
     LARGE_PAYLOAD_PURGE_DISPOSITION_UNSPECIFIED = 0;
 
     // Terminal success: the tombstone is resolved and the backend deletes it. Covers the blob being
-    // deleted, the blob already being absent, and the blob being deliberately left in place because
-    // the payload store does not own it. All three are terminal because none of them can be
-    // improved by trying again.
+    // deleted and the blob already being absent. Both are terminal because neither can be improved by
+    // trying again.
     LARGE_PAYLOAD_PURGE_DISPOSITION_DELETED = 1;
 
     // The failure may self-heal, so the row stays pending and the backend sets the next attempt.

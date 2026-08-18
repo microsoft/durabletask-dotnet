@@ -15,8 +15,8 @@ public enum LargePayloadPurgeDisposition
     Unspecified = 0,
 
     /// <summary>
-    /// Terminal success. The blob was deleted, was already absent, or was deliberately left in place because
-    /// it is not owned by the payload store. The backend deletes the tombstone in all three cases.
+    /// Terminal success. The blob was deleted or was already absent. The backend deletes the tombstone in
+    /// both cases.
     /// </summary>
     Deleted = 1,
 

@@ -288,9 +288,8 @@ public sealed class BlobPayloadStore : PayloadStore
 
         if (!HasOwnershipMarker(properties.Metadata))
         {
-            // Positive evidence that the blob is customer-owned: leave it untouched. A blob this store never
-            // wrote is not this store's to delete, so this is not proof of deletion; the caller decides how to
-            // dispose of the payload reference.
+            // Positive evidence that the blob is customer-owned: leave it untouched. The caller still resolves
+            // the payload reference, because a blob this store never wrote is not this store's to delete.
             return PayloadDeleteOutcome.NotStoreOwned;
         }
 

@@ -24,9 +24,8 @@ public enum PayloadDeleteOutcome
 
     /// <summary>
     /// The backing object exists but does not carry the store's ownership marker, so the store did not
-    /// create it and left it untouched. Because an object the store never wrote is not the store's to
-    /// delete, this outcome is not proof that the object was deleted; the caller decides how to dispose
-    /// of the reference.
+    /// create it and left it untouched. The payload reference is still resolved, because an object the
+    /// store never wrote is not the store's to delete.
     /// </summary>
     NotStoreOwned,
 }

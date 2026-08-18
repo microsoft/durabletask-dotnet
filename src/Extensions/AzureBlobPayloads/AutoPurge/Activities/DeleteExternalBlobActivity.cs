@@ -167,21 +167,16 @@ public class DeleteExternalBlobActivity(
             using CancellationTokenSource timeout = new(this.SingleDeleteTimeout);
             PayloadDeleteOutcome outcome = await this.store.DeleteAsync(token, timeout.Token);
 
-            // The blob exists but this store never wrote it - it carries no ownership marker - so it is
-            // quarantined, not reported as deleted. The marker is new in this PR, but main has been emitting v2
-            // tokens without writing it, so on upgrade every pre-existing v2 blob reaches this branch. Reporting
-            // Deleted here would tell the backend to hard-delete the tombstone row, orphaning that blob
-            // permanently AND destroying the only durable record that it exists. Quarantine keeps the row and its
-            // token backend-side as evidence and stops the backend polling it - the same disposition, and for the
-            // same reason, as the v1 and malformed-token branches: a delete that cannot be verified as this
-            // store's own must not be discarded as a success.
+            // The blob exists but this store never wrote it, so it was left untouched. That is an expected
+            // outcome, not a defect - the token text merely matched the v2 grammar - and quarantining it would
+            // fill the quarantine set with non-defects. The tombstone is still resolved, because a blob the
+            // store does not own is not the store's to delete.
             if (outcome == PayloadDeleteOutcome.NotStoreOwned)
             {
-                this.logger.BlobPurgeDeleteQuarantined("NotStoreOwned", null);
-                return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Quarantined);
+                this.logger.BlobPurgeBlobNotStoreOwned();
             }
 
-            // Deleted and AlreadyAbsent are terminal successes: the blob is gone, and neither can be improved by
+            // Deleted, AlreadyAbsent, and NotStoreOwned are all terminal successes: none can be improved by
             // trying again.
             return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted);
         }

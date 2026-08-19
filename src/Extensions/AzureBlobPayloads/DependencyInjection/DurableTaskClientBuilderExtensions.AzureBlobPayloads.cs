@@ -1,10 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
-using Microsoft.DurableTask.Client.Grpc.Internal;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -38,11 +36,10 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
 
-                // Register a decorator rather than moving Channel onto an intercepted CallInvoker.
+                // Register an interceptor rather than moving Channel onto an intercepted CallInvoker.
                 // Clearing Channel would disable the client's gRPC channel recreation, and requiring a
                 // pre-built Channel/CallInvoker would rule out the Address-only configuration.
-                opt.SetCallInvokerDecorator(
-                    invoker => invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts)));
+                opt.Interceptors.Add(new AzureBlobPayloadsSideCarInterceptor(store, opts));
             });
 
         return builder;

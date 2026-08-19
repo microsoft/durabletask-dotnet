@@ -1,16 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
-using Microsoft.DurableTask.Client.Grpc.Internal;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
-using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -20,9 +20,11 @@ namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests;
 /// Verifies that enabling externalized payloads composes with the gRPC transport options instead of
 /// replacing them. Previously the extension moved <c>Channel</c> onto an intercepted <c>CallInvoker</c>
 /// and nulled <c>Channel</c>, which silently disabled channel recreation on both the worker and the
-/// client, and made the <c>Address</c>-only setup unusable.
+/// client, and made the <c>Address</c>-only setup unusable. It now registers an interceptor on the
+/// supported <c>Interceptors</c> collection, which the worker and client apply to every invoker they
+/// build.
 /// </summary>
-public class ExternalizedPayloadsCallInvokerDecoratorTests
+public class ExternalizedPayloadsInterceptorTests
 {
     static readonly Marshaller<P.CreateInstanceRequest> RequestMarshaller = Marshallers.Create(
         r => r.ToByteArray(), P.CreateInstanceRequest.Parser.ParseFrom);
@@ -51,6 +53,7 @@ public class ExternalizedPayloadsCallInvokerDecoratorTests
 
         // Assert
         options.Channel.Should().BeSameAs(channel);
+        options.Interceptors.Should().ContainSingle().Which.Should().BeOfType<AzureBlobPayloadsSideCarInterceptor>();
     }
 
     [Fact]
@@ -69,6 +72,7 @@ public class ExternalizedPayloadsCallInvokerDecoratorTests
 
         // Assert
         options.Channel.Should().BeSameAs(channel);
+        options.Interceptors.Should().ContainSingle().Which.Should().BeOfType<AzureBlobPayloadsSideCarInterceptor>();
     }
 
     [Fact]
@@ -119,9 +123,9 @@ public class ExternalizedPayloadsCallInvokerDecoratorTests
         builder.UseExternalizedPayloads();
         GrpcDurableTaskWorkerOptions options = GetOptions<GrpcDurableTaskWorkerOptions>(services);
 
-        // Assert: the extension no longer mutates the configured invoker; it decorates on use instead.
+        // Assert: the extension no longer mutates the configured invoker; it intercepts on use instead.
         options.CallInvoker.Should().BeSameAs(external);
-        options.ApplyCallInvokerDecorator(external).Should().NotBeSameAs(external);
+        options.Interceptors.Should().ContainSingle().Which.Should().BeOfType<AzureBlobPayloadsSideCarInterceptor>();
     }
 
     [Fact]
@@ -142,23 +146,16 @@ public class ExternalizedPayloadsCallInvokerDecoratorTests
     }
 
     [Fact]
-    public async Task Worker_RegisteredDecorator_ExternalizesLargePayloads()
+    public async Task Worker_RegisteredInterceptor_ExternalizesLargePayloads()
     {
         // Arrange
-        ServiceCollection services = new();
-        RecordingPayloadStore store = new();
-        services.AddSingleton<PayloadStore>(store);
-        services.Configure<LargePayloadStorageOptions>(o => o.ThresholdBytes = 1);
-        DefaultDurableTaskWorkerBuilder builder = new(null, services);
-        builder.UseGrpc("http://localhost:4001");
-        builder.UseExternalizedPayloads();
-        GrpcDurableTaskWorkerOptions options = GetOptions<GrpcDurableTaskWorkerOptions>(services);
-
         RecordingCallInvoker inner = new();
-        CallInvoker decorated = options.ApplyCallInvokerDecorator(inner);
+        RecordingPayloadStore store = new();
+        ServiceProvider provider = BuildWorkerProvider(inner, store);
 
-        // Act
-        await InvokeCreateInstanceAsync(decorated, new string('x', 1024));
+        // Act: build the invoker the same way the running worker does.
+        CallInvoker invoker = BuildWorkerCallInvoker(provider);
+        await InvokeCreateInstanceAsync(invoker, new string('x', 1024));
 
         // Assert
         store.UploadCount.Should().Be(1);
@@ -166,23 +163,22 @@ public class ExternalizedPayloadsCallInvokerDecoratorTests
     }
 
     [Fact]
-    public async Task Client_RegisteredDecorator_ExternalizesLargePayloads()
+    public async Task Client_RegisteredInterceptor_ExternalizesLargePayloads()
     {
         // Arrange
-        ServiceCollection services = new();
+        RecordingCallInvoker inner = new();
         RecordingPayloadStore store = new();
+        ServiceCollection services = new();
         services.AddSingleton<PayloadStore>(store);
         services.Configure<LargePayloadStorageOptions>(o => o.ThresholdBytes = 1);
         DefaultDurableTaskClientBuilder builder = new(null, services);
-        builder.UseGrpc("http://localhost:4001");
+        builder.UseGrpc(opt => opt.CallInvoker = inner);
         builder.UseExternalizedPayloads();
         GrpcDurableTaskClientOptions options = GetOptions<GrpcDurableTaskClientOptions>(services);
 
-        RecordingCallInvoker inner = new();
-        CallInvoker decorated = options.ApplyCallInvokerDecorator(inner);
-
-        // Act
-        await InvokeCreateInstanceAsync(decorated, new string('x', 1024));
+        // Act: build the invoker the same way the running client does.
+        CallInvoker invoker = BuildClientCallInvoker(options);
+        await InvokeCreateInstanceAsync(invoker, new string('x', 1024));
 
         // Assert
         store.UploadCount.Should().Be(1);
@@ -193,6 +189,65 @@ public class ExternalizedPayloadsCallInvokerDecoratorTests
     {
         P.CreateInstanceRequest request = new() { InstanceId = "instance", Name = "orchestration", Input = input };
         return invoker.AsyncUnaryCall(CreateInstanceMethod, null, default, request).ResponseAsync;
+    }
+
+    static ServiceProvider BuildWorkerProvider(CallInvoker inner, PayloadStore store)
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(store);
+        services.Configure<LargePayloadStorageOptions>(o => o.ThresholdBytes = 1);
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
+        builder.UseGrpc(opt => opt.CallInvoker = inner);
+        builder.UseExternalizedPayloads();
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// Builds a <see cref="CallInvoker"/> through the worker's own private invoker-building path, so the
+    /// test cannot accidentally re-implement how interceptors are applied.
+    /// </summary>
+    /// <param name="provider">The configured service provider.</param>
+    /// <returns>The invoker the worker would use.</returns>
+    static CallInvoker BuildWorkerCallInvoker(ServiceProvider provider)
+    {
+        Type workerType = typeof(GrpcDurableTaskWorkerOptions).Assembly
+            .GetType("Microsoft.DurableTask.Worker.Grpc.GrpcDurableTaskWorker", throwOnError: true)!;
+
+        object worker = Activator.CreateInstance(
+            workerType,
+            new object?[]
+            {
+                string.Empty,
+                Mock.Of<IDurableTaskFactory>(),
+                provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>(),
+                provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>(),
+                provider,
+                NullLoggerFactory.Instance,
+                null,
+                null,
+                null,
+            })!;
+
+        MethodInfo getCallInvoker = workerType.GetMethod(
+            "GetCallInvoker", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object?[] args = { null, null };
+        getCallInvoker.Invoke(worker, args);
+        return (CallInvoker)args[0]!;
+    }
+
+    /// <summary>
+    /// Builds a <see cref="CallInvoker"/> through the client's own private invoker-building path, so the
+    /// test cannot accidentally re-implement how interceptors are applied.
+    /// </summary>
+    /// <param name="options">The configured client options.</param>
+    /// <returns>The invoker the client would use.</returns>
+    static CallInvoker BuildClientCallInvoker(GrpcDurableTaskClientOptions options)
+    {
+        MethodInfo getCallInvoker = typeof(GrpcDurableTaskClient).GetMethod(
+            "GetCallInvoker", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object?[] args = { options, NullLogger.Instance, null };
+        getCallInvoker.Invoke(null, args);
+        return (CallInvoker)args[2]!;
     }
 
     static TOptions GetOptions<TOptions>(IServiceCollection services)

@@ -7,8 +7,8 @@ using System.Text;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Client.Grpc.Internal;
 using Microsoft.DurableTask.Tracing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -627,13 +627,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
-        AsyncDisposable disposable = GetCallInvokerCore(options, logger, out CallInvoker undecorated);
+        AsyncDisposable disposable = GetCallInvokerCore(options, logger, out CallInvoker core);
 
-        // Decorate outside any ChannelRecreatingCallInvoker so the wrapper's internal channel swaps
-        // stay transparent to the decorator (and to any interceptor it installs).
-        callInvoker = options.ApplyCallInvokerDecorator(undecorated);
+        // Intercept outside any ChannelRecreatingCallInvoker so the wrapper's internal channel swaps
+        // stay transparent to the configured interceptors.
+        callInvoker = ApplyInterceptors(options.Interceptors, core);
         return disposable;
     }
+
+    static CallInvoker ApplyInterceptors(IList<Interceptor> interceptors, CallInvoker invoker)
+        => interceptors.Count == 0 ? invoker : invoker.Intercept(interceptors.ToArray());
 
     static AsyncDisposable GetCallInvokerCore(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {

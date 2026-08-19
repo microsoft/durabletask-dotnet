@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core.Interceptors;
+
 namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>
@@ -22,6 +24,26 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
     /// Gets or sets the gRPC call invoker to use. Will supersede <see cref="Address" /> when provided.
     /// </summary>
     public CallInvoker? CallInvoker { get; set; }
+
+    /// <summary>
+    /// Gets the gRPC interceptors applied to every <see cref="CallInvoker"/> the client builds from its
+    /// configured transport, including invokers rebuilt after the underlying channel is recreated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the supported way to attach cross-cutting gRPC behavior — authentication headers, tracing,
+    /// logging, payload externalization — to the Durable Task gRPC client. Prefer it over supplying a
+    /// pre-built, already-intercepted <see cref="CallInvoker"/> in place of <see cref="Channel"/>: an
+    /// externally-supplied invoker opts the client out of gRPC channel recreation, so a wedged connection
+    /// can never be replaced.
+    /// </para>
+    /// <para>
+    /// Interceptors run in list order — the first interceptor added is the outermost, so it observes each
+    /// outgoing call first and each response last. Registration is purely additive: while this collection
+    /// is empty, the client uses exactly the invoker its configured transport produces.
+    /// </para>
+    /// </remarks>
+    public IList<Interceptor> Interceptors { get; } = new List<Interceptor>();
 
     /// <summary>
     /// Gets the internal options. These are not exposed directly, but configurable via
@@ -57,13 +79,5 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
         /// old channel so in-flight RPCs from peer clients are not interrupted.
         /// </summary>
         public Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? ChannelRecreator { get; set; }
-
-        /// <summary>
-        /// Gets or sets an optional decorator applied to every <see cref="CallInvoker"/> the client builds
-        /// from its configured transport. Extensions use this to attach interceptors without taking
-        /// ownership of <see cref="GrpcDurableTaskClientOptions.Channel"/>, which would otherwise disable
-        /// recreation.
-        /// </summary>
-        public Func<CallInvoker, CallInvoker>? CallInvokerDecorator { get; set; }
     }
 }

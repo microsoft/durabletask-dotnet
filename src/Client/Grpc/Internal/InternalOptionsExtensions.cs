@@ -30,48 +30,4 @@ public static class InternalOptionsExtensions
     {
         options.Internal.ChannelRecreator = recreator ?? throw new ArgumentNullException(nameof(recreator));
     }
-
-    /// <summary>
-    /// Sets a callback that decorates every <see cref="CallInvoker"/> the client builds from its configured
-    /// transport. Use this instead of replacing <see cref="GrpcDurableTaskClientOptions.Channel"/> with an
-    /// intercepted <see cref="GrpcDurableTaskClientOptions.CallInvoker"/>: clearing the channel leaves the
-    /// client with no way to recreate a wedged connection.
-    /// </summary>
-    /// <param name="options">The gRPC client options.</param>
-    /// <param name="decorator">The decorator callback.</param>
-    /// <remarks>
-    /// This is an internal API that supports the DurableTask infrastructure and not subject to
-    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
-    /// any release. You should only use it directly in your code with extreme caution and knowing that
-    /// doing so can result in application failures when updating to a new DurableTask release.
-    /// </remarks>
-    public static void SetCallInvokerDecorator(
-        this GrpcDurableTaskClientOptions options,
-        Func<CallInvoker, CallInvoker> decorator)
-    {
-        options.Internal.CallInvokerDecorator = decorator ?? throw new ArgumentNullException(nameof(decorator));
-    }
-
-    /// <summary>
-    /// Applies the decorator registered by <see cref="SetCallInvokerDecorator"/> to <paramref name="invoker"/>,
-    /// returning it unchanged when no decorator is registered. Callers that build a
-    /// <see cref="CallInvoker"/> from these options must route it through this method so registered
-    /// interceptors are not silently dropped.
-    /// </summary>
-    /// <param name="options">The gRPC client options.</param>
-    /// <param name="invoker">The invoker to decorate.</param>
-    /// <returns>The decorated invoker, or <paramref name="invoker"/> when no decorator is registered.</returns>
-    /// <remarks>
-    /// This is an internal API that supports the DurableTask infrastructure and not subject to
-    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
-    /// any release. You should only use it directly in your code with extreme caution and knowing that
-    /// doing so can result in application failures when updating to a new DurableTask release.
-    /// </remarks>
-    public static CallInvoker ApplyCallInvokerDecorator(
-        this GrpcDurableTaskClientOptions options,
-        CallInvoker invoker)
-    {
-        Func<CallInvoker, CallInvoker>? decorator = options.Internal.CallInvokerDecorator;
-        return decorator is null ? invoker : decorator(invoker);
-    }
 }

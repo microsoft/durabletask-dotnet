@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
-using Microsoft.DurableTask.Worker.Grpc.Internal;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -129,7 +129,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                     // carrying that ownership forward to the recreated state.
                     return new ChannelRecreateResult(
                         true,
-                        this.grpcOptions.ApplyCallInvokerDecorator(newChannel.CreateCallInvoker()),
+                        ApplyInterceptors(this.grpcOptions.Interceptors, newChannel.CreateCallInvoker()),
                         newChannel.Target,
                         default,
                         newChannel);
@@ -162,7 +162,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 AsyncDisposable newDisposable = CreateOwnedChannelDisposable(newChannel);
                 return new ChannelRecreateResult(
                     true,
-                    this.grpcOptions.ApplyCallInvokerDecorator(newChannel.CreateCallInvoker()),
+                    ApplyInterceptors(this.grpcOptions.Interceptors, newChannel.CreateCallInvoker()),
                     newChannel.Target,
                     newDisposable,
                     newChannel);
@@ -305,8 +305,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
     {
-        AsyncDisposable disposable = this.GetCallInvokerCore(out CallInvoker undecorated, out address);
-        callInvoker = this.grpcOptions.ApplyCallInvokerDecorator(undecorated);
+        AsyncDisposable disposable = this.GetCallInvokerCore(out CallInvoker core, out address);
+        callInvoker = ApplyInterceptors(this.grpcOptions.Interceptors, core);
         return disposable;
     }
 
@@ -331,6 +331,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         address = c.Target;
         return CreateOwnedChannelDisposable(c);
     }
+
+    static CallInvoker ApplyInterceptors(IList<Interceptor> interceptors, CallInvoker invoker)
+        => interceptors.Count == 0 ? invoker : invoker.Intercept(interceptors.ToArray());
 
     static ILogger CreateLogger(ILoggerFactory loggerFactory, DurableTaskWorkerOptions options)
     {

@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;

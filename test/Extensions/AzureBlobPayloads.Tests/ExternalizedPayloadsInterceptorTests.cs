@@ -41,7 +41,7 @@ public class ExternalizedPayloadsInterceptorTests
     public void Worker_WithChannel_PreservesChannelSoRecreationStaysEnabled()
     {
         // Arrange
-        GrpcChannel channel = GrpcChannel.ForAddress("http://localhost:4001");
+        using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost:4001");
         ServiceCollection services = new();
         services.AddSingleton<PayloadStore>(new FakePayloadStore());
         DefaultDurableTaskWorkerBuilder builder = new(null, services);
@@ -60,7 +60,7 @@ public class ExternalizedPayloadsInterceptorTests
     public void Client_WithChannel_PreservesChannelSoRecreationStaysEnabled()
     {
         // Arrange
-        GrpcChannel channel = GrpcChannel.ForAddress("http://localhost:4001");
+        using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost:4001");
         ServiceCollection services = new();
         services.AddSingleton<PayloadStore>(new FakePayloadStore());
         DefaultDurableTaskClientBuilder builder = new(null, services);
@@ -113,7 +113,8 @@ public class ExternalizedPayloadsInterceptorTests
     public void Worker_WithExternalCallInvoker_PreservesConfiguredInvoker()
     {
         // Arrange
-        CallInvoker external = GrpcChannel.ForAddress("http://localhost:4001").CreateCallInvoker();
+        using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost:4001");
+        CallInvoker external = channel.CreateCallInvoker();
         ServiceCollection services = new();
         services.AddSingleton<PayloadStore>(new FakePayloadStore());
         DefaultDurableTaskWorkerBuilder builder = new(null, services);

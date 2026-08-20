@@ -246,6 +246,97 @@ public class GrpcDurableTaskWorkerInterceptorsTests
         }
     }
 
+    [Fact]
+    public async Task Interceptors_AddedAfterWorkerConstruction_NeverTakeEffect_EvenAfterChannelRecreate()
+    {
+        // Arrange: the interceptor chain is captured when the worker is constructed. Options instances are
+        // cached per name by IOptionsMonitor, so a caller holding the same monitor can mutate the very list
+        // the worker was configured from. Without a snapshot, the recreate path re-reads that list and the
+        // late addition silently activates at the next externally-triggered recreate.
+        //
+        // The late interceptor is inserted at index 0 so it becomes the outermost link. That keeps the probe
+        // network-free in both directions: whichever interceptor is outermost short-circuits the call. An
+        // Add() to the end is the same defect — it mutates the same list the recreate path re-reads — but it
+        // lands innermost, where the outer short-circuit would mask it and make the assertion vacuous.
+        GrpcChannel currentChannel = GrpcChannel.ForAddress("http://localhost:5109");
+        GrpcChannel recreatedChannel = GrpcChannel.ForAddress("http://localhost:5110");
+        List<string> log = new();
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { Channel = currentChannel };
+        grpcOptions.SetChannelRecreator((channel, ct) => Task.FromResult(recreatedChannel));
+        grpcOptions.Interceptors.Add(new RecordingInterceptor("at-construction", log, passThrough: false));
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions);
+
+        try
+        {
+            // Act: mutate the live options collection after the worker was built, then force a recreate.
+            grpcOptions.Interceptors.Insert(0, new RecordingInterceptor("added-late", log, passThrough: false));
+            object result = await InvokeTryRecreateChannelAsync(worker, currentChannel);
+
+            CallProbe.Invoke(GetResultProperty<CallInvoker>(result, "NewCallInvoker"));
+
+            // Assert: the rebuilt invoker still carries exactly the chain captured at construction.
+            GetResultProperty<bool>(result, "Recreated").Should().BeTrue();
+            log.Should().Equal("at-construction");
+            log.Should().NotContain("added-late");
+        }
+        finally
+        {
+            currentChannel.Dispose();
+            recreatedChannel.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Interceptors_AddedAfterWorkerConstruction_NeverTakeEffect_OnWorkerOwnedRecreate()
+    {
+        // Arrange: same contract on the Address-only rebuild path, which re-reads the collection separately.
+        List<string> log = new();
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { Address = "http://localhost:5111" };
+        grpcOptions.Interceptors.Add(new RecordingInterceptor("at-construction", log, passThrough: false));
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions);
+        GrpcChannel currentChannel = GrpcChannel.ForAddress(grpcOptions.Address);
+
+        try
+        {
+            // Act
+            grpcOptions.Interceptors.Insert(0, new RecordingInterceptor("added-late", log, passThrough: false));
+            object result = await InvokeTryRecreateChannelAsync(worker, currentChannel);
+
+            CallProbe.Invoke(GetResultProperty<CallInvoker>(result, "NewCallInvoker"));
+
+            // Assert
+            GetResultProperty<bool>(result, "Recreated").Should().BeTrue();
+            log.Should().Equal("at-construction");
+
+            AsyncDisposable newDisposable = GetResultProperty<AsyncDisposable>(result, "NewWorkerOwnedDisposable");
+            await newDisposable.DisposeAsync();
+        }
+        finally
+        {
+            currentChannel.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Interceptors_AddedAfterWorkerConstruction_DoNotAffectStartupInvoker()
+    {
+        // Arrange
+        StubCallInvoker external = new();
+        List<string> log = new();
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { CallInvoker = external };
+        grpcOptions.Interceptors.Add(new RecordingInterceptor("at-construction", log, passThrough: true));
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions);
+
+        // Act
+        grpcOptions.Interceptors.Insert(0, new RecordingInterceptor("added-late", log, passThrough: true));
+        InvokeGetCallInvoker(worker, out CallInvoker callInvoker, out _);
+        CallProbe.Invoke(callInvoker);
+
+        // Assert
+        log.Should().Equal("at-construction");
+        external.CallCount.Should().Be(1);
+    }
+
     static void InvokeGetCallInvoker(GrpcDurableTaskWorker worker, out CallInvoker callInvoker, out string address)
     {
         object?[] args = { null, null };

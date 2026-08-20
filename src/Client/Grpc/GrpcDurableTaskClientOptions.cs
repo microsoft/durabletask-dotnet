@@ -42,6 +42,11 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
     /// outgoing call first and each response last. Registration is purely additive: while this collection
     /// is empty, the client uses exactly the invoker its configured transport produces.
     /// </para>
+    /// <para>
+    /// This collection is captured when the client is constructed, so it must be populated while options are
+    /// being configured (for example from <c>Configure</c> or <c>PostConfigure</c>). Mutating it afterwards
+    /// has no effect on a client that has already been built, including across channel recreation.
+    /// </para>
     /// </remarks>
     public IList<Interceptor> Interceptors { get; } = new List<Interceptor>();
 

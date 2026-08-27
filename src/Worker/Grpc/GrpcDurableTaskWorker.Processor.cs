@@ -327,14 +327,13 @@ sealed partial class GrpcDurableTaskWorker
                 EmptyMessage,
                 deadline: this.NextConnectionSetupDeadline(),
                 cancellationToken: cancellation);
-            this.Logger.EstablishedWorkItemConnection();
 
             await this.AnnounceLargePayloadAutoPurgeAsync(cancellation);
 
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
 
             // Get the stream for receiving work-items
-            return this.client!.GetWorkItems(
+            AsyncServerStreamingCall<P.WorkItem> stream = this.client!.GetWorkItems(
                 new P.GetWorkItemsRequest
                 {
                     MaxConcurrentActivityWorkItems =
@@ -347,6 +346,13 @@ sealed partial class GrpcDurableTaskWorker
                     WorkItemFilters = this.worker.workItemFilters?.ToGrpcWorkItemFilters(),
                 },
                 cancellationToken: cancellation);
+
+            // Logged last, not straight after Hello: the message claims a work-item streaming connection, and
+            // between Hello and here the announcement can still stop the attempt without any stream being
+            // requested. Logging earlier made every retry of a gated connect report a connection that was
+            // never opened.
+            this.Logger.EstablishedWorkItemConnection();
+            return stream;
         }
 
         /// <summary>

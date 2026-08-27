@@ -17,11 +17,12 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
 /// <summary>
 /// The auto-purge opt-in is announced with a dedicated <c>SetLargePayloadAutoPurge</c> RPC on a service only the
-/// Durable Task Scheduler implements, sent once per connection before the work-item stream is requested. Three
+/// Durable Task Scheduler implements, sent once per connection before the work-item stream is requested. Four
 /// properties matter and none is visible from the type system: the RPC must not be sent when the worker has no
-/// opinion; a backend that does not implement the service must not be blocked by it; and any OTHER failure must
+/// opinion; a backend that does not implement the service must not be blocked by it; any OTHER failure must
 /// stop the connect attempt rather than opening the work-item stream, because while the backend still believes
-/// auto-purge is off it hard-deletes payload metadata without tombstoning and the blob reference is lost for good.
+/// auto-purge is off it hard-deletes payload metadata without tombstoning and the blob reference is lost for good;
+/// and a connect attempt stopped that way must not report an established work-item connection it never opened.
 /// </summary>
 public class LargePayloadAutoPurgeConnectTests
 {
@@ -29,6 +30,8 @@ public class LargePayloadAutoPurgeConnectTests
         "/microsoft.durabletask.largepayloads.LargePayloadPurge/SetLargePayloadAutoPurge";
 
     const string Category = "Microsoft.DurableTask.Worker.Grpc";
+
+    const int EstablishedConnectionEventId = 4;
 
     static readonly MethodInfo ConnectAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
@@ -141,6 +144,9 @@ public class LargePayloadAutoPurgeConnectTests
         // The absorbed-failure log must not appear for a status that is not absorbed, or the single failure
         // would be reported twice - once here and once by ExecuteAsync's own handler.
         logs.Should().NotContain(log => log.Message.Contains("does not implement the large-payload auto-purge setting RPC"));
+
+        // And no attempt claims an established work-item connection, since none was ever opened.
+        CountEstablishedConnectionLogs(logProvider).Should().Be(0);
     }
 
     [Fact]
@@ -201,13 +207,18 @@ public class LargePayloadAutoPurgeConnectTests
             new RpcException(new Status(StatusCode.Unavailable, "no confirmation")),
             failAutoPurgeTimes: 1,
             onWorkItemsRequested: cts.Cancel);
+        TestLogProvider logProvider = new(new NullOutput());
 
         // Act
-        await InvokeProcessorExecuteAsync(CreateProcessor(grpcOptions, invoker, out _), cts.Token);
+        await InvokeProcessorExecuteAsync(CreateProcessor(grpcOptions, invoker, out _, logProvider), cts.Token);
 
         // Assert - GetWorkItems appears exactly once, and only after the second (successful) announcement.
         invoker.CallLog.Should().Equal(
             "Hello", "SetLargePayloadAutoPurge", "Hello", "SetLargePayloadAutoPurge", "GetWorkItems");
+
+        // Two connect attempts, one opened stream, so exactly one established-connection log. Counting across
+        // both attempts is what catches a log tied to Hello instead of to the stream: that would report twice.
+        CountEstablishedConnectionLogs(logProvider).Should().Be(1);
     }
 
     [Fact]
@@ -228,6 +239,89 @@ public class LargePayloadAutoPurgeConnectTests
         await act.Should().ThrowAsync<RpcException>();
         invoker.CallLog.Should().Equal("Hello", "SetLargePayloadAutoPurge");
     }
+
+    [Fact]
+    public async Task ConnectAsync_ReportsTheEstablishedConnectionOnlyAfterRequestingWorkItems()
+    {
+        // Arrange - Event 4 claims a work-item streaming connection, so it must not be emitted until the stream
+        // has actually been requested. Snapshotting the count at the moment GetWorkItems runs pins the ordering
+        // against the one call that matters, rather than asserting a position in the whole log sequence.
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { LargePayloadAutoPurgeEnabled = true };
+        TestLogProvider logProvider = new(new NullOutput());
+        int establishedWhenWorkItemsRequested = -1;
+        RecordingCallInvoker invoker = new(
+            onWorkItemsRequested: () => establishedWhenWorkItemsRequested = CountEstablishedConnectionLogs(logProvider));
+
+        // Act
+        await InvokeConnectAsync(CreateProcessor(grpcOptions, invoker, out _, logProvider));
+
+        // Assert - not yet logged when the stream was requested, logged exactly once by the time connect returns.
+        establishedWhenWorkItemsRequested.Should().Be(0);
+        CountEstablishedConnectionLogs(logProvider).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(StatusCode.Unavailable)]
+    [InlineData(StatusCode.Internal)]
+    [InlineData(StatusCode.DeadlineExceeded)]
+    public async Task ConnectAsync_WhenTheAnnouncementFails_ReportsNoEstablishedConnection(StatusCode statusCode)
+    {
+        // Arrange - the gate correctly stops the attempt before GetWorkItems. Reporting an established
+        // connection here would describe a stream that was never opened.
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { LargePayloadAutoPurgeEnabled = true };
+        RecordingCallInvoker invoker = new(new RpcException(new Status(statusCode, "no confirmation")));
+        TestLogProvider logProvider = new(new NullOutput());
+
+        // Act
+        Func<Task> act = () => InvokeConnectAsync(CreateProcessor(grpcOptions, invoker, out _, logProvider));
+
+        // Assert
+        await act.Should().ThrowAsync<RpcException>();
+        CountEstablishedConnectionLogs(logProvider).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_WhenCancelledDuringTheCall_ReportsNoEstablishedConnection()
+    {
+        // Arrange - shutdown races the announcement, so no stream is ever requested.
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { LargePayloadAutoPurgeEnabled = true };
+        using CancellationTokenSource cts = new();
+        RecordingCallInvoker invoker = new(
+            new RpcException(new Status(StatusCode.Cancelled, "shutting down")),
+            onAutoPurgeCall: cts.Cancel);
+        TestLogProvider logProvider = new(new NullOutput());
+
+        // Act
+        Func<Task> act = () =>
+            InvokeConnectAsync(CreateProcessor(grpcOptions, invoker, out _, logProvider), cts.Token);
+
+        // Assert
+        await act.Should().ThrowAsync<RpcException>();
+        CountEstablishedConnectionLogs(logProvider).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_WhenServiceIsUnimplemented_ReportsTheEstablishedConnection()
+    {
+        // Arrange - the deliberately degraded path still opens the stream, so it must still report one. This is
+        // the positive control that separates "gated" from "merely never logs".
+        GrpcDurableTaskWorkerOptions grpcOptions = new() { LargePayloadAutoPurgeEnabled = true };
+        RecordingCallInvoker invoker = new(
+            new RpcException(new Status(StatusCode.Unimplemented, "unknown service")));
+        TestLogProvider logProvider = new(new NullOutput());
+
+        // Act
+        await InvokeConnectAsync(CreateProcessor(grpcOptions, invoker, out _, logProvider));
+
+        // Assert
+        invoker.CallLog.Should().Contain("GetWorkItems");
+        CountEstablishedConnectionLogs(logProvider).Should().Be(1);
+    }
+
+    static int CountEstablishedConnectionLogs(TestLogProvider logProvider)
+        => logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs)
+            ? logs.Count(log => log.EventId.Id == EstablishedConnectionEventId)
+            : 0;
 
     static object CreateProcessor(
         GrpcDurableTaskWorkerOptions grpcOptions,

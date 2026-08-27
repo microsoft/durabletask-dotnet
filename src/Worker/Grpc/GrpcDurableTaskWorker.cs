@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,6 +19,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     static readonly TimeSpan DeferredDisposeGracePeriod = TimeSpan.FromSeconds(30);
 
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
+    readonly Interceptor[] interceptors;
     readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
@@ -50,6 +52,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
+
+        // Snapshot the interceptors once so the chain is fixed for the worker's lifetime. Options instances
+        // are cached per name, so the configured collection stays reachable and mutable after construction;
+        // re-reading it when a channel is recreated would let a late mutation silently take effect at an
+        // externally-triggered recreate, long after the change was made.
+        this.interceptors = this.grpcOptions.Interceptors.ToArray();
         this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
@@ -135,7 +143,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                     // The recreator owns the replacement channel lifetime. Return a default disposable
                     // so the caller disposes the previous worker-owned channel exactly once without
                     // carrying that ownership forward to the recreated state.
-                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, default, newChannel);
+                    return new ChannelRecreateResult(
+                        true,
+                        ApplyInterceptors(this.interceptors, newChannel.CreateCallInvoker()),
+                        newChannel.Target,
+                        default,
+                        newChannel);
                 }
 
                 // Recreator returned the same instance — nothing to swap.
@@ -163,7 +176,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 // This new channel is worker-owned, so hand back a disposable that will shut it down
                 // (and dispose it on frameworks where GrpcChannel implements IDisposable).
                 AsyncDisposable newDisposable = CreateOwnedChannelDisposable(newChannel);
-                return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable, newChannel);
+                return new ChannelRecreateResult(
+                    true,
+                    ApplyInterceptors(this.interceptors, newChannel.CreateCallInvoker()),
+                    newChannel.Target,
+                    newDisposable,
+                    newChannel);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -303,6 +321,13 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
     {
+        AsyncDisposable disposable = this.GetCallInvokerCore(out CallInvoker core, out address);
+        callInvoker = ApplyInterceptors(this.interceptors, core);
+        return disposable;
+    }
+
+    AsyncDisposable GetCallInvokerCore(out CallInvoker callInvoker, out string address)
+    {
         if (this.grpcOptions.Channel is GrpcChannel c)
         {
             callInvoker = c.CreateCallInvoker();
@@ -322,6 +347,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         address = c.Target;
         return CreateOwnedChannelDisposable(c);
     }
+
+    static CallInvoker ApplyInterceptors(Interceptor[] interceptors, CallInvoker invoker)
+        => interceptors.Length == 0 ? invoker : invoker.Intercept(interceptors);
 
     static ILogger CreateLogger(ILoggerFactory loggerFactory, DurableTaskWorkerOptions options)
     {

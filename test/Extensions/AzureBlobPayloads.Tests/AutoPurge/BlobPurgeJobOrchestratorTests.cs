@@ -141,11 +141,8 @@ public class BlobPurgeJobOrchestratorTests
         for (int i = 0; i < batchSize; i++)
         {
             tombstones.Add(new LargePayloadTombstone(
-                PartitionId: 1,
-                InstanceKey: i,
-                PayloadId: i,
-                Token: $"blob:v2:https://acct.blob.core.windows.net/c/{i}",
-                Revision: 1));
+                TombstoneToken: $"tombstone-{i}",
+                PayloadToken: $"blob:v2:https://acct.blob.core.windows.net/c/{i}"));
         }
 
         Mock<TaskOrchestrationContext> context = new();
@@ -224,6 +221,96 @@ public class BlobPurgeJobOrchestratorTests
         tokensDeleted.Should().Be(batchSize);
         reported.Should().NotBeNull();
         reported!.Should().HaveCount(batchSize);
+    }
+
+    [Fact]
+    public async Task RunAsync_SendsPayloadTokenToStorage_AndEchoesTombstoneTokenToBackend()
+    {
+        // Arrange - a tombstone now carries two opaque strings: PayloadToken addresses the blob, TombstoneToken
+        // identifies the ledger row. Both are plain strings, so swapping them compiles silently and would fail
+        // in the worst possible way - deleting nothing while telling the backend rows were purged. Distinct,
+        // non-overlapping values make a swap impossible to miss.
+        List<LargePayloadTombstone> tombstones =
+        [
+            new("tombstone-a", "blob:v2:https://acct.blob.core.windows.net/c/a"),
+            new("tombstone-b", "blob:v2:https://acct.blob.core.windows.net/c/b"),
+        ];
+
+        Mock<TaskOrchestrationContext> context = new();
+        Mock<TaskOrchestrationEntityFeature> entities = new();
+
+        context.Setup(c => c.Entities).Returns(entities.Object);
+        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
+        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        entities
+            .SetupSequence(e => e.CallEntityAsync<BlobPurgeJobState?>(
+                It.IsAny<EntityInstanceId>(),
+                nameof(BlobPurgeJob.Get),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 100 })
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
+
+        entities
+            .Setup(e => e.CallEntityAsync(
+                It.IsAny<EntityInstanceId>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CallEntityOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        context
+            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
+                It.Is<TaskName>(n => n.Name == nameof(GetLargePayloadTombstonesActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(tombstones);
+
+        List<string> sentToDelete = [];
+        context
+            .Setup(c => c.CallActivityAsync<List<BlobPurgeOutcome>>(
+                It.Is<TaskName>(n => n.Name == nameof(DeleteExternalBlobActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                List<string> chunk = (List<string>)input!;
+                sentToDelete.AddRange(chunk);
+
+                // Distinct dispositions so the zip cannot be proven by a constant.
+                return Task.FromResult<List<BlobPurgeOutcome>>(
+                [
+                    new(LargePayloadPurgeDisposition.Deleted),
+                    new(LargePayloadPurgeDisposition.Quarantined),
+                ]);
+            });
+
+        List<LargePayloadPurgeResult>? reported = null;
+        context
+            .Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ReportLargePayloadPurgeResultsActivity)),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => reported = (List<LargePayloadPurgeResult>)input!)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await new BlobPurgeJobOrchestrator().RunAsync(
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+
+        // Assert - storage saw only payload tokens, the backend heard only tombstone tokens, and each row kept
+        // its own disposition rather than the batch collapsing onto one.
+        this.AssertNoCycleFailed();
+        sentToDelete.Should().Equal(
+            "blob:v2:https://acct.blob.core.windows.net/c/a",
+            "blob:v2:https://acct.blob.core.windows.net/c/b");
+        reported.Should().NotBeNull();
+        List<LargePayloadPurgeResult> results = reported!;
+        results.Select(r => r.TombstoneToken).Should().Equal("tombstone-a", "tombstone-b");
+        results.Select(r => r.Disposition).Should().Equal(
+            LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeDisposition.Quarantined);
     }
 
     [Fact]

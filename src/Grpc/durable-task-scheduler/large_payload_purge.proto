@@ -1,0 +1,127 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+syntax = "proto3";
+
+package microsoft.durabletask.largepayloads;
+
+option csharp_namespace = "Microsoft.DurableTask.Protobuf.LargePayloads";
+
+// Blob auto-purge for externalized large payloads.
+//
+// A payload too large to store inline is written to blob storage and the backend keeps only a token.
+// Purging the instance cannot reclaim that blob on its own: the blob lives in the customer's storage
+// account and only the worker holds credentials for it. This service is how the backend hands that
+// deletion to the worker and learns the outcome.
+//
+// The contract is a ledger, not a stream. Purge writes one tombstone per externalized payload, the
+// worker fetches the tombstones that are due, deletes the blobs, and reports each outcome. The
+// backend owns retry scheduling and row lifetime; the worker owns the delete and the classification
+// of its result, and never computes a retry delay.
+service LargePayloadPurge {
+  // Records whether the caller's task hub has opted into large-payload blob auto-purge.
+  //
+  // This is a setting, not a WorkerCapability: a worker being able to resolve externalized payloads
+  // is not the same as the customer opting into deleting them, and a capability list is presence-only
+  // so it cannot carry an explicit false.
+  //
+  // Send this once per worker connection, before requesting work items. The backend only writes
+  // tombstones for a task hub that has opted in, and a worker about to start draining them should not
+  // observe a stale setting. Not calling it at all leaves the stored value untouched, which is what
+  // keeps a worker that does not know about auto-purge from silently disabling a task hub that opted
+  // in.
+  rpc SetLargePayloadAutoPurge(SetLargePayloadAutoPurgeRequest) returns (SetLargePayloadAutoPurgeResponse);
+
+  // Returns a bounded, deterministically ordered batch of due large-payload tombstones whose
+  // external blobs the worker must delete. Scoped to the caller's authenticated task hub.
+  // Only rows that are pending and whose next attempt time has arrived are returned; a row stays
+  // pending until its outcome is reported, so this is safe under retries and duplicate callers.
+  rpc GetLargePayloadTombstones(GetLargePayloadTombstonesRequest) returns (GetLargePayloadTombstonesResponse);
+
+  // Reports the outcome of each attempted blob deletion. The backend owns retry scheduling and
+  // branches solely on `disposition`: it deletes rows reported as DELETED, reschedules RETRY on
+  // its own backoff, and moves QUARANTINED rows out of the active fetch while preserving their
+  // evidence. The worker never computes a retry delay.
+  rpc ReportLargePayloadPurgeResults(ReportLargePayloadPurgeResultsRequest) returns (ReportLargePayloadPurgeResultsResponse);
+}
+
+// client -> server: the task hub's auto-purge opt-in, as configured on the worker.
+message SetLargePayloadAutoPurgeRequest {
+  // The customer's explicit choice, persisted only when it differs from the stored value. A worker
+  // with no opinion omits the call rather than sending a default here, so there is no third state to
+  // encode on the wire.
+  bool enabled = 1;
+}
+
+// server -> client: acknowledgement that the setting was recorded.
+message SetLargePayloadAutoPurgeResponse {
+}
+
+// server -> client: one tombstoned large-payload row whose external blob the worker must delete.
+message LargePayloadTombstone {
+  // Opaque, backend-issued correlation token for this exact tombstone version. The worker must not
+  // interpret its format and must echo it unchanged in the purge result.
+  string tombstone_token = 1;
+
+  // A self-describing SDK v2 token: "blob:v2:{fullBlobUrl}".
+  // Legacy v1 tokens are never tombstoned: v1 carries a container name but not the storage
+  // account, so a delete against the configured account cannot be verified. The backend
+  // hard-deletes v1 payload rows instead.
+  string payload_token = 2;
+}
+
+// The outcome of a single blob deletion attempt. The split is by whether a failure can self-heal.
+enum LargePayloadPurgeDisposition {
+  // Required: proto3 reserves 0 as the first value, and scalars have no field presence, so an
+  // unset field arrives as 0. Keeping 0 meaningless is load-bearing here: if 0 meant DELETED, a
+  // client that failed to set this field would make the backend delete tombstones and orphan the
+  // blobs permanently. The backend must reject a result carrying this value.
+  LARGE_PAYLOAD_PURGE_DISPOSITION_UNSPECIFIED = 0;
+
+  // Terminal success: the tombstone is resolved and the backend deletes it. Covers the blob being
+  // deleted, the blob already being absent, and the blob being deliberately left in place because
+  // the payload store does not own it. All three are terminal because none of them can be
+  // improved by trying again.
+  LARGE_PAYLOAD_PURGE_DISPOSITION_DELETED = 1;
+
+  // The failure may self-heal, so the row stays pending and the backend sets the next attempt.
+  LARGE_PAYLOAD_PURGE_DISPOSITION_RETRY = 2;
+
+  // A deterministic failure or protocol violation that retrying can never fix. The row leaves the
+  // polling set but is never deleted or expired: it keeps the token, which after the payload row is
+  // gone is the only durable record of the blob, so discarding it would orphan the blob silently.
+  // Resolving a quarantined row is a deliberate operator action. Why it failed is not recorded here
+  // and is not meant to be; that detail lives in the worker's telemetry at full fidelity.
+  LARGE_PAYLOAD_PURGE_DISPOSITION_QUARANTINED = 3;
+}
+
+// client -> server: the outcome of exactly one tombstoned row.
+message LargePayloadPurgeResult {
+  // Echoed unchanged from the corresponding LargePayloadTombstone.
+  string tombstone_token = 1;
+
+  // The only field the backend acts on. Deliberately the only outcome field on this message:
+  // anything finer would be write-only. Failure detail stays in the worker's own telemetry, which
+  // holds the full exception rather than a lossy classification.
+  LargePayloadPurgeDisposition disposition = 2;
+}
+
+// client -> server: request up to `limit` due tombstones for the caller's task hub.
+message GetLargePayloadTombstonesRequest {
+  // The maximum number of rows to return. The service clamps this to its own maximum.
+  int32 limit = 1;
+}
+
+// server -> client: the due tombstones whose blobs the worker must delete.
+message GetLargePayloadTombstonesResponse {
+  repeated LargePayloadTombstone tombstones = 1;
+}
+
+// client -> server: a bounded batch of purge outcomes.
+message ReportLargePayloadPurgeResultsRequest {
+  repeated LargePayloadPurgeResult results = 1;
+}
+
+// server -> client: acknowledgement that the reported outcomes were recorded.
+message ReportLargePayloadPurgeResultsResponse {
+}

@@ -19,6 +19,7 @@ using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using ActivityStatusCode = System.Diagnostics.ActivityStatusCode;
 using DTCore = DurableTask.Core;
+using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -34,16 +35,18 @@ sealed partial class GrpcDurableTaskWorker
 
         readonly GrpcDurableTaskWorker worker;
         readonly TaskHubSidecarServiceClient client;
+        readonly LP.LargePayloadPurge.LargePayloadPurgeClient purgeClient;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
         readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, LP.LargePayloadPurge.LargePayloadPurgeClient purgeClient, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         {
             this.worker = worker;
             this.client = client;
+            this.purgeClient = purgeClient;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
             this.orchestrationFilter = orchestrationFilter;
@@ -335,6 +338,8 @@ sealed partial class GrpcDurableTaskWorker
             await this.client!.HelloAsync(EmptyMessage, deadline: deadline, cancellationToken: cancellation);
             this.Logger.EstablishedWorkItemConnection();
 
+            await this.TrySetLargePayloadAutoPurgeAsync(cancellation);
+
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
 
             // Get the stream for receiving work-items
@@ -349,12 +354,59 @@ sealed partial class GrpcDurableTaskWorker
                         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
                     Capabilities = { this.worker.grpcOptions.Capabilities },
                     WorkItemFilters = this.worker.workItemFilters?.ToGrpcWorkItemFilters(),
-
-                    // Left unset when the worker has no opinion, so the backend can distinguish "not
-                    // configured" from an explicit opt-out.
-                    LargePayloadAutoPurgeEnabled = this.worker.grpcOptions.LargePayloadAutoPurgeEnabled,
                 },
                 cancellationToken: cancellation);
+        }
+
+        /// <summary>
+        /// Announces the configured large-payload auto-purge opt-in, once per connection and before the
+        /// work-item stream is requested, as the contract requires: the backend only writes tombstones for a
+        /// task hub that has opted in, and a worker about to start draining them should not observe a stale
+        /// setting.
+        /// </summary>
+        /// <remarks>
+        /// A worker with no opinion - the default, and every worker that has not configured externalized
+        /// payloads - sends nothing at all rather than sending a default, which leaves the stored value
+        /// untouched. That is what keeps a worker that does not know about auto-purge from silently disabling
+        /// a task hub that opted in.
+        /// <para>
+        /// No failure here is allowed to escape. This is an optional cleanup setting on a service that only
+        /// the Durable Task Scheduler backend implements, while the caller is the connect path shared by every
+        /// backend: letting an <see cref="RpcException"/> propagate would be caught by ConnectAsync's handlers
+        /// and turn a missing or briefly unhappy purge service into a reconnect loop - and, via the
+        /// channel-poisoned counters, into an orchestration execution outage. Blob cleanup degrades on its
+        /// own; orchestration execution does not degrade with it. The next reconnect retries the call.
+        /// </para>
+        /// </remarks>
+        /// <param name="cancellation">The cancellation token, honored so shutdown is not swallowed.</param>
+        /// <returns>A task that completes once the setting has been announced, or deliberately skipped.</returns>
+        async Task TrySetLargePayloadAutoPurgeAsync(CancellationToken cancellation)
+        {
+            if (this.worker.grpcOptions.LargePayloadAutoPurgeEnabled is not bool enabled)
+            {
+                return;
+            }
+
+            try
+            {
+                await this.purgeClient.SetLargePayloadAutoPurgeAsync(
+                    new LP.SetLargePayloadAutoPurgeRequest { Enabled = enabled },
+                    cancellationToken: cancellation);
+                this.Logger.LargePayloadAutoPurgeSet(enabled);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+            {
+                // Mixed rollout, or a backend that is not the Durable Task Scheduler at all, so the service
+                // does not exist. Distinct from the failure below because it is permanent for this backend
+                // build rather than worth retrying, and because it names the remedy.
+                this.Logger.LargePayloadAutoPurgeUnsupported();
+            }
+            catch (RpcException ex) when (!cancellation.IsCancellationRequested)
+            {
+                // Cancellation is deliberately NOT swallowed: during shutdown the exception must reach
+                // ConnectAsync's caller so the processor exits instead of going on to open a work-item stream.
+                this.Logger.LargePayloadAutoPurgeSetFailed(ex);
+            }
         }
 
         async Task ProcessWorkItemsAsync(

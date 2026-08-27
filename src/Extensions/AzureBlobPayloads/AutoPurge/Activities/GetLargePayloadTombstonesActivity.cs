@@ -4,8 +4,8 @@
 using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
-using P = Microsoft.DurableTask.Protobuf;
+using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
+using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
@@ -13,15 +13,15 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// Activity that fetches a bounded batch of due large-payload tombstones from the backend for the auto-purge
 /// job to delete.
 /// </summary>
-/// <param name="client">The sidecar service client used to query the backend for tombstones.</param>
+/// <param name="client">The large-payload purge service client used to query the backend for tombstones.</param>
 /// <param name="logger">The logger instance.</param>
 [DurableTask]
 internal sealed class GetLargePayloadTombstonesActivity(
-    TaskHubSidecarServiceClient client,
+    LargePayloadPurgeClient client,
     ILogger<GetLargePayloadTombstonesActivity> logger)
     : TaskActivity<int, List<LargePayloadTombstone>>
 {
-    readonly TaskHubSidecarServiceClient client = Check.NotNull(client);
+    readonly LargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<GetLargePayloadTombstonesActivity> logger = Check.NotNull(logger);
 
     /// <inheritdoc/>
@@ -33,11 +33,11 @@ internal sealed class GetLargePayloadTombstonesActivity(
                 nameof(input), input, $"Limit must be greater than 0 and less than or equal to {LargePayloadTombstone.MaxRequestLimit}.");
         }
 
-        P.GetLargePayloadTombstonesResponse response;
+        LP.GetLargePayloadTombstonesResponse response;
         try
         {
             response = await this.client.GetLargePayloadTombstonesAsync(
-                new P.GetLargePayloadTombstonesRequest { Limit = input });
+                new LP.GetLargePayloadTombstonesRequest { Limit = input });
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
@@ -58,14 +58,9 @@ internal sealed class GetLargePayloadTombstonesActivity(
         }
 
         List<LargePayloadTombstone> tombstones = new(response.Tombstones.Count);
-        foreach (P.LargePayloadTombstone tombstone in response.Tombstones)
+        foreach (LP.LargePayloadTombstone tombstone in response.Tombstones)
         {
-            tombstones.Add(new LargePayloadTombstone(
-                tombstone.PartitionId,
-                tombstone.InstanceKey,
-                tombstone.PayloadId,
-                tombstone.Token,
-                tombstone.Revision));
+            tombstones.Add(new LargePayloadTombstone(tombstone.TombstoneToken, tombstone.PayloadToken));
         }
 
         this.logger.BlobPurgeFetchedTombstones(tombstones.Count);

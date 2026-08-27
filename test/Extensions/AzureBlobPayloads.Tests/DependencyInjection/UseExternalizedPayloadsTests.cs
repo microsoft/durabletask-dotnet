@@ -129,11 +129,12 @@ public class UseExternalizedPayloadsTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void UseExternalizedPayloads_Worker_SendsResolvedAutoPurgeValueOnTheHandshake(bool autoPurge)
+    public void UseExternalizedPayloads_Worker_ResolvesAutoPurgeValueForTheWorkerConnection(bool autoPurge)
     {
         // Arrange - the backend only tombstones payloads for a task hub whose workers opted in, so the resolved
-        // AutoPurge value has to ride the GetWorkItems handshake. A worker that never calls this extension sends
-        // nothing at all, which the backend reads as "no opinion".
+        // AutoPurge value has to reach the backend. The worker sends it with SetLargePayloadAutoPurge once per
+        // connection, before requesting work items. A worker that never calls this extension leaves the option
+        // null, never sends the RPC, and the backend keeps whatever it already had.
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> builder = new();
         builder.Setup(b => b.Services).Returns(services);
@@ -206,8 +207,8 @@ public class UseExternalizedPayloadsTests
         // used to inject a concrete DurableTaskClient, which a worker-only host never registers, so they threw at
         // dispatch time - and only at dispatch, because DurableTaskRegistry stores a lazy
         // ActivatorUtilities.GetServiceOrCreateInstance factory - leaving auto-purge silently broken. They now
-        // inject the worker's own TaskHubSidecarServiceClient (built from the worker's GrpcDurableTaskWorkerOptions),
-        // so they construct with no DurableTaskClient present. A real worker configures a transport, so UseGrpc
+        // inject the worker's own LargePayloadPurge client (built from the worker's GrpcDurableTaskWorkerOptions
+        // CallInvoker), so they construct with no DurableTaskClient present. A real worker configures a transport, so UseGrpc
         // supplies one here - without it the worker's PostConfigure would throw for having neither Channel nor
         // CallInvoker.
         ServiceCollection services = new();
@@ -272,7 +273,7 @@ public class UseExternalizedPayloadsTests
     public void UseExternalizedPayloads_NamedWorkerBuilder_ResolvesEverythingUnderThatName()
     {
         // Arrange - the worker mirror of the named-client gap: the storage options, the worker's entity-support
-        // flip, the resolved auto-purge handshake flag and the sidecar client the activities inject are all keyed
+        // flip, the resolved auto-purge flag and the purge service client the activities inject are all keyed
         // on builder.Name, and every existing worker test uses the empty name. Drive a non-empty name.
         const string name = "worker-hub";
         ServiceCollection services = new();

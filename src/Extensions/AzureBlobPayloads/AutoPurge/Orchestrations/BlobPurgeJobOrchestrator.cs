@@ -227,7 +227,7 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         List<string> tokens = new(chunk.Count);
         foreach (LargePayloadTombstone tombstone in chunk)
         {
-            tokens.Add(tombstone.Token);
+            tokens.Add(tombstone.PayloadToken);
         }
 
         List<BlobPurgeOutcome> outcomes = await context.CallActivityAsync<List<BlobPurgeOutcome>>(
@@ -250,15 +250,10 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         {
             LargePayloadTombstone tombstone = chunk[i];
 
-            // The revision is echoed back unchanged so the backend can detect a tombstone that was rewritten
-            // while this attempt was in flight and ignore the stale result. Retry scheduling is the backend's
-            // job, so no next-attempt time is computed here.
-            results.Add(new LargePayloadPurgeResult(
-                tombstone.PartitionId,
-                tombstone.InstanceKey,
-                tombstone.PayloadId,
-                tombstone.Revision,
-                outcomes[i].Disposition));
+            // The tombstone token is echoed back unchanged: it is opaque to the SDK and is the only thing that
+            // tells the backend which row this disposition belongs to. Retry scheduling is the backend's job,
+            // so no next-attempt time is computed here.
+            results.Add(new LargePayloadPurgeResult(tombstone.TombstoneToken, outcomes[i].Disposition));
         }
 
         return results;

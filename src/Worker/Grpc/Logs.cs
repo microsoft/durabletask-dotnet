@@ -107,5 +107,14 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 78, Level = LogLevel.Warning, Message = "Activity notification callback failed for phase '{Phase}'.")]
         public static partial void ActivityNotificationFailed(this ILogger logger, ActivityNotificationPhase phase, Exception exception);
+
+        [LoggerMessage(EventId = 79, Level = LogLevel.Debug, Message = "Announced large-payload auto-purge setting to the backend. Enabled = {enabled}.")]
+        public static partial void LargePayloadAutoPurgeSet(this ILogger logger, bool enabled);
+
+        [LoggerMessage(EventId = 80, Level = LogLevel.Warning, Message = "The backend does not implement the large-payload auto-purge setting RPC, so the configured setting was not applied and externalized payload blobs will not be cleaned up. Orchestration execution is unaffected. Upgrade the backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator') to enable it.")]
+        public static partial void LargePayloadAutoPurgeUnsupported(this ILogger logger);
+
+        [LoggerMessage(EventId = 81, Level = LogLevel.Warning, Message = "Failed to announce the large-payload auto-purge setting to the backend. Externalized payload blob cleanup may not reflect the configured setting until the next reconnect. Orchestration execution is unaffected.")]
+        public static partial void LargePayloadAutoPurgeSetFailed(this ILogger logger, Exception exception);
     }
 }

@@ -9,7 +9,7 @@ using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
@@ -19,7 +19,7 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <remarks>
 /// Externalized payloads are configured per host, not per named builder. The <c>PayloadStore</c> and the
-/// purge <c>TaskHubSidecarServiceClient</c> are registered as container-wide singletons, so the first builder
+/// purge <c>LargePayloadPurgeClient</c> are registered as container-wide singletons, so the first builder
 /// in the host that calls <c>UseExternalizedPayloads</c> supplies the configuration that both of them use.
 /// Configuring multiple named workers in the same host with different storage accounts or different backends
 /// is therefore not supported: later builders silently share the first builder's registration. A single named
@@ -95,9 +95,10 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
 
-                // Item 2 of the pre-merge checklist: the resolved AutoPurge value rides the work-item
-                // handshake so the backend only tombstones payloads for a task hub whose workers opted in.
-                // Absent means "no opinion"; an explicit true/false is the customer's choice.
+                // The resolved AutoPurge value is announced to the backend with SetLargePayloadAutoPurge, once
+                // per worker connection and before work items are requested, so the backend only tombstones
+                // payloads for a task hub whose workers opted in. Null means "no opinion" - the RPC is not sent
+                // at all; an explicit true/false is the customer's choice.
                 opt.LargePayloadAutoPurgeEnabled = opts.AutoPurge;
             });
 
@@ -129,12 +130,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 ?? options.Channel?.CreateCallInvoker()
                 ?? throw new InvalidOperationException(
                     "A gRPC Channel or CallInvoker must be configured on the worker to purge externalized payloads.");
-            return new TaskHubSidecarServiceClient(invoker);
+            return new LargePayloadPurgeClient(invoker);
         });
 
         // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
         // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
-        // execute here. The purge activities fetch/report via the worker's TaskHubSidecarServiceClient above.
+        // execute here. The purge activities fetch/report via the worker's LargePayloadPurgeClient above.
         builder.AddTasks(r =>
         {
             r.AddEntity<BlobPurgeJob>();

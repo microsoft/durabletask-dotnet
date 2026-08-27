@@ -4,12 +4,12 @@
 using Grpc.Core;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
 
 namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.AutoPurge;
 
 /// <summary>
-/// The two purge activities are the real runtime path to the backend - they call the generated sidecar client
+/// The two purge activities are the real runtime path to the backend - they call the generated purge service client
 /// directly. During a mixed rollout an older backend returns gRPC <c>Unimplemented</c> for the new purge RPCs;
 /// each activity must translate that into a <see cref="NotImplementedException"/> so the orchestrator can
 /// disable the job instead of retrying an operation that can never succeed.
@@ -20,7 +20,7 @@ public class PurgeActivityUnimplementedTests
     public async Task GetLargePayloadTombstones_WhenBackendUnimplemented_ThrowsNotImplemented()
     {
         // Arrange - the backend rejects the fetch RPC because it does not implement it.
-        TaskHubSidecarServiceClient client = new(
+        LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Unimplemented, "unknown method"))));
         GetLargePayloadTombstonesActivity activity = new(client, new TestLogger<GetLargePayloadTombstonesActivity>());
 
@@ -37,13 +37,13 @@ public class PurgeActivityUnimplementedTests
     {
         // Arrange - a non-empty result list is required to get past the activity's empty-input short-circuit and
         // actually reach the report RPC, which the backend does not implement.
-        TaskHubSidecarServiceClient client = new(
+        LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Unimplemented, "unknown method"))));
         ReportLargePayloadPurgeResultsActivity activity =
             new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>());
         List<LargePayloadPurgeResult> results = new()
         {
-            new LargePayloadPurgeResult(1, 2, 3, 4, LargePayloadPurgeDisposition.Deleted),
+            new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
         };
 
         // Act
@@ -55,7 +55,7 @@ public class PurgeActivityUnimplementedTests
 
     /// <summary>
     /// A minimal <see cref="CallInvoker"/> whose unary calls fault with a configured <see cref="RpcException"/>.
-    /// Building a real <see cref="TaskHubSidecarServiceClient"/> over it exercises the activity's own catch
+    /// Building a real <see cref="LargePayloadPurgeClient"/> over it exercises the activity's own catch
     /// clause exactly as a live channel would, without mocking the generated client. The faulted
     /// <see cref="AsyncUnaryCall{TResponse}"/> surfaces the exception on await, matching real gRPC.
     /// </summary>

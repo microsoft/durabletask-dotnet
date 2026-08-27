@@ -3,7 +3,7 @@
 
 using System.Reflection;
 using Microsoft.DurableTask.Client;
-using P = Microsoft.DurableTask.Protobuf;
+using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.Client.Grpc.Tests;
 
@@ -22,8 +22,8 @@ public class LargePayloadPurgeEnumParityTests
         Dictionary<int, string> managed = Enum.GetValues(typeof(LargePayloadPurgeDisposition))
             .Cast<LargePayloadPurgeDisposition>()
             .ToDictionary(v => (int)v, v => v.ToString());
-        Dictionary<int, string> proto = Enum.GetValues(typeof(P.LargePayloadPurgeDisposition))
-            .Cast<P.LargePayloadPurgeDisposition>()
+        Dictionary<int, string> proto = Enum.GetValues(typeof(LP.LargePayloadPurgeDisposition))
+            .Cast<LP.LargePayloadPurgeDisposition>()
             .ToDictionary(v => (int)v, v => v.ToString());
 
         // Assert - same numeric values AND the same names at each value, so neither side can gain, lose, or
@@ -42,9 +42,9 @@ public class LargePayloadPurgeEnumParityTests
     /// <param name="inboundType">A type carrying server-to-client data for the purge feature.</param>
     [Theory]
     [InlineData(typeof(LargePayloadTombstone))]
-    [InlineData(typeof(P.LargePayloadTombstone))]
-    [InlineData(typeof(P.GetLargePayloadTombstonesResponse))]
-    [InlineData(typeof(P.ReportLargePayloadPurgeResultsResponse))]
+    [InlineData(typeof(LP.LargePayloadTombstone))]
+    [InlineData(typeof(LP.GetLargePayloadTombstonesResponse))]
+    [InlineData(typeof(LP.ReportLargePayloadPurgeResultsResponse))]
     public void InboundTypes_ExposeNoEnumMembers(Type inboundType)
     {
         // Arrange & Act

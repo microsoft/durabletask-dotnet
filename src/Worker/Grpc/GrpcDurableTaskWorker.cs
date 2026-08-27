@@ -5,6 +5,8 @@ using System.Diagnostics;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
@@ -73,7 +75,14 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                Processor processor = new(this, new(callInvoker), this.orchestrationFilter, this.ExceptionPropertiesProvider);
+                // Both clients are built on the SAME CallInvoker, so the DTS-only purge service rides the
+                // worker's existing channel and interceptors rather than opening a second connection.
+                Processor processor = new(
+                    this,
+                    new TaskHubSidecarServiceClient(callInvoker),
+                    new LP.LargePayloadPurge.LargePayloadPurgeClient(callInvoker),
+                    this.orchestrationFilter,
+                    this.ExceptionPropertiesProvider);
                 ProcessorExitReason reason = await processor.ExecuteAsync(stoppingToken);
 
                 if (reason == ProcessorExitReason.Shutdown || stoppingToken.IsCancellationRequested)

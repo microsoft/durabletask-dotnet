@@ -7,7 +7,7 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
 /// The outcome of attempting to delete a single externalized payload blob during an auto-purge cycle. The
-/// orchestrator combines it with the tombstone's identity and revision to build the reported
+/// orchestrator pairs it with the tombstone token it kept for that row to build the reported
 /// <see cref="LargePayloadPurgeResult"/>.
 /// </summary>
 /// <remarks>

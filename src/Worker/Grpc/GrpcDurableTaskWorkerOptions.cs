@@ -153,9 +153,9 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public TimeSpan SilentDisconnectTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
         /// <summary>
-        /// Gets or sets the number of consecutive connect failures (Hello timeouts, Unavailable responses, or
-        /// silent stream disconnects) after which the underlying gRPC channel will be recreated to clear
-        /// stale DNS, sub-channel state, or routing-affinity bindings. Setting to 0 or a negative value
+        /// Gets or sets the number of consecutive connect failures (connection-setup timeouts, Unavailable
+        /// responses, or silent stream disconnects) after which the underlying gRPC channel will be recreated
+        /// to clear stale DNS, sub-channel state, or routing-affinity bindings. Setting to 0 or a negative value
         /// disables channel recreation. Defaults to 5.
         /// </summary>
         public int ChannelRecreateFailureThreshold { get; set; } = 5;

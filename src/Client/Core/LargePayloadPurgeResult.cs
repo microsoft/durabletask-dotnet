@@ -20,8 +20,13 @@ namespace Microsoft.DurableTask.Client;
 /// </remarks>
 /// <param name="TombstoneToken">
 /// The opaque correlation token echoed unchanged from the fetched <see cref="LargePayloadTombstone"/>. It is
-/// what identifies the row being reported on, so a result carrying a token the caller invented or altered
-/// resolves nothing.
+/// what identifies the row being reported on, so it must be passed back exactly as received: callers must not
+/// parse it, derive from it, or construct one.
+/// <para>
+/// Opaqueness here is encapsulation, not security. The token is not an authentication credential and carries
+/// no integrity guarantee, so treating a well-formed token as proof that the caller was entitled to report on
+/// that row would be wrong. Authentication and task-hub scope are the security boundary.
+/// </para>
 /// </param>
 /// <param name="Disposition">The disposition of the deletion attempt.</param>
 public sealed record LargePayloadPurgeResult(

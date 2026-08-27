@@ -84,8 +84,9 @@ public static class InternalOptionsExtensions
     }
 
     /// <summary>
-    /// Sets the deadline applied to the initial <c>Hello</c> RPC during worker connect. A wedged
-    /// handshake on a half-open HTTP/2 connection no longer hangs the reconnect loop indefinitely.
+    /// Sets the deadline applied to each unary connection-setup RPC the worker issues before it opens the
+    /// work-item stream. Each such RPC gets its own fresh deadline of this length. A wedged handshake on a
+    /// half-open HTTP/2 connection no longer hangs the reconnect loop indefinitely.
     /// </summary>
     /// <param name="options">The gRPC worker options.</param>
     /// <param name="deadline">The deadline; non-positive disables the deadline.</param>

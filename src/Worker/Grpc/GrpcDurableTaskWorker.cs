@@ -71,6 +71,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         AsyncDisposable workerOwnedChannelDisposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
+        this.PublishCallInvoker(callInvoker);
 
         // Seed the tracker from the configured channel once, then update latestObservedChannel after
         // each successful recreate. Do not re-read this.grpcOptions.Channel inside the loop: the options
@@ -281,6 +282,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         TimeSpan deferredDisposeGracePeriod)
     {
         callInvoker = result.NewCallInvoker!;
+        this.PublishCallInvoker(callInvoker);
         address = result.NewAddress!;
         latestObservedChannel = result.NewChannel;
         AsyncDisposable previousDisposable = workerOwnedChannelDisposable;
@@ -324,6 +326,16 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         AsyncDisposable disposable = this.GetCallInvokerCore(out CallInvoker core, out address);
         callInvoker = ApplyInterceptors(this.interceptors, core);
         return disposable;
+    }
+
+    // Called with the post-interceptor invoker only, at startup and after each successful recreate, so a
+    // subscriber shares the worker's transport (and its auth chain) instead of holding an invoker that goes
+    // stale the moment the channel is replaced. Deliberately not wrapped in a catch: the hook is documented as
+    // non-throwing, and swallowing a failure here would leave subscribers silently pinned to a dead channel
+    // with nothing to indicate it.
+    void PublishCallInvoker(CallInvoker callInvoker)
+    {
+        this.grpcOptions.Internal.CallInvokerPublisher?.Invoke(callInvoker);
     }
 
     AsyncDisposable GetCallInvokerCore(out CallInvoker callInvoker, out string address)

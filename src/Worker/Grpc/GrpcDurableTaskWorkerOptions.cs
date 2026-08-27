@@ -207,5 +207,14 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         /// Gets or sets a callback that is invoked when activity work items are received or finished.
         /// </summary>
         public Action<ActivityNotificationPhase>? NotifyActivity { get; set; }
+
+        /// <summary>
+        /// Gets or sets a callback invoked with the worker's current effective <see cref="CallInvoker"/> - the
+        /// one produced after <see cref="Interceptors"/> have been applied. It is invoked once when the worker
+        /// starts and again after every successful channel recreate, so a component that shares the worker's
+        /// transport can follow it instead of capturing an invoker that later points at a disposed channel.
+        /// Implementations must not throw and must not block.
+        /// </summary>
+        public Action<CallInvoker>? CallInvokerPublisher { get; set; }
     }
 }

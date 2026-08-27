@@ -5,6 +5,7 @@ using Grpc.Core;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -71,7 +72,8 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>, RebindableCallInvoker>(
+                (opt, store, monitor, purgeInvoker) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
 
@@ -81,6 +83,11 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 opt.Interceptors.Add(new AzureBlobPayloadsSideCarInterceptor(store, opts));
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
+
+                // Follow the worker's transport instead of capturing one. The worker publishes its effective
+                // post-interceptor invoker here at startup and after every channel recreate, which is what
+                // keeps the purge activities on the live channel and inside the configured auth chain.
+                opt.SetCallInvokerPublisher(purgeInvoker.Rebind);
 
                 // The resolved AutoPurge value is announced to the backend with SetLargePayloadAutoPurge, once
                 // per worker connection and before work items are requested, so the backend only tombstones
@@ -101,24 +108,22 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
             });
 
         // The purge activities talk to the backend over the worker's OWN transport, so a worker-only host
-        // (which never registers a DurableTaskClient) can still run the job. This resolves the same CallInvoker
-        // the worker itself uses, so the RPCs ride its channel and interceptor - no second connection.
+        // (which never registers a DurableTaskClient) can still run the job. The worker's transport is not
+        // fixed for the life of the process - it recreates its channel when the current one is wedged, and the
+        // invoker it hands out is the one left after the configured interceptors (auth included) have been
+        // applied. Capturing options.CallInvoker/Channel here would therefore take a RAW invoker, skip the
+        // interceptors, reject the Address-only configuration outright, and keep pointing at channel A after
+        // the worker had moved to channel B. Instead, register an indirection the worker publishes into and
+        // build the client on that.
         // TryAddSingleton (rather than a keyed/named registration) is deliberate: the consumers -
         // GetLargePayloadTombstonesActivity and ReportLargePayloadPurgeResultsActivity - are constructed from
         // the plain IServiceProvider at dispatch with no worker name in scope, so a keyed registration would
         // have no resolvable consumer. This is the per-host single-configuration constraint documented on the
         // class remarks: in a multi-named-worker host the first builder's options win here. Do not "fix" this
         // into keyed DI - without a worker-name-aware consumer there is nothing to resolve the keyed client.
-        builder.Services.TryAddSingleton(sp =>
-        {
-            GrpcDurableTaskWorkerOptions options =
-                sp.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(builder.Name);
-            CallInvoker invoker = options.CallInvoker
-                ?? options.Channel?.CreateCallInvoker()
-                ?? throw new InvalidOperationException(
-                    "A gRPC Channel or CallInvoker must be configured on the worker to purge externalized payloads.");
-            return new LargePayloadPurgeClient(invoker);
-        });
+        builder.Services.TryAddSingleton<RebindableCallInvoker>();
+        builder.Services.TryAddSingleton(
+            sp => new LargePayloadPurgeClient(sp.GetRequiredService<RebindableCallInvoker>()));
 
         // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
         // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to

@@ -396,7 +396,7 @@ public class GrpcDurableTaskWorkerTests
         callInvoker.HelloCallCount.Should().Be(1);
         callInvoker.GetWorkItemsCallCount.Should().Be(0);
         logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
-        logs!.Should().Contain(log => log.Message.Contains("Hello handshake to backend timed out after 00:00:00.123"));
+        logs!.Should().Contain(log => log.Message.Contains("Connection setup to backend timed out after 00:00:00.123"));
         logs.Should().Contain(log => log.Message.Contains("Recreating gRPC channel to backend"));
     }
 

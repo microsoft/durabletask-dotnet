@@ -24,8 +24,8 @@ public sealed class BlobPurgeJobState
     /// when it last recorded a non-zero number of purged blobs.
     /// </summary>
     /// <remarks>
-    /// This is not a liveness or heartbeat signal, and it must not be read as one. Neither starting a host nor
-    /// a reconciliation pass moves it, and an active job whose cycles keep finding nothing to purge leaves it
+    /// This is not a liveness or heartbeat signal, and it must not be read as one. A repeated enable call that
+    /// changes nothing does not move it, and an active job whose cycles keep finding nothing to purge leaves it
     /// untouched indefinitely, so a value far in the past is equally consistent with a healthy idle job and a
     /// dead one.
     /// </remarks>

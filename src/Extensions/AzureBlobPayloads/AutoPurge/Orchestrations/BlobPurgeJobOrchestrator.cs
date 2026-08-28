@@ -151,8 +151,9 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                 // stale local emulator image). Retrying cannot help, so disable the job durably and exit the
                 // perpetual loop cleanly instead of logging a generic failure and backing off forever.
                 // MarkUnsupported is AWAITED, not signalled, so the disable is committed to the entity before we
-                // return; the client-side starter will not resurrect an Unsupported job until the process
-                // restarts. This is deliberately a distinct diagnostic from BlobPurgeCycleFailed below.
+                // return. Nothing restarts the job automatically: it stays Unsupported until a caller
+                // explicitly enables auto-purge again, and that call's Create revives it. This is deliberately
+                // a distinct diagnostic from BlobPurgeCycleFailed below.
                 logger.BlobPurgeBackendUnsupported(jobId, ex.FailureDetails.ErrorMessage);
                 await context.Entities.CallEntityAsync(
                     input.JobEntityId, nameof(BlobPurgeJob.MarkUnsupported), ex.FailureDetails.ErrorMessage);

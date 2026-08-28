@@ -165,9 +165,8 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// <remarks>
     /// This is a real stop, not a pause. The orchestrator reaches it after the fetch or report activity
     /// surfaces a gRPC <c>Unimplemented</c> as a <see cref="NotImplementedException"/>, and then exits; nothing
-    /// restarts the job on its own, because nothing reasserts the job's existence on a timer any more.
-    /// Recovery is an explicit call to the public enable API once the backend implements the RPCs -
-    /// <see cref="Create"/> revives an unsupported job deliberately.
+    /// restarts the job on its own. Recovery is an explicit call to the public enable API once the backend
+    /// implements the RPCs - <see cref="Create"/> revives an unsupported job deliberately.
     /// </remarks>
     /// <param name="context">The entity context.</param>
     /// <param name="detail">A human-readable description of why the backend is unsupported.</param>

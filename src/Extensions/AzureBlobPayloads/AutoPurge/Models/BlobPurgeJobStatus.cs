@@ -24,10 +24,10 @@ public enum BlobPurgeJobStatus
     /// <summary>
     /// The backend does not implement the large-payload purge RPCs, so the job cannot run. This happens against
     /// an older backend build or a stale local emulator image that predates the feature. It is kept distinct
-    /// from <see cref="Pending"/> precisely because <see cref="BlobPurgeJob.Create"/> must NOT re-activate it:
-    /// the client-side starter re-issues <c>Create</c> on every reconciliation pass, so a merely-stopped
-    /// (<see cref="Pending"/>) job is meant to come back, whereas an unsupported one must stay down until the
-    /// process restarts and re-checks the backend.
+    /// from <see cref="Pending"/> so that a job which is down because the backend cannot support it is not
+    /// mistaken for one that was deliberately stopped. Nothing revives it on its own: recovery is an explicit
+    /// re-enable once the backend implements the RPCs, and that call's <see cref="BlobPurgeJob.Create"/>
+    /// reactivates the job.
     /// </summary>
     Unsupported = 2,
 }

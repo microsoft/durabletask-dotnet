@@ -51,9 +51,9 @@ internal sealed class GetLargePayloadTombstonesActivity(
             // retrying an operation that can never succeed - see BlobPurgeJobOrchestrator's handling of it.
             throw new NotImplementedException(
                 "The Durable Task backend does not implement the GetLargePayloadTombstones RPC required for " +
-                "large-payload auto-purge. Upgrade the backend (or re-pull " +
-                "'mcr.microsoft.com/dts/dts-emulator'), then restart the app. Auto-purge is now disabled until " +
-                $"the process restarts. Backend detail: {e.Status.Detail}",
+                "large-payload auto-purge. Auto-purge is now disabled. Upgrade the backend (or re-pull " +
+                "'mcr.microsoft.com/dts/dts-emulator'), then call SetLargePayloadAutoPurgeAsync(true, ...) " +
+                $"again to re-enable it. Backend detail: {e.Status.Detail}",
                 e);
         }
 

@@ -70,7 +70,7 @@ public class BlobPurgeJobTests
         state.PurgeBatchSize.Should().Be(999);
 
         // Run is re-signalled even though the job is already active. That is what lets a job whose orchestrator
-        // has died be rebuilt at the next reconciliation pass, and it is safe because the backend discards the
+        // has died be rebuilt by a later explicit enable call, and it is safe because the backend discards the
         // resulting start while the orchestrator is alive rather than replacing it.
         Mock.Get(operation.Context).Verify(
             c => c.SignalEntity(
@@ -113,9 +113,9 @@ public class BlobPurgeJobTests
     [Fact]
     public async Task Create_WhenAlreadyActive_AndBatchSizeUnchanged_DoesNotMoveLastModifiedAt()
     {
-        // Arrange - the steady state. Create runs on every reconciliation pass, and almost every one of those
-        // carries the same configured batch size the job already has. If that rewrote LastModifiedAt, the field
-        // would degrade to "time of the last pass" and say nothing about the job.
+        // Arrange - the steady state. Create runs on every explicit enable call, and a repeated enable almost
+        // always carries the same batch size the job already has. If that rewrote LastModifiedAt, the field
+        // would degrade to "time of the last call" and say nothing about the job.
         DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
         BlobPurgeJobState existing = new()
         {
@@ -170,7 +170,7 @@ public class BlobPurgeJobTests
     public async Task Run_DoesNotMoveLastModifiedAt()
     {
         // Arrange - Run schedules an orchestrator and changes nothing about the job. It is signalled by every
-        // Create, so writing here would move the field on every reconciliation pass and undo the conditional
+        // Create, so writing here would move the field on every enable call and undo the conditional
         // write above.
         DateTimeOffset configuredAt = DateTimeOffset.UtcNow.AddDays(-2);
         BlobPurgeJobState existing = new()
@@ -297,10 +297,10 @@ public class BlobPurgeJobTests
     [Fact]
     public async Task Stop_WhenNotActive_LeavesStateUntouched()
     {
-        // Arrange - a job that is already stopped. The starter's client-side pre-check normally suppresses a
-        // redundant stop, so this is the signal that races past it: the job stopped between that read and this
-        // signal landing. Rewriting LastModifiedAt here would report the losing side of that race as if it
-        // were the moment the job stopped.
+        // Arrange - a job that is already stopped. A repeated explicit disable lands here, as does one that
+        // races another caller's disable: the job stopped between when this caller decided to disable it and
+        // this signal landing. Rewriting LastModifiedAt here would report the losing side of that race as if
+        // it were the moment the job stopped.
         DateTimeOffset stoppedAt = DateTimeOffset.UtcNow.AddHours(-6);
         BlobPurgeJobState existing = new()
         {

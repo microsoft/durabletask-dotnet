@@ -21,11 +21,5 @@
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- The AzureBlobPayloads extension owns the public auto-purge on/off API, but the RPC behind it must ride
-         this client's own post-interceptor transport. ILargePayloadAutoPurgeClient is the narrow seam that
-         gives it that one operation without exposing the CallInvoker as supported surface. -->
-    <InternalsVisibleTo Include="Microsoft.DurableTask.Extensions.AzureBlobPayloads" Key="$(StrongNamePublicKey)" />
-  </ItemGroup>
 
 </Project>

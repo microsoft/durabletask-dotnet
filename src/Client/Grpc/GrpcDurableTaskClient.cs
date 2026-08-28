@@ -22,7 +22,7 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.
 /// </summary>
-public sealed class GrpcDurableTaskClient : DurableTaskClient, ILargePayloadAutoPurgeClient
+public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePayloadAutoPurgeClient
 {
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
@@ -635,7 +635,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, ILargePayloadAuto
     }
 
     /// <inheritdoc/>
-    async Task ILargePayloadAutoPurgeClient.SetLargePayloadAutoPurgeAsync(bool enabled, CancellationToken cancellation)
+    async Task Internal.ILargePayloadAutoPurgeClient.SetLargePayloadAutoPurgeAsync(bool enabled, CancellationToken cancellation)
     {
         try
         {

@@ -3,7 +3,7 @@
 
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Client.Grpc;
+using Microsoft.DurableTask.Client.Grpc.Internal;
 using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Client;

@@ -81,8 +81,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
         [LoggerMessage(EventId = 65, Level = LogLevel.Information, Message = "{instanceId}: Abandoned entity work item. Completion token = '{completionToken}'")]
         public static partial void AbandonedEntityWorkItem(this ILogger logger, string instanceId, string completionToken);
 
-        [LoggerMessage(EventId = 70, Level = LogLevel.Warning, Message = "Connection setup to backend timed out after {timeout}. Will retry.")]
-        public static partial void ConnectionSetupTimeout(this ILogger logger, TimeSpan timeout);
+        [LoggerMessage(EventId = 70, Level = LogLevel.Warning, Message = "Hello handshake to backend timed out after {timeout}. Will retry.")]
+        public static partial void HelloTimeout(this ILogger logger, TimeSpan timeout);
 
         [LoggerMessage(EventId = 71, Level = LogLevel.Warning, Message = "Authentication failed when connecting to backend. Will retry.")]
         public static partial void AuthenticationFailed(this ILogger logger, Exception ex);
@@ -107,11 +107,5 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 78, Level = LogLevel.Warning, Message = "Activity notification callback failed for phase '{Phase}'.")]
         public static partial void ActivityNotificationFailed(this ILogger logger, ActivityNotificationPhase phase, Exception exception);
-
-        [LoggerMessage(EventId = 79, Level = LogLevel.Debug, Message = "Announced large-payload auto-purge setting to the backend. Enabled = {enabled}.")]
-        public static partial void LargePayloadAutoPurgeSet(this ILogger logger, bool enabled);
-
-        [LoggerMessage(EventId = 80, Level = LogLevel.Warning, Message = "The backend does not implement the large-payload auto-purge setting RPC, so the configured setting was not applied and externalized payload blobs will not be cleaned up. Orchestration execution is unaffected. Upgrade the backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator') to enable it.")]
-        public static partial void LargePayloadAutoPurgeUnsupported(this ILogger logger);
     }
 }

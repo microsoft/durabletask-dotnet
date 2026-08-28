@@ -369,15 +369,16 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task Create_WhenUnsupported_DoesNotReactivate()
+    public async Task Create_WhenUnsupported_RevivesJob()
     {
-        // Arrange - the backend was found not to implement the purge RPCs, so the job is disabled. Create runs
-        // on every reconciliation pass, so if it revived an unsupported job the disable would be undone within
-        // one interval and the job would spin against the missing RPC forever. This guard is the only thing that
-        // makes the stop real; recovery is deliberately by process restart (via Reset), not by Create.
+        // Arrange - the backend was found not to implement the purge RPCs, so the job was disabled. Create is
+        // now reached only from an explicit client call, so reviving is exactly what the caller asked for, and
+        // it is the documented recovery once the backend has been upgraded. Refusing here would strand the job
+        // permanently, because nothing else clears the status.
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Unsupported,
+            LastError = "backend does not implement GetLargePayloadTombstones",
             PurgeBatchSize = 250,
         };
         TestEntityOperation operation = new(
@@ -388,11 +389,12 @@ public class BlobPurgeJobTests
         // Act
         await this.job.RunAsync(operation);
 
-        // Assert - the status is the load-bearing assertion: without the guard Create falls through and sets it
-        // Active. Run must not be signalled either, since that is the other half of a revival.
+        // Assert - reviving means both halves: the status goes Active and the orchestrator is scheduled. The
+        // stale error is dropped so a later failure is not read as this one.
         BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
             operation.State.GetState(typeof(BlobPurgeJobState)));
-        state.Status.Should().Be(BlobPurgeJobStatus.Unsupported);
+        state.Status.Should().Be(BlobPurgeJobStatus.Active);
+        state.LastError.Should().BeNull();
 
         Mock.Get(operation.Context).Verify(
             c => c.SignalEntity(
@@ -400,7 +402,7 @@ public class BlobPurgeJobTests
                 nameof(BlobPurgeJob.Run),
                 It.IsAny<object?>(),
                 It.IsAny<SignalEntityOptions?>()),
-            Times.Never);
+            Times.Once);
     }
 
     [Fact]
@@ -467,60 +469,5 @@ public class BlobPurgeJobTests
         state.Status.Should().Be(BlobPurgeJobStatus.Unsupported);
         state.LastError.Should().Be("original detail");
         state.LastModifiedAt.Should().Be(disabledAt);
-    }
-
-    [Fact]
-    public async Task Reset_WhenUnsupported_MovesToPendingAndClearsError()
-    {
-        // Arrange - a process starting up against a backend that may have been upgraded. Reset clears the
-        // unsupported disable so the next Create can re-check the backend, and drops the stale error.
-        BlobPurgeJobState existing = new()
-        {
-            Status = BlobPurgeJobStatus.Unsupported,
-            LastError = "backend does not implement GetLargePayloadTombstones",
-            PurgeBatchSize = 250,
-        };
-        TestEntityOperation operation = new(
-            nameof(BlobPurgeJob.Reset),
-            new TestEntityState(existing),
-            null);
-
-        // Act
-        await this.job.RunAsync(operation);
-
-        // Assert
-        BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
-            operation.State.GetState(typeof(BlobPurgeJobState)));
-        state.Status.Should().Be(BlobPurgeJobStatus.Pending);
-        state.LastError.Should().BeNull();
-        state.LastModifiedAt.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task Reset_WhenActive_LeavesStateUntouched()
-    {
-        // Arrange - the worst regression this guard prevents. Reset is signalled blind on every process start,
-        // before the starter knows the job's state, so a signal landing on a healthy Active job must change
-        // nothing. Without the guard, a routine host restart would stop a running job every time.
-        DateTimeOffset activeSince = DateTimeOffset.UtcNow.AddHours(-3);
-        BlobPurgeJobState existing = new()
-        {
-            Status = BlobPurgeJobStatus.Active,
-            LastModifiedAt = activeSince,
-            PurgeBatchSize = 250,
-        };
-        TestEntityOperation operation = new(
-            nameof(BlobPurgeJob.Reset),
-            new TestEntityState(existing),
-            null);
-
-        // Act
-        await this.job.RunAsync(operation);
-
-        // Assert
-        BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
-            operation.State.GetState(typeof(BlobPurgeJobState)));
-        state.Status.Should().Be(BlobPurgeJobStatus.Active);
-        state.LastModifiedAt.Should().Be(activeSince);
     }
 }

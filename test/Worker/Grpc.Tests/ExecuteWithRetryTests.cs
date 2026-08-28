@@ -11,7 +11,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -259,14 +258,13 @@ public class ExecuteWithRetryTests
 
         CallInvoker callInvoker = Mock.Of<CallInvoker>();
         P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(callInvoker);
-        LP.LargePayloadPurge.LargePayloadPurgeClient purgeClient = new(callInvoker);
 
         Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
         return Activator.CreateInstance(
             processorType,
             BindingFlags.Public | BindingFlags.Instance,
             binder: null,
-            args: new object?[] { worker, client, purgeClient, null, null },
+            args: new object?[] { worker, client, null, null },
             culture: null)!;
     }
 

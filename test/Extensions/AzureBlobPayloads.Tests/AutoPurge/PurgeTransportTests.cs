@@ -77,7 +77,6 @@ public class PurgeTransportTests
             builder.UseExternalizedPayloads(options =>
             {
                 options.ConnectionString = "UseDevelopmentStorage=true";
-                options.AutoPurge = true;
             });
         });
 
@@ -100,10 +99,11 @@ public class PurgeTransportTests
             await worker.StopAsync(CancellationToken.None);
         }
 
-        // Assert - the configured interceptor observed the worker's own connection-setup RPCs AND both purge
-        // RPCs, so all four rode the same intercepted transport.
+        // Assert - the configured interceptor observed the worker's own handshake AND both purge RPCs, so all
+        // three rode the same intercepted transport. The worker itself never calls SetLargePayloadAutoPurge:
+        // that setting is written by an explicit client call, not by a worker connecting.
         interceptor.Calls.Should().Contain("Hello");
-        interceptor.Calls.Should().Contain("SetLargePayloadAutoPurge");
+        interceptor.Calls.Should().NotContain("SetLargePayloadAutoPurge");
         interceptor.Calls.Should().Contain("GetLargePayloadTombstones");
         interceptor.Calls.Should().Contain("ReportLargePayloadPurgeResults");
     }
@@ -250,15 +250,14 @@ public class PurgeTransportTests
 
     static async Task FetchTombstonesIgnoringTransportFailureAsync(LargePayloadPurgeClient client)
     {
-        // The fake endpoints never answer, so the call always fails. Which handler recorded it is the signal,
-        // not whether it succeeded.
-        try
-        {
-            await client.GetLargePayloadTombstonesAsync(new LP.GetLargePayloadTombstonesRequest { Limit = 1 });
-        }
-        catch (RpcException)
-        {
-        }
+        // The fake endpoints answer every call with a trailers-only Unavailable, so the call always fails.
+        // Which handler recorded it is the signal, not whether it succeeded - but the status is asserted rather
+        // than swallowed, so a call that failed for some unrelated reason (a wrong method, a broken marshaller)
+        // cannot masquerade as the expected transport failure.
+        RpcException failure = await Assert.ThrowsAsync<RpcException>(
+            () => client.GetLargePayloadTombstonesAsync(new LP.GetLargePayloadTombstonesRequest { Limit = 1 })
+                .ResponseAsync);
+        failure.StatusCode.Should().Be(StatusCode.Unavailable);
     }
 
     /// <summary>

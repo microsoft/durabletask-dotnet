@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Client.Grpc;
@@ -21,10 +22,11 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.
 /// </summary>
-public sealed class GrpcDurableTaskClient : DurableTaskClient
+public sealed class GrpcDurableTaskClient : DurableTaskClient, ILargePayloadAutoPurgeClient
 {
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
+    readonly LP.LargePayloadPurge.LargePayloadPurgeClient largePayloadPurgeClient;
     readonly GrpcDurableTaskClientOptions options;
     readonly DurableEntityClient? entityClient;
     AsyncDisposable asyncDisposable;
@@ -55,6 +57,13 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         this.options = Check.NotNull(options);
         this.asyncDisposable = GetCallInvoker(options, logger, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
+
+        // Built on the SAME effective invoker as the sidecar client, which is what keeps the DTS-only purge
+        // service on this client's existing channel and inside its configured interceptors. That invoker may be
+        // a ChannelRecreatingCallInvoker, so the generated client follows the client's channel swaps rather than
+        // pinning the channel it happened to see here. Constructed unconditionally: it opens no connection of
+        // its own, so an app that never touches auto-purge pays only the allocation.
+        this.largePayloadPurgeClient = new LP.LargePayloadPurge.LargePayloadPurgeClient(callInvoker);
 
         if (this.options.EnableEntitySupport)
         {
@@ -622,6 +631,26 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new InvalidOperationException(
                 $"An error occurred while retrieving the history for orchestration with instanceId {instanceId}.", e);
+        }
+    }
+
+    /// <inheritdoc/>
+    async Task ILargePayloadAutoPurgeClient.SetLargePayloadAutoPurgeAsync(bool enabled, CancellationToken cancellation)
+    {
+        try
+        {
+            await this.largePayloadPurgeClient.SetLargePayloadAutoPurgeAsync(
+                new LP.SetLargePayloadAutoPurgeRequest { Enabled = enabled },
+                cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                "The SetLargePayloadAutoPurge operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
         }
     }
 

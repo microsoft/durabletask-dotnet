@@ -10,7 +10,6 @@ using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using P = Microsoft.DurableTask.Protobuf;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -283,7 +282,7 @@ public class GrpcDurableTaskWorkerDebugLoggingTests
             processorType,
             BindingFlags.Public | BindingFlags.Instance,
             binder: null,
-            args: new object?[] { worker, client, new LP.LargePayloadPurge.LargePayloadPurgeClient(Mock.Of<CallInvoker>()), null, null },
+            args: new object?[] { worker, client, null, null },
             culture: null)!;
     }
 

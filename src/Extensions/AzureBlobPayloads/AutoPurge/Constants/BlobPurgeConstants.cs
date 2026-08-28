@@ -18,7 +18,7 @@ static class BlobPurgeConstants
 
     /// <summary>
     /// The default number of tombstoned payloads the auto-purge job requests from the backend per cycle,
-    /// used whenever a batch size is not explicitly configured.
+    /// used whenever a batch size is not passed explicitly.
     /// </summary>
     public const int DefaultBatchSize = 500;
 
@@ -28,12 +28,6 @@ static class BlobPurgeConstants
     /// GetLargePayloadTombstones contract bound, so the two cannot drift.
     /// </summary>
     public const int MaxBatchSize = LargePayloadTombstone.MaxRequestLimit;
-
-    /// <summary>
-    /// The fixed instance ID of the client-to-entity bridge orchestration the starter schedules to ensure the
-    /// singleton job. A fixed ID keeps racing client processes from creating duplicate bridge orchestrations.
-    /// </summary>
-    public const string StarterInstanceId = "BlobPurgeJobStarter-" + JobId;
 
     /// <summary>
     /// The prefix used for generating blob purge job orchestrator instance IDs. Format: "BlobPurgeJob-{jobId}".

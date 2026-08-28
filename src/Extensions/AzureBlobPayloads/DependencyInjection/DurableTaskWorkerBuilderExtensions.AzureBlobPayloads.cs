@@ -88,18 +88,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 // post-interceptor invoker here at startup and after every channel recreate, which is what
                 // keeps the purge activities on the live channel and inside the configured auth chain.
                 opt.SetCallInvokerPublisher(purgeInvoker.Rebind);
-
-                // The resolved AutoPurge value is announced to the backend with SetLargePayloadAutoPurge, once
-                // per worker connection and before work items are requested, so the backend only tombstones
-                // payloads for a task hub whose workers opted in. Null means "no opinion" - the RPC is not sent
-                // at all; an explicit true/false is the customer's choice.
-                opt.LargePayloadAutoPurgeEnabled = opts.AutoPurge;
             });
 
         // The auto-purge job is entity-driven: its orchestrator drives the BlobPurgeJob entity, and an
         // orchestrator that touches entities with support off throws (TaskOrchestrationContextWrapper). Enable
-        // it whenever externalized payloads are configured - mirroring the client side, and not gated on
-        // AutoPurge - so the job can be both driven (enabled path) and stopped (disabled path) either way.
+        // it whenever externalized payloads are configured - mirroring the client side - so the job can run
+        // whenever a client has turned the feature on, whichever host that client lives in.
         builder.Services
             .AddOptions<DurableTaskWorkerOptions>(builder.Name)
             .Configure(options =>
@@ -125,13 +119,13 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         builder.Services.TryAddSingleton(
             sp => new LargePayloadPurgeClient(sp.GetRequiredService<RebindableCallInvoker>()));
 
-        // Register the entity/orchestrators/activities that run the singleton auto-purge job. These are
-        // ALWAYS registered (not gated on AutoPurge) so that a client-enabled job always has something to
-        // execute here. The purge activities fetch/report via the worker's LargePayloadPurgeClient above.
+        // Register the entity/orchestrator/activities that run the singleton auto-purge job. These are ALWAYS
+        // registered (never gated on configuration) so that a job a client has turned on always has something
+        // to execute here. Workers never call SetLargePayloadAutoPurge - the setting is owned by the explicit
+        // client API - but they do fetch and report via the worker's LargePayloadPurgeClient above.
         builder.AddTasks(r =>
         {
             r.AddEntity<BlobPurgeJob>();
-            r.AddOrchestrator<ExecuteBlobPurgeJobOperationOrchestrator>();
             r.AddOrchestrator<BlobPurgeJobOrchestrator>();
             r.AddActivity<GetLargePayloadTombstonesActivity>();
             r.AddActivity<DeleteExternalBlobActivity>();

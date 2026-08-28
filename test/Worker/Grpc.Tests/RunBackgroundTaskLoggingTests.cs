@@ -12,7 +12,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using P = Microsoft.DurableTask.Protobuf;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 using Xunit;
 using Grpc.Core;
 using Xunit.Abstractions;
@@ -624,7 +623,7 @@ public class RunBackgroundTaskLoggingTests
                 processorType,
                 BindingFlags.Public | BindingFlags.Instance,
                 binder: null,
-                args: new object?[] { worker, clientMock.Object, new LP.LargePayloadPurge.LargePayloadPurgeClient(Mock.Of<CallInvoker>()), null, null },
+                args: new object?[] { worker, clientMock.Object, null, null },
                 culture: null)!;
 
             MethodInfo runBackgroundTask = processorType.GetMethod("RunBackgroundTask", BindingFlags.Instance | BindingFlags.NonPublic)!;

@@ -6,6 +6,12 @@
     <AssemblyName>Microsoft.DurableTask.Extensions.AzureBlobPayloads</AssemblyName>
     <RootNamespace>Microsoft.DurableTask</RootNamespace>
     <EnableStyleCop>true</EnableStyleCop>
+    <!-- Client.Grpc grants this assembly InternalsVisibleTo so the public auto-purge API can reach the narrow
+         ILargePayloadAutoPurgeClient seam. That also makes Client.Grpc's copies of the shared-source helpers
+         (Check, Verify, TaskExtensions, RetryPolicyExtensions) visible here, where this assembly compiles the
+         same files from src/Shared. CS0436 reports the resulting ambiguity; the compiler resolves it to the
+         local source, which is both correct and the only outcome the shared-source layout can produce. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

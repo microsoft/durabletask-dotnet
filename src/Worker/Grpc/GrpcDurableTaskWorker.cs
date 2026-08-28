@@ -7,7 +7,6 @@ using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
@@ -84,12 +83,13 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Both clients are built on the SAME CallInvoker, so the DTS-only purge service rides the
-                // worker's existing channel and interceptors rather than opening a second connection.
+                // Built on the SAME CallInvoker as the sidecar client so the DTS-only purge service the
+                // activities use rides the worker's existing channel and interceptors rather than opening a
+                // second connection. The worker itself never calls SetLargePayloadAutoPurge; that setting is
+                // owned by the explicit client API.
                 Processor processor = new(
                     this,
                     new TaskHubSidecarServiceClient(callInvoker),
-                    new LP.LargePayloadPurge.LargePayloadPurgeClient(callInvoker),
                     this.orchestrationFilter,
                     this.ExceptionPropertiesProvider);
                 ProcessorExitReason reason = await processor.ExecuteAsync(stoppingToken);

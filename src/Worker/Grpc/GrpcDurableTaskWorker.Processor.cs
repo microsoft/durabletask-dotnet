@@ -19,7 +19,6 @@ using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using ActivityStatusCode = System.Diagnostics.ActivityStatusCode;
 using DTCore = DurableTask.Core;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -35,18 +34,16 @@ sealed partial class GrpcDurableTaskWorker
 
         readonly GrpcDurableTaskWorker worker;
         readonly TaskHubSidecarServiceClient client;
-        readonly LP.LargePayloadPurge.LargePayloadPurgeClient purgeClient;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
         readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, LP.LargePayloadPurge.LargePayloadPurgeClient purgeClient, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         {
             this.worker = worker;
             this.client = client;
-            this.purgeClient = purgeClient;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
             this.orchestrationFilter = orchestrationFilter;
@@ -96,12 +93,10 @@ sealed partial class GrpcDurableTaskWorker
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.DeadlineExceeded)
                 {
-                    // Deadlines are carried only by the pre-stream connection-setup RPCs (HelloAsync, and
-                    // SetLargePayloadAutoPurge when the worker has an opinion to announce). Once the work-item
-                    // stream is established, ProcessWorkItemsAsync relies on the silent-disconnect timer instead
-                    // of per-read deadlines. A DeadlineExceeded here therefore means connection setup hung on a
-                    // stale or half-open channel.
-                    this.Logger.ConnectionSetupTimeout(this.internalOptions.HelloDeadline);
+                    // Only HelloAsync carries a deadline. Once the work-item stream is established,
+                    // ProcessWorkItemsAsync relies on the silent-disconnect timer instead of per-read deadlines.
+                    // A DeadlineExceeded here therefore means the handshake hung on a stale or half-open channel.
+                    this.Logger.HelloTimeout(this.internalOptions.HelloDeadline);
                     channelLikelyPoisoned = true;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
@@ -325,10 +320,8 @@ sealed partial class GrpcDurableTaskWorker
         {
             await this.client!.HelloAsync(
                 EmptyMessage,
-                deadline: this.NextConnectionSetupDeadline(),
+                deadline: this.NextHelloDeadline(),
                 cancellationToken: cancellation);
-
-            await this.AnnounceLargePayloadAutoPurgeAsync(cancellation);
 
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
 
@@ -347,27 +340,19 @@ sealed partial class GrpcDurableTaskWorker
                 },
                 cancellationToken: cancellation);
 
-            // Logged last, not straight after Hello: the message claims a work-item streaming connection, and
-            // between Hello and here the announcement can still stop the attempt without any stream being
-            // requested. Logging earlier made every retry of a gated connect report a connection that was
-            // never opened.
+            // Logged last, not straight after Hello: the message claims a work-item streaming connection, so it
+            // must not be emitted until the call that opens one has actually been created. A synchronous throw
+            // out of GetWorkItems would otherwise leave a retry loop reporting connections that never existed.
             this.Logger.EstablishedWorkItemConnection();
             return stream;
         }
 
         /// <summary>
-        /// Computes a fresh absolute deadline for one connection-setup RPC from the configured
+        /// Computes a fresh absolute deadline for the <c>Hello</c> handshake from the configured
         /// <c>HelloDeadline</c> interval.
         /// </summary>
-        /// <remarks>
-        /// Deliberately called once per RPC rather than once per connect: sharing a single absolute deadline
-        /// across the setup RPCs would give the later ones whatever slice of the interval the earlier ones
-        /// left, so a Hello that took most of the budget would leave the next call with almost none and it
-        /// would time out for a reason that has nothing to do with its own health. Each call instead gets the
-        /// full interval, which is what the option's wording promises.
-        /// </remarks>
         /// <returns>The absolute UTC deadline, or <c>null</c> when the deadline is disabled.</returns>
-        DateTime? NextConnectionSetupDeadline()
+        DateTime? NextHelloDeadline()
         {
             TimeSpan interval = this.internalOptions.HelloDeadline;
             if (interval <= TimeSpan.Zero)
@@ -382,63 +367,6 @@ sealed partial class GrpcDurableTaskWorker
             DateTime maxDeadlineUtc = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
             TimeSpan maxOffset = maxDeadlineUtc - now;
             return interval >= maxOffset ? maxDeadlineUtc : now.Add(interval);
-        }
-
-        /// <summary>
-        /// Announces the configured large-payload auto-purge opt-in, once per connection and before the
-        /// work-item stream is requested, as the contract requires.
-        /// </summary>
-        /// <remarks>
-        /// A worker with no opinion - the default, and every worker that has not configured externalized
-        /// payloads - sends nothing at all rather than sending a default, which leaves the stored value
-        /// untouched. That is what keeps a worker that does not know about auto-purge from silently disabling
-        /// a task hub that opted in.
-        /// <para>
-        /// When the worker does have an opinion, the announcement is a precondition for taking work rather
-        /// than best-effort telemetry, so only <see cref="StatusCode.Unimplemented"/> is absorbed here. Every
-        /// other failure propagates to <c>ExecuteAsync</c>, which does not open the work-item stream and
-        /// instead retries with the existing backoff and channel-recreate policy. The reason is that the two
-        /// settings disagree destructively: while the backend still believes auto-purge is off it hard-deletes
-        /// payload metadata without writing a tombstone, so the blob reference is lost permanently and no
-        /// later purge cycle can recover it. Declining to take work until the setting is confirmed trades
-        /// availability for a loss that is not repairable, which is the right way round.
-        /// </para>
-        /// <para>
-        /// <see cref="StatusCode.Unimplemented"/> is the one safe exception: a backend without the service is
-        /// not a Durable Task Scheduler backend that might be silently deleting payload metadata, it is a
-        /// backend with no large-payload tombstoning at all, so there is nothing to lose by proceeding.
-        /// </para>
-        /// <para>
-        /// The call carries the same finite deadline as the Hello handshake so a half-open channel cannot
-        /// park the worker here indefinitely: a hung call surfaces as
-        /// <see cref="StatusCode.DeadlineExceeded"/>, which counts toward the channel-recreate threshold like
-        /// any other setup timeout.
-        /// </para>
-        /// </remarks>
-        /// <param name="cancellation">The cancellation token.</param>
-        /// <returns>A task that completes once the setting has been announced, absorbed, or skipped.</returns>
-        async Task AnnounceLargePayloadAutoPurgeAsync(CancellationToken cancellation)
-        {
-            if (this.worker.grpcOptions.LargePayloadAutoPurgeEnabled is not bool enabled)
-            {
-                return;
-            }
-
-            try
-            {
-                await this.purgeClient.SetLargePayloadAutoPurgeAsync(
-                    new LP.SetLargePayloadAutoPurgeRequest { Enabled = enabled },
-                    deadline: this.NextConnectionSetupDeadline(),
-                    cancellationToken: cancellation);
-                this.Logger.LargePayloadAutoPurgeSet(enabled);
-            }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
-            {
-                // Mixed rollout, or a backend that is not the Durable Task Scheduler at all, so the service
-                // does not exist. No separate failure log for the propagating cases: ExecuteAsync's handlers
-                // already log each status, and logging here as well would double-report a single failure.
-                this.Logger.LargePayloadAutoPurgeUnsupported();
-            }
         }
 
         async Task ProcessWorkItemsAsync(

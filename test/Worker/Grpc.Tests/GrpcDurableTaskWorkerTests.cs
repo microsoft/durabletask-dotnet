@@ -15,7 +15,6 @@ using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -396,7 +395,7 @@ public class GrpcDurableTaskWorkerTests
         callInvoker.HelloCallCount.Should().Be(1);
         callInvoker.GetWorkItemsCallCount.Should().Be(0);
         logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
-        logs!.Should().Contain(log => log.Message.Contains("Connection setup to backend timed out after 00:00:00.123"));
+        logs!.Should().Contain(log => log.Message.Contains("Hello handshake to backend timed out after 00:00:00.123"));
         logs.Should().Contain(log => log.Message.Contains("Recreating gRPC channel to backend"));
     }
 
@@ -952,7 +951,7 @@ public class GrpcDurableTaskWorkerTests
             processorType,
             BindingFlags.Public | BindingFlags.Instance,
             binder: null,
-            args: new object?[] { worker, client, new LP.LargePayloadPurge.LargePayloadPurgeClient(Mock.Of<CallInvoker>()), null, null },
+            args: new object?[] { worker, client, null, null },
             culture: null)!;
     }
 

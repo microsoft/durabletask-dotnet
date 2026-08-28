@@ -7,8 +7,6 @@ using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask;
@@ -81,36 +79,16 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 opt.Interceptors.Add(new AzureBlobPayloadsSideCarInterceptor(store, opts));
             });
 
-        // The auto-purge job is entity-driven: BlobPurgeJobStarter reaches the singleton job through
-        // client.Entities on BOTH paths - the enabled path creates and drives the job, and the disabled path
-        // signals it Stop - so entity support must be on whenever externalized payloads are configured, not only
-        // when AutoPurge is enabled. Gating it on AutoPurge would break the off-switch: flipping AutoPurge from
-        // true to false would disable entities exactly when the stop signal needs client.Entities, leaving a
-        // running job deleting blobs forever. Set it on the base options so an explicit UseGrpc client that
-        // disables entity support still wins (DurableTaskClientOptions.ApplyTo copies this value only when the
-        // derived options did not set it explicitly).
+        // The explicit auto-purge API (SetLargePayloadAutoPurgeAsync) reaches the singleton job through
+        // client.Entities on BOTH paths - enabling signals Create, disabling signals Stop - so entity support
+        // must be on whenever externalized payloads are configured. Set it on the base options so an explicit
+        // UseGrpc client that disables entity support still wins (DurableTaskClientOptions.ApplyTo copies this
+        // value only when the derived options did not set it explicitly).
         builder.Configure(options =>
         {
             options.EnableEntitySupport = true;
         });
 
-        // Always register the auto-purge starter. Whether auto-purge is actually enabled can only be known once
-        // options are fully resolved - the flag can be set by the inline configure delegate, services.Configure,
-        // configuration binding or PostConfigure, none of which are visible here at registration time - so the
-        // starter is registered unconditionally and no-ops in StartAsync when AutoPurge is disabled.
-        RegisterBlobPurgeJobStarter(builder);
-
         return builder;
-    }
-
-    static void RegisterBlobPurgeJobStarter(IDurableTaskClientBuilder builder)
-    {
-        string builderName = builder.Name;
-        builder.Services.AddSingleton<IHostedService>(sp => new BlobPurgeJobStarter(
-            sp.GetRequiredService<IDurableTaskClientProvider>(),
-            sp.GetRequiredService<PayloadStore>(),
-            sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>(),
-            builderName,
-            sp.GetRequiredService<ILogger<BlobPurgeJobStarter>>()));
     }
 }

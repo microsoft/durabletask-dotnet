@@ -21,6 +21,17 @@ static class TraceHelper
     static readonly ActivitySource ActivityTraceSource = new ActivitySource(Source);
 
     /// <summary>
+    /// Gets a value indicating whether any listener is currently registered for the Durable Task
+    /// <see cref="ActivitySource"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is a cheap check that callers can use to skip trace-event lookup work (such as scanning
+    /// orchestration history to correlate scheduling events) when no listener is registered and any resulting
+    /// <see cref="Activity"/> would be discarded anyway.
+    /// </remarks>
+    public static bool HasListeners => ActivityTraceSource.HasListeners();
+
+    /// <summary>
     /// Starts a new trace activity for scheduling an orchestration from the client.
     /// </summary>
     /// <param name="createInstanceRequest">The orchestration's creation request.</param>

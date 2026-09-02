@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using DurableTask.Core;
@@ -10,6 +11,7 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Tests.Logging;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.Logging;
@@ -362,6 +364,148 @@ public class GrpcDurableTaskWorkerTests
         logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
         logs!.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Started'"));
         logs.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Completed'"));
+    }
+
+    // The following two tests both touch the process-wide "Microsoft.DurableTask" ActivitySource used by
+    // TraceHelper, so they are kept in this class (whose test methods xunit runs sequentially by default) to
+    // avoid flaky interference between them.
+    [Fact]
+    public async Task DispatchWorkItem_OrchestratorRequest_NoActivityListeners_DoesNotBuildHistoryIndexes()
+    {
+        // Arrange: duplicate event IDs cause TraceHistoryEventLookup to throw when it builds an index. If this
+        // invalid history still completes, the no-listener fast path did not invoke either lookup method.
+        TraceHelper.HasListeners.Should().BeFalse();
+
+        P.WorkItem orchestratorWorkItem = CreateOrchestratorWorkItemWithDuplicateEventIds();
+
+        TaskCompletionSource completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrpcDurableTaskWorker worker = CreateActivityWorker(new GrpcDurableTaskWorkerOptions());
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => completed.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, orchestratorWorkItem, CancellationToken.None);
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert: work item processing still completes normally with no listener registered.
+        clientMock.VerifyAll();
+    }
+
+    [Fact]
+    public async Task DispatchWorkItem_OrchestratorRequest_WithActivityListener_DuplicateEventIds_AbandonsWorkItem()
+    {
+        // Arrange
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(listener);
+        TraceHelper.HasListeners.Should().BeTrue();
+
+        P.WorkItem orchestratorWorkItem = CreateOrchestratorWorkItemWithDuplicateEventIds();
+
+        TaskCompletionSource abandoned = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrpcDurableTaskWorker worker = CreateActivityWorker(new GrpcDurableTaskWorkerOptions());
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.AbandonTaskOrchestratorWorkItemAsync(
+                It.Is<P.AbandonOrchestrationTaskRequest>(
+                    request => request.CompletionToken == orchestratorWorkItem.CompletionToken),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => abandoned.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.AbandonOrchestrationTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, orchestratorWorkItem, CancellationToken.None);
+        await abandoned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        clientMock.VerifyAll();
+        clientMock.Verify(
+            client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    static P.WorkItem CreateOrchestratorWorkItemWithDuplicateEventIds()
+    {
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance1",
+            ExecutionId = "execution1",
+        };
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = -1,
+            ExecutionStarted = new P.ExecutionStartedEvent
+            {
+                Name = "TestOrchestration",
+                OrchestrationInstance = new P.OrchestrationInstance { InstanceId = "instance1", ExecutionId = "execution1" },
+            },
+        });
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 1,
+            TaskScheduled = new P.TaskScheduledEvent { Name = "FirstScheduled" },
+        });
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 1,
+            TaskScheduled = new P.TaskScheduledEvent { Name = "SecondScheduled" },
+        });
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 2,
+            SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+            {
+                InstanceId = "sub1",
+                Name = "FirstSub",
+            },
+        });
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 2,
+            SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+            {
+                InstanceId = "sub2",
+                Name = "SecondSub",
+            },
+        });
+        request.NewEvents.Add(new P.HistoryEvent
+        {
+            EventId = 10,
+            TaskCompleted = new P.TaskCompletedEvent { TaskScheduledId = 1 },
+        });
+        request.NewEvents.Add(new P.HistoryEvent
+        {
+            EventId = 11,
+            SubOrchestrationInstanceCompleted = new P.SubOrchestrationInstanceCompletedEvent { TaskScheduledId = 2 },
+        });
+
+        return new P.WorkItem
+        {
+            OrchestratorRequest = request,
+            CompletionToken = "completion1",
+        };
     }
 
     [Fact]

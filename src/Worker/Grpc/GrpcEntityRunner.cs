@@ -113,7 +113,7 @@ public static class GrpcEntityRunner
             addToExtendedSessions = true;
 
             // If an entity state was provided, even if we already have one stored, we always want to use the provided state.
-            if (!entityStateIncluded && extendedSessions.TryGetValue(request.InstanceId, out string? entityState))
+            if (!entityStateIncluded && extendedSessionsCache!.TryGetCachedValue(request.InstanceId, out string? entityState))
             {
                 batch.EntityState = entityState;
                 stateCached = true;
@@ -135,15 +135,19 @@ public static class GrpcEntityRunner
 
         if (addToExtendedSessions)
         {
-            // addToExtendedSessions can only be set to true if extendedSessions is not null
-            extendedSessions!.Set(
+            // addToExtendedSessions can only be set to true if extendedSessionsCache is not null.
+            // TrySetCachedValue is synchronized with a concurrent ExtendedSessionsCache.Dispose() (see
+            // GrpcOrchestrationRunner for the full rationale); the entity's cached state is a plain
+            // string with nothing to dispose, but routing through the same encapsulated API keeps cache
+            // mutation consistently guarded against a racing shutdown.
+            extendedSessionsCache!.TrySetCachedValue(
                 request.InstanceId,
                 result.EntityState,
                 new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
         }
         else
         {
-            extendedSessions?.Remove(request.InstanceId);
+            extendedSessionsCache?.RemoveCachedValue(request.InstanceId);
         }
 
         P.EntityBatchResult response = result.ToEntityBatchResult();

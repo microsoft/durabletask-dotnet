@@ -12,8 +12,13 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <param name="Options">The Durable Task worker options.</param>
 /// <param name="LoggerFactory">The logger factory for this orchestration.</param>
 /// <param name="Parent">The orchestration parent details.</param>
+/// <param name="ReuseNewGuidHashAlgorithm">
+/// Whether this invocation may cache its deterministic-GUID hash algorithm. This is enabled only for
+/// internal execution paths that own the complete shim lifetime.
+/// </param>
 record OrchestrationInvocationContext(
     TaskName Name,
     DurableTaskWorkerOptions Options,
     ILoggerFactory LoggerFactory,
-    ParentOrchestrationInstance? Parent = null);
+    ParentOrchestrationInstance? Parent = null,
+    bool ReuseNewGuidHashAlgorithm = false);

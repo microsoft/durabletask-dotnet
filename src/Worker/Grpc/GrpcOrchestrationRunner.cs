@@ -144,26 +144,48 @@ public static class GrpcOrchestrationRunner
 
         if (isExtendedSession && extendedSessions != null)
         {
+            // extendedSessions is only non-null when extendedSessionsCache is also non-null. All reads,
+            // removals, and insertions are routed through the synchronized cache wrapper so ownership
+            // transfers are atomic with respect to expiration, removal, and concurrent disposal.
+            //
             // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
             // session based on the provided history
-            if (!pastEventsIncluded && extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
+            if (!pastEventsIncluded
+                && extendedSessionsCache!.TryTakeExtendedSession(
+                    request.InstanceId,
+                    out ExtendedSessionState? extendedSessionState)
+                && extendedSessionState is not null)
             {
-                OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
-                runtimeState.NewEvents.Clear();
-                foreach (HistoryEvent newEvent in newEvents)
+                ExtendedSessionState? runnerOwnedSession = extendedSessionState;
+                try
                 {
-                    runtimeState.AddEvent(newEvent);
-                }
+                    OrchestrationRuntimeState runtimeState = extendedSessionState.RuntimeState;
+                    runtimeState.NewEvents.Clear();
+                    foreach (HistoryEvent newEvent in newEvents)
+                    {
+                        runtimeState.AddEvent(newEvent);
+                    }
 
-                result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
-                if (extendedSessionState.OrchestrationExecutor.IsCompleted)
+                    result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
+                    if (!extendedSessionState.OrchestrationExecutor.IsCompleted
+                        && extendedSessionsCache.TryStoreExtendedSession(
+                            request.InstanceId,
+                            extendedSessionState,
+                            TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds)))
+                    {
+                        runnerOwnedSession = null;
+                    }
+                }
+                finally
                 {
-                    extendedSessions.Remove(request.InstanceId);
+                    // Completion, execution failure, or a rejected cache hand-off all leave the
+                    // runner owning the session and therefore responsible for disposing its shim.
+                    runnerOwnedSession?.DisposeRunnerOwned();
                 }
             }
             else
             {
-                extendedSessions.Remove(request.InstanceId);
+                extendedSessionsCache!.RemoveCachedValue(request.InstanceId);
                 addToExtendedSessions = true;
             }
         }
@@ -195,27 +217,52 @@ public static class GrpcOrchestrationRunner
                 DurableTaskShimFactory factory = services is null
                     ? DurableTaskShimFactory.Default
                     : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
-                TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
+                TaskOrchestration shim = factory.CreateOrchestrationWithManagedLifetime(
+                    orchestratorName,
+                    implementation,
+                    properties,
+                    parent);
 
-                TaskOrchestrationExecutor executor = new(
-                    runtimeState,
-                    shim,
-                    BehaviorOnContinueAsNew.Carryover,
-                    request.EntityParameters.ToCore(),
-                    ErrorPropagationMode.UseFailureDetails);
-                result = executor.Execute();
-
-                if (addToExtendedSessions && !executor.IsCompleted)
+                ExtendedSessionState? runnerOwnedSession = null;
+                bool transferredSessionToCache = false;
+                try
                 {
-                    // addToExtendedSessions can only be set to true if extendedSessions is not null
-                    extendedSessions!.Set<ExtendedSessionState>(
-                        request.InstanceId,
-                        new(runtimeState, shim, executor),
-                        new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
+                    TaskOrchestrationExecutor executor = new(
+                        runtimeState,
+                        shim,
+                        BehaviorOnContinueAsNew.Carryover,
+                        request.EntityParameters.ToCore(),
+                        ErrorPropagationMode.UseFailureDetails);
+                    runnerOwnedSession = new ExtendedSessionState(runtimeState, shim, executor);
+                    result = executor.Execute();
+
+                    if (addToExtendedSessions && !executor.IsCompleted)
+                    {
+                        transferredSessionToCache = extendedSessionsCache!.TryStoreExtendedSession(
+                            request.InstanceId,
+                            runnerOwnedSession,
+                            TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds));
+                        if (transferredSessionToCache)
+                        {
+                            runnerOwnedSession = null;
+                        }
+                    }
+                    else
+                    {
+                        extendedSessionsCache?.RemoveCachedValue(request.InstanceId);
+                    }
                 }
-                else
+                finally
                 {
-                    extendedSessions?.Remove(request.InstanceId);
+                    if (runnerOwnedSession is not null)
+                    {
+                        runnerOwnedSession.DisposeRunnerOwned();
+                    }
+                    else if (!transferredSessionToCache)
+                    {
+                        // The executor failed before its ExtendedSessionState could assume ownership.
+                        (shim as IDisposable)?.Dispose();
+                    }
                 }
             }
         }

@@ -16,7 +16,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// A wrapper to go from <see cref="OrchestrationContext" /> to <see cref="TaskOrchestrationContext "/>.
 /// </summary>
-sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
+sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext, IDisposable
 {
     // We use a stack (a custom implementation using a single-linked list) to make it easier for users
     // to abandon external events that they no longer care about. The common case is a Task.WhenAny in a loop.
@@ -32,6 +32,18 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     object? customStatus;
     bool preserveUnprocessedEventsOnContinueAsNew;
     TaskOrchestrationEntityContext? entityFeature;
+
+    // Internal worker paths with complete shim-lifetime ownership cache and reuse this instance across
+    // NewGuid() calls. Public factory paths use a fresh, per-call SHA1 instead because TaskOrchestration
+    // has no disposal hook through which those callers could release a cached instance.
+    //
+    // Note: on .NET Framework, the underlying SHA1CryptoServiceProvider.Initialize() disposes and
+    // recreates its native CAPI hash handle on every call, so the native-handle churn is not eliminated
+    // there -- only the managed-side allocation (the HashAlgorithm object itself and SHA1.Create()'s
+    // provider lookup) is avoided. On modern .NET (net5.0+) running on Windows, the CNG-based
+    // implementation can use a reusable hash handle (BCRYPT_HASH_REUSABLE_FLAG) and reset it in place,
+    // so this caching also avoids native-handle churn on those runtimes.
+    SHA1? cachedHashAlgorithm;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskOrchestrationContextWrapper"/> class.
@@ -434,15 +446,28 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         byte[] namespaceValueByteArray = namespaceValueGuid.ToByteArray();
         SwapByteArrayValues(namespaceValueByteArray);
 
-        byte[] hashByteArray;
 #pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
-        using (HashAlgorithm hashAlgorithm = SHA1.Create()) /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
-                                                               and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
-                                                               customers' inflight orchestrations. */
+        bool reuseHashAlgorithm = this.invocationContext.ReuseNewGuidHashAlgorithm;
+
+        /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
+           and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
+           customers' inflight orchestrations. */
+        byte[] hashByteArray;
+        using (SHA1? ownedHashAlgorithm = reuseHashAlgorithm ? null : SHA1.Create())
         {
+            SHA1 hashAlgorithm = ownedHashAlgorithm
+                ?? (this.cachedHashAlgorithm ??= SHA1.Create());
+
+            // Resetting before every use makes the reusable and per-call modes byte-for-byte identical.
+            hashAlgorithm.Initialize();
             hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
             hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
-            hashByteArray = hashAlgorithm.Hash;
+
+            // HashAlgorithm.Hash is nullable in its API surface, but is guaranteed to be populated
+            // immediately after TransformFinalBlock completes successfully.
+            hashByteArray = hashAlgorithm.Hash
+                ?? throw new InvalidOperationException(
+                    "SHA1.Hash was unexpectedly null after TransformFinalBlock.");
         }
 #pragma warning restore CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
 
@@ -456,6 +481,17 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         SwapByteArrayValues(newGuidByteArray);
 
         return new Guid(newGuidByteArray);
+    }
+
+    /// <summary>
+    /// Releases the resources cached by this instance, including the <see cref="SHA1"/> instance used by
+    /// <see cref="NewGuid"/>. This should be called once this wrapper is no longer needed, i.e. once the
+    /// orchestration execution that owns it has completed and it is being replaced or discarded.
+    /// </summary>
+    public void Dispose()
+    {
+        this.cachedHashAlgorithm?.Dispose();
+        this.cachedHashAlgorithm = null;
     }
 
     /// <summary>

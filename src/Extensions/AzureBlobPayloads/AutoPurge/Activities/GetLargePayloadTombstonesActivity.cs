@@ -44,6 +44,17 @@ internal sealed class GetLargePayloadTombstonesActivity(
             throw new OperationCanceledException(
                 "The GetLargePayloadTombstonesAsync operation was canceled.", e);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            // The backend declined this fetch because a task-hub precondition is not met - auto-purge is
+            // disabled, or the hub is being deleted. Returning empty instead of throwing is deliberate: it
+            // costs one idle cycle and nothing else, and it leaves the job running so the next cycle re-reads
+            // the entity and re-asks the backend. Throwing, or disabling the job here, would let a decline
+            // observed mid-disable durably defeat a re-enable that lands moments later. A real disable's Stop
+            // signal is what ends the loop, on the next entity check.
+            this.logger.BlobPurgeFetchPreconditionFailed(e.Status.Detail);
+            return new List<LargePayloadTombstone>();
+        }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
         {
             // Mixed-rollout guard: an older backend build (or a stale local emulator image) does not implement

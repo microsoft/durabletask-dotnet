@@ -48,4 +48,10 @@ static partial class Logs
 
     [LoggerMessage(EventId = 830, Level = LogLevel.Error, Message = "Blob payload auto-purge for job '{jobId}' stopped because the backend does not implement the large-payload purge RPCs: {detail}. The job is now disabled and will not delete blobs. Upgrade the Durable Task backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator'), then enable auto-purge again to resume.")]
     public static partial void BlobPurgeBackendUnsupported(this ILogger logger, string? jobId, string detail);
+
+    // Deliberately generic about WHICH precondition. The backend answers FailedPrecondition for more than one
+    // condition - auto-purge being disabled for the task hub, and the task hub being deleted - and the server's
+    // detail is what tells them apart, so it is carried through verbatim rather than being classified here.
+    [LoggerMessage(EventId = 831, Level = LogLevel.Information, Message = "Blob payload auto-purge fetch was declined by the backend because a precondition is not met: {detail}. No blobs are deleted this cycle. The job keeps running and idles before asking again, so it resumes on its own once the precondition is satisfied.")]
+    public static partial void BlobPurgeFetchPreconditionFailed(this ILogger logger, string detail);
 }

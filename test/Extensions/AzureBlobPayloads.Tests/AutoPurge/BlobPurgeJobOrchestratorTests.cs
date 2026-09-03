@@ -327,12 +327,14 @@ public class BlobPurgeJobOrchestratorTests
         await new BlobPurgeJobOrchestrator().RunAsync(
             context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
 
-        // Assert - the fetch ran (recording the batch size) and the idle timer was created, but neither the
-        // delete nor the report activity was ever invoked on the empty batch.
+        // Assert - the fetch ran (recording the batch size) and the one-minute idle timer was created, but
+        // neither the delete nor the report activity was ever invoked on the empty batch. The duration is
+        // asserted exactly: it is the pause that bounds how quickly a quiet job re-asks the backend, and it is
+        // also the path a backend that declines the fetch on a precondition takes.
         this.AssertNoCycleFailed();
         this.requested.Should().Equal(250);
         context.Verify(
-            c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            c => c.CreateTimer(TimeSpan.FromMinutes(1), It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
         context.Verify(
             c => c.CallActivityAsync<List<BlobPurgeOutcome>>(

@@ -52,6 +52,6 @@ static partial class Logs
     // Deliberately generic about WHICH precondition. The backend answers FailedPrecondition for more than one
     // condition - auto-purge being disabled for the task hub, and the task hub being deleted - and the server's
     // detail is what tells them apart, so it is carried through verbatim rather than being classified here.
-    [LoggerMessage(EventId = 831, Level = LogLevel.Information, Message = "Blob payload auto-purge fetch was declined by the backend because a precondition is not met: {detail}. No blobs are deleted this cycle. The job keeps running and idles before asking again, so it resumes on its own once the precondition is satisfied.")]
+    [LoggerMessage(EventId = 831, Level = LogLevel.Information, Message = "Blob payload auto-purge fetch was declined by the backend because a precondition is not met: {detail}. No blobs are deleted from this response; the job will recheck its durable state after the normal idle delay.")]
     public static partial void BlobPurgeFetchPreconditionFailed(this ILogger logger, string detail);
 }

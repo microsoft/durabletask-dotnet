@@ -69,14 +69,15 @@ public class PurgeActivityBackendStatusTests
         // Act
         List<LargePayloadTombstone> tombstones = await activity.RunAsync(null!, 100);
 
-        // Assert - an empty batch is what routes the orchestrator to its idle timer, leaving the job running so
-        // a re-enable landing moments later is picked up on the next cycle.
+        // Assert - an empty batch routes the orchestrator to its idle timer, after which it rechecks its
+        // durable entity state: an authoritative Stop ends the job, and a re-enable that lands in the
+        // meantime is honoured instead of being overridden by this stale observation.
         tombstones.Should().BeEmpty();
         (LogLevel Level, string Message) entry = logger.Logs.Should().ContainSingle().Subject;
         entry.Level.Should().Be(LogLevel.Information);
         entry.Message.Should().Contain(Detail);
         entry.Message.Should().Contain("precondition is not met");
-        entry.Message.Should().Contain("No blobs are deleted this cycle");
+        entry.Message.Should().Contain("No blobs are deleted from this response");
     }
 
     [Fact]

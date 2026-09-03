@@ -47,11 +47,9 @@ internal sealed class GetLargePayloadTombstonesActivity(
         catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
         {
             // The backend declined this fetch because a task-hub precondition is not met - auto-purge is
-            // disabled, or the hub is being deleted. Returning empty instead of throwing is deliberate: it
-            // costs one idle cycle and nothing else, and it leaves the job running so the next cycle re-reads
-            // the entity and re-asks the backend. Throwing, or disabling the job here, would let a decline
-            // observed mid-disable durably defeat a re-enable that lands moments later. A real disable's Stop
-            // signal is what ends the loop, on the next entity check.
+            // disabled, or the hub is being deleted. Return empty and mutate nothing durable: this observation
+            // can race with a re-enable, so recording it would let a stale decline outlive the newer state.
+            // The Stop signal, read from the entity on the next cycle, is what authoritatively ends the job.
             this.logger.BlobPurgeFetchPreconditionFailed(e.Status.Detail);
             return new List<LargePayloadTombstone>();
         }

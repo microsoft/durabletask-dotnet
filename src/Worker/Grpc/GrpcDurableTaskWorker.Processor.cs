@@ -318,27 +318,15 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellation)
         {
-            TimeSpan helloDeadline = this.internalOptions.HelloDeadline;
-            DateTime? deadline = null;
-
-            if (helloDeadline > TimeSpan.Zero)
-            {
-                // Clamp to a UTC DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
-                // throw ArgumentOutOfRangeException out of DateTime.Add and so the gRPC deadline remains
-                // unambiguous during internal normalization.
-                DateTime now = DateTime.UtcNow;
-                DateTime maxDeadlineUtc = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
-                TimeSpan maxOffset = maxDeadlineUtc - now;
-                deadline = helloDeadline >= maxOffset ? maxDeadlineUtc : now.Add(helloDeadline);
-            }
-
-            await this.client!.HelloAsync(EmptyMessage, deadline: deadline, cancellationToken: cancellation);
-            this.Logger.EstablishedWorkItemConnection();
+            await this.client!.HelloAsync(
+                EmptyMessage,
+                deadline: this.NextHelloDeadline(),
+                cancellationToken: cancellation);
 
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
 
             // Get the stream for receiving work-items
-            return this.client!.GetWorkItems(
+            AsyncServerStreamingCall<P.WorkItem> stream = this.client!.GetWorkItems(
                 new P.GetWorkItemsRequest
                 {
                     MaxConcurrentActivityWorkItems =
@@ -351,6 +339,34 @@ sealed partial class GrpcDurableTaskWorker
                     WorkItemFilters = this.worker.workItemFilters?.ToGrpcWorkItemFilters(),
                 },
                 cancellationToken: cancellation);
+
+            // Logged last, not straight after Hello: the message claims a work-item streaming connection, so it
+            // must not be emitted until the call that opens one has actually been created. A synchronous throw
+            // out of GetWorkItems would otherwise leave a retry loop reporting connections that never existed.
+            this.Logger.EstablishedWorkItemConnection();
+            return stream;
+        }
+
+        /// <summary>
+        /// Computes a fresh absolute deadline for the <c>Hello</c> handshake from the configured
+        /// <c>HelloDeadline</c> interval.
+        /// </summary>
+        /// <returns>The absolute UTC deadline, or <c>null</c> when the deadline is disabled.</returns>
+        DateTime? NextHelloDeadline()
+        {
+            TimeSpan interval = this.internalOptions.HelloDeadline;
+            if (interval <= TimeSpan.Zero)
+            {
+                return null;
+            }
+
+            // Clamp to a UTC DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
+            // throw ArgumentOutOfRangeException out of DateTime.Add and so the gRPC deadline remains
+            // unambiguous during internal normalization.
+            DateTime now = DateTime.UtcNow;
+            DateTime maxDeadlineUtc = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+            TimeSpan maxOffset = maxDeadlineUtc - now;
+            return interval >= maxOffset ? maxDeadlineUtc : now.Add(interval);
         }
 
         async Task ProcessWorkItemsAsync(

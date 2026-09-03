@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Extensions/AzureBlobPayloads/AzureBlobPayloads.csproj" />
+    <ProjectReference Include="$(RepoRoot)test/Abstractions.Tests/Abstractions.Tests.csproj" />
   </ItemGroup>
 
 </Project>

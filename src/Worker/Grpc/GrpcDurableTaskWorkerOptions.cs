@@ -126,9 +126,11 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public bool InsertEntityUnlocksOnCompletion { get; set; }
 
         /// <summary>
-        /// Gets or sets the maximum amount of time to wait for the initial Hello handshake against the
-        /// backend before treating the connect attempt as failed and retrying. A non-positive value disables
-        /// the deadline. Defaults to 30 seconds. This guards against half-open HTTP/2 connections that can
+        /// Gets or sets the maximum amount of time to wait for a single connection-setup RPC against the
+        /// backend before treating the connect attempt as failed and retrying. Each pre-stream RPC - the
+        /// Hello handshake, and the large-payload auto-purge announcement when the worker has one to make -
+        /// gets this much time on its own rather than sharing one budget. A non-positive value disables the
+        /// deadline. Defaults to 30 seconds. This guards against half-open HTTP/2 connections that can
         /// otherwise cause reconnect to hang indefinitely.
         /// </summary>
         public TimeSpan HelloDeadline { get; set; } = TimeSpan.FromSeconds(30);
@@ -143,9 +145,9 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public TimeSpan SilentDisconnectTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
         /// <summary>
-        /// Gets or sets the number of consecutive connect failures (Hello timeouts, Unavailable responses, or
-        /// silent stream disconnects) after which the underlying gRPC channel will be recreated to clear
-        /// stale DNS, sub-channel state, or routing-affinity bindings. Setting to 0 or a negative value
+        /// Gets or sets the number of consecutive connect failures (connection-setup timeouts, Unavailable
+        /// responses, or silent stream disconnects) after which the underlying gRPC channel will be recreated
+        /// to clear stale DNS, sub-channel state, or routing-affinity bindings. Setting to 0 or a negative value
         /// disables channel recreation. Defaults to 5.
         /// </summary>
         public int ChannelRecreateFailureThreshold { get; set; } = 5;
@@ -197,5 +199,14 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         /// Gets or sets a callback that is invoked when activity work items are received or finished.
         /// </summary>
         public Action<ActivityNotificationPhase>? NotifyActivity { get; set; }
+
+        /// <summary>
+        /// Gets or sets a callback invoked with the worker's current effective <see cref="CallInvoker"/> - the
+        /// one produced after <see cref="Interceptors"/> have been applied. It is invoked once when the worker
+        /// starts and again after every successful channel recreate, so a component that shares the worker's
+        /// transport can follow it instead of capturing an invoker that later points at a disposed channel.
+        /// Implementations must not throw and must not block.
+        /// </summary>
+        public Action<CallInvoker>? CallInvokerPublisher { get; set; }
     }
 }

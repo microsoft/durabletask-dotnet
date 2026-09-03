@@ -21,6 +21,12 @@ static class TraceHelper
     static readonly ActivitySource ActivityTraceSource = new ActivitySource(Source);
 
     /// <summary>
+    /// Gets whether any listener is subscribed to Durable Task tracing activities.
+    /// </summary>
+    /// <returns><see langword="true"/> when tracing work can produce activities; otherwise, <see langword="false"/>.</returns>
+    public static bool HasListeners() => ActivityTraceSource.HasListeners();
+
+    /// <summary>
     /// Starts a new trace activity for scheduling an orchestration from the client.
     /// </summary>
     /// <param name="createInstanceRequest">The orchestration's creation request.</param>

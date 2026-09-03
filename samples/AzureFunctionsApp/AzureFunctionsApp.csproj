@@ -19,6 +19,8 @@
     <ProjectReference Include="..\..\src\Generators\Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <!-- Reference Abstractions for latest DurableEventAttribute -->
     <ProjectReference Include="..\..\src\Abstractions\Abstractions.csproj" />
+    <!-- Reference Client for strongly-typed entity proxy extensions -->
+    <ProjectReference Include="..\..\src\Client\Core\Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

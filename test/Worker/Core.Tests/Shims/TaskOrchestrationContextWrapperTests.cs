@@ -391,6 +391,123 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastSubOrchestrationVersion.Should().Be(string.Empty);
     }
 
+    [Fact]
+    public void CompleteExternalEvent_CanceledWaiter_BuffersEventForNextWaiter()
+    {
+        // Arrange: reproduces the sequence from Azure/azure-functions-durable-extension#1676.
+        // Two differently-named external event waits are registered with a shared cancellation
+        // token, similar to a Task.WhenAny loop. The waiter for "event_1" is canceled (e.g.
+        // because "event_0" won the race), but "event_1" is later raised while the canceled
+        // waiter is still the only registered listener for that name.
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        using CancellationTokenSource cts = new();
+        Task<string> canceledWait = wrapper.WaitForExternalEvent<string>("event_1", cts.Token);
+        cts.Cancel();
+
+        // Act: the event arrives after the only waiter for it has been canceled/abandoned.
+        InvokeCompleteExternalEvent(wrapper, "event_1", "\"payload\"");
+
+        // Assert: the canceled waiter must not "consume" the event. It should be buffered so
+        // that a subsequent WaitForExternalEvent call (e.g. in the next ContinueAsNew generation)
+        // can still observe it.
+        canceledWait.IsCanceled.Should().BeTrue();
+        Task<string> nextWait = wrapper.WaitForExternalEvent<string>("event_1");
+        nextWait.IsCompletedSuccessfully.Should().BeTrue();
+        nextWait.Result.Should().Be("payload");
+    }
+
+    [Fact]
+    public void CompleteExternalEvent_CanceledWaiter_WithContinueAsNewPreserved_ForwardsEventToNextExecution()
+    {
+        // Arrange: same as above, but the event arrives after ContinueAsNew(preserveUnprocessedEvents: true)
+        // has already been called (e.g. while an activity scheduled before ContinueAsNew is still
+        // completing). The event should be forwarded to the next execution, not silently dropped.
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        using CancellationTokenSource cts = new();
+        Task<string> canceledWait = wrapper.WaitForExternalEvent<string>("event_1", cts.Token);
+        cts.Cancel();
+
+        wrapper.ContinueAsNew("new-input", preserveUnprocessedEvents: true);
+
+        // Act
+        InvokeCompleteExternalEvent(wrapper, "event_1", "\"payload\"");
+
+        // Assert
+        canceledWait.IsCanceled.Should().BeTrue();
+        innerContext.SentEvents.Should().ContainSingle();
+        innerContext.SentEvents[0].InstanceId.Should().Be(wrapper.InstanceId);
+        innerContext.SentEvents[0].EventName.Should().Be("event_1");
+        innerContext.SentEvents[0].EventData.Should().BeOfType<RawInput>().Which.Value.Should().Be("\"payload\"");
+    }
+
+    [Fact]
+    public void CompleteExternalEvent_MultipleCanceledWaiters_BuffersEventAfterSkippingAll()
+    {
+        // Arrange: several waiters for the same event name are canceled/abandoned in a row
+        // (e.g. a loop that repeatedly races and abandons the same event). None of them should
+        // be able to consume the event.
+        TrackingOrchestrationContext innerContext = new();
+        CountingDataConverter converter = new();
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions { DataConverter = converter },
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        using CancellationTokenSource cts1 = new();
+        using CancellationTokenSource cts2 = new();
+        using CancellationTokenSource cts3 = new();
+        Task<string> wait1 = wrapper.WaitForExternalEvent<string>("event_1", cts1.Token);
+        Task<string> wait2 = wrapper.WaitForExternalEvent<string>("event_1", cts2.Token);
+        Task<string> wait3 = wrapper.WaitForExternalEvent<string>("event_1", cts3.Token);
+        cts1.Cancel();
+        cts2.Cancel();
+        cts3.Cancel();
+
+        // Act
+        InvokeCompleteExternalEvent(wrapper, "event_1", "\"payload\"");
+
+        // Assert
+        converter.DeserializeCallCounts[typeof(string)].Should().Be(1);
+        wait1.IsCanceled.Should().BeTrue();
+        wait2.IsCanceled.Should().BeTrue();
+        wait3.IsCanceled.Should().BeTrue();
+        Task<string> nextWait = wrapper.WaitForExternalEvent<string>("event_1");
+        nextWait.IsCompletedSuccessfully.Should().BeTrue();
+        nextWait.Result.Should().Be("payload");
+    }
+
+    [Fact]
+    public void CompleteExternalEvent_ActiveWaiterAboveCanceledWaiter_DeliversToActiveWaiter()
+    {
+        // Arrange: the most recent (top-of-stack) waiter is still live, but an older waiter
+        // underneath it for the same event name was already canceled. The event should go to
+        // the live waiter, and the canceled one underneath should remain untouched (not consumed).
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        using CancellationTokenSource cts1 = new();
+        Task<string> canceledWait = wrapper.WaitForExternalEvent<string>("event_1", cts1.Token);
+        cts1.Cancel();
+        Task<string> activeWait = wrapper.WaitForExternalEvent<string>("event_1");
+
+        // Act
+        InvokeCompleteExternalEvent(wrapper, "event_1", "\"payload\"");
+
+        // Assert
+        canceledWait.IsCanceled.Should().BeTrue();
+        activeWait.IsCompletedSuccessfully.Should().BeTrue();
+        activeWait.Result.Should().Be("payload");
+    }
+
     static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)
     {
         PropertyInfo tagsProperty = innerContext.LastScheduledTaskOptions!.GetType().GetProperty("Tags")!;
@@ -400,6 +517,19 @@ public class TaskOrchestrationContextWrapperTests
     static void InvokeCompleteExternalEvent(TaskOrchestrationContextWrapper wrapper, string eventName, string rawEventPayload)
     {
         CompleteExternalEventMethod.Invoke(wrapper, [eventName, rawEventPayload]);
+    }
+
+    sealed class CountingDataConverter : DataConverter
+    {
+        public Dictionary<Type, int> DeserializeCallCounts { get; } = [];
+
+        public override object? Deserialize(string? data, Type targetType)
+        {
+            this.DeserializeCallCounts[targetType] = this.DeserializeCallCounts.GetValueOrDefault(targetType) + 1;
+            return targetType == typeof(string) ? "payload" : null;
+        }
+
+        public override string? Serialize(object? value) => throw new NotSupportedException();
     }
 
     sealed class TrackingOrchestrationContext : OrchestrationContext

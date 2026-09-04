@@ -30,10 +30,14 @@ sealed partial class TaskOrchestrationContextWrapper
         /// Tries to set the result on tcs.
         /// </summary>
         /// <param name="result">The result.</param>
-        void TrySetResult(object result);
+        /// <returns>
+        /// <c>true</c> if the result was set successfully, meaning this waiter is a live consumer of the event;
+        /// <c>false</c> if the waiter was already completed, canceled, or abandoned and cannot accept the result.
+        /// </returns>
+        bool TrySetResult(object? result);
     }
 
-    class EventTaskCompletionSource<T> : TaskCompletionSource<T>, IEventSource
+    sealed class EventTaskCompletionSource<T> : TaskCompletionSource<T>, IEventSource
     {
         /// <inheritdoc/>
         public Type EventType => typeof(T);
@@ -42,7 +46,7 @@ sealed partial class TaskOrchestrationContextWrapper
         public IEventSource? Next { get; set; }
 
         /// <inheritdoc/>
-        void IEventSource.TrySetResult(object result) => this.TrySetResult((T)result);
+        bool IEventSource.TrySetResult(object? result) => this.TrySetResult((T)result!);
     }
 
     class NamedQueue<TValue>

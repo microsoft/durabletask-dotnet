@@ -335,11 +335,7 @@ static class ProtoUtils
                 ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
                 ActivityContext clientActivityContext = new(orchestrationActivity.TraceId, clientSpanId, orchestrationActivity.ActivityTraceFlags, orchestrationActivity.TraceStateString);
 
-                return new P.TraceContext
-                {
-                    TraceParent = $"00-{clientActivityContext.TraceId}-{clientActivityContext.SpanId}-0{clientActivityContext.TraceFlags:d}",
-                    TraceState = clientActivityContext.TraceState,
-                };
+                return ProtoUtils.CreateTraceContext(clientActivityContext);
             }
 
             switch (action.OrchestratorActionType)
@@ -498,6 +494,21 @@ static class ProtoUtils
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Creates a protobuf trace context from an activity context.
+    /// </summary>
+    /// <param name="activityContext">The activity context to convert.</param>
+    /// <returns>The corresponding protobuf trace context.</returns>
+    internal static P.TraceContext CreateTraceContext(ActivityContext activityContext)
+    {
+        return new()
+        {
+            TraceParent =
+                $"00-{activityContext.TraceId}-{activityContext.SpanId}-0{activityContext.TraceFlags:d}",
+            TraceState = activityContext.TraceState,
+        };
     }
 
     /// <summary>
@@ -1054,7 +1065,7 @@ static class ProtoUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
                 string stringValue = value.StringValue;
 
-                // If the value starts with the 'dt:' prefix, it may represent a DateTime value — attempt to parse it.
+                // If the value starts with the 'dt:' prefix, it may represent a DateTime value ï¿½ attempt to parse it.
                 if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
                 {
                     if (DateTime.TryParse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date))
@@ -1063,7 +1074,7 @@ static class ProtoUtils
                     }
                 }
 
-                // If the value starts with the 'dto:' prefix, it may represent a DateTime value — attempt to parse it.
+                // If the value starts with the 'dto:' prefix, it may represent a DateTime value ï¿½ attempt to parse it.
                 if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
                 {
                     if (DateTimeOffset.TryParse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset date))

@@ -247,16 +247,42 @@ sealed partial class GrpcDurableTaskWorker
             return failureDetails;
         }
 
-        async ValueTask<OrchestrationRuntimeState> BuildRuntimeStateAsync(
+        static OrchestrationRuntimeState BuildRuntimeState(
             P.OrchestratorRequest orchestratorRequest,
-            ProtoUtils.EntityConversionState? entityConversionState,
-            CancellationToken cancellation)
+            IReadOnlyList<P.HistoryEvent> pastEvents,
+            ProtoUtils.EntityConversionState? entityConversionState)
         {
             Func<P.HistoryEvent, HistoryEvent> converter = entityConversionState is null
                 ? ProtoUtils.ConvertHistoryEvent
                 : entityConversionState.ConvertFromProto;
 
-            List<HistoryEvent> pastEvents;
+            List<HistoryEvent> convertedPastEvents = new(pastEvents.Count);
+            foreach (P.HistoryEvent protoEvent in pastEvents)
+            {
+                convertedPastEvents.Add(converter(protoEvent));
+            }
+
+            // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
+            var runtimeState = new OrchestrationRuntimeState(convertedPastEvents);
+            foreach (P.HistoryEvent protoEvent in orchestratorRequest.NewEvents)
+            {
+                // AddEvent() puts events into the NewEvents list.
+                runtimeState.AddEvent(converter(protoEvent));
+            }
+
+            if (runtimeState.ExecutionStartedEvent == null)
+            {
+                // TODO: What's the right way to handle this? Callback to the sidecar with a retriable error request?
+                throw new InvalidOperationException("The provided orchestration history was incomplete");
+            }
+
+            return runtimeState;
+        }
+
+        async ValueTask<IReadOnlyList<P.HistoryEvent>> GetPastEventsAsync(
+            P.OrchestratorRequest orchestratorRequest,
+            CancellationToken cancellation)
+        {
             if (orchestratorRequest.RequiresHistoryStreaming)
             {
                 // Stream the remaining events from the remote service
@@ -280,40 +306,19 @@ sealed partial class GrpcDurableTaskWorker
                 // chunks (e.g. one event per chunk) that would reallocate and copy on every chunk, which is
                 // itself quadratic. List<T>.Add's built-in geometric (doubling) growth already gives
                 // amortized O(1) appends, so we let it manage capacity on its own.
-                pastEvents = new List<HistoryEvent>();
+                List<P.HistoryEvent> pastEvents = new();
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
                     foreach (P.HistoryEvent protoEvent in chunk.Events)
                     {
-                        pastEvents.Add(converter(protoEvent));
+                        pastEvents.Add(protoEvent);
                     }
                 }
-            }
-            else
-            {
-                // The history was already provided in the work item request
-                pastEvents = new List<HistoryEvent>(orchestratorRequest.PastEvents.Count);
-                foreach (P.HistoryEvent protoEvent in orchestratorRequest.PastEvents)
-                {
-                    pastEvents.Add(converter(protoEvent));
-                }
+
+                return pastEvents;
             }
 
-            // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
-            var runtimeState = new OrchestrationRuntimeState(pastEvents);
-            foreach (P.HistoryEvent protoEvent in orchestratorRequest.NewEvents)
-            {
-                // AddEvent() puts events into the NewEvents list.
-                runtimeState.AddEvent(converter(protoEvent));
-            }
-
-            if (runtimeState.ExecutionStartedEvent == null)
-            {
-                // TODO: What's the right way to handle this? Callback to the sidecar with a retriable error request?
-                throw new InvalidOperationException("The provided orchestration history was incomplete");
-            }
-
-            return runtimeState;
+            return orchestratorRequest.PastEvents;
         }
 
         async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellation)
@@ -602,25 +607,88 @@ sealed partial class GrpcDurableTaskWorker
             string completionToken,
             CancellationToken cancellationToken)
         {
+            P.ExecutionRewoundEvent? rewindEvent = request
+                .NewEvents
+                .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionRewound)
+                .Select(e => e.ExecutionRewound)
+                .LastOrDefault();
+
+            IReadOnlyList<P.HistoryEvent>? materializedPastEvents = null;
+            bool isInitialRewind = false;
+            if (rewindEvent is not null || request.RequiresHistoryStreaming)
+            {
+                materializedPastEvents = await this.GetPastEventsAsync(request, cancellationToken);
+            }
+
+            if (rewindEvent is not null)
+            {
+                // The initial request still has the terminal event. After the history is rewritten,
+                // a second rewind event is used only to jump-start normal orchestration execution.
+                P.ExecutionCompletedEvent? completedEvent = materializedPastEvents!
+                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted)
+                    .Select(e => e.ExecutionCompleted)
+                    .LastOrDefault();
+
+                if (completedEvent is not null)
+                {
+                    if (completedEvent.OrchestrationStatus != P.OrchestrationStatus.Failed)
+                    {
+                        throw new InvalidOperationException(
+                            "Expected a rewind request's ExecutionCompleted event to have status Failed, " +
+                            $"but found '{completedEvent.OrchestrationStatus}'.");
+                    }
+
+                    isInitialRewind = true;
+                }
+            }
+
+            IReadOnlyList<P.HistoryEvent> pastEvents = materializedPastEvents ?? request.PastEvents;
             var executionStartedEvent =
                 request
                     .NewEvents
-                    .Concat(request.PastEvents)
+                    .Concat(pastEvents)
                     .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
                     .Select(e => e.ExecutionStarted)
                     .FirstOrDefault();
 
+            if (isInitialRewind
+                && rewindEvent!.ParentTraceContext is not null)
+            {
+                if (executionStartedEvent is null)
+                {
+                    throw new InvalidOperationException("Rewinding orchestration has no ExecutionStartedEvent in its history");
+                }
+
+                executionStartedEvent = executionStartedEvent.Clone();
+                executionStartedEvent.ParentTraceContext = rewindEvent.ParentTraceContext;
+            }
+
+            // A rewind starts a new orchestration span instead of continuing the failed execution's stored span.
+            P.OrchestrationTraceContext? orchestrationTraceContext =
+                isInitialRewind ? null : request.OrchestrationTraceContext;
             Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
                 executionStartedEvent,
-                request.OrchestrationTraceContext);
+                orchestrationTraceContext);
+
+            if (isInitialRewind)
+            {
+                await this.CompleteOrchestratorTaskWithChunkingAsync(
+                    RewindOrchestrationHandler.CreateResponse(
+                        request,
+                        pastEvents,
+                        completionToken,
+                        traceActivity),
+                    this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
+                    cancellationToken);
+                return;
+            }
 
             if (executionStartedEvent is not null)
             {
                 P.HistoryEvent? GetSuborchestrationInstanceCreatedEvent(int eventId)
                 {
                     var subOrchestrationEvent =
-                        request
-                            .PastEvents
+                        pastEvents
                             .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)
                             .FirstOrDefault(x => x.EventId == eventId);
 
@@ -630,8 +698,7 @@ sealed partial class GrpcDurableTaskWorker
                 P.HistoryEvent? GetTaskScheduledEvent(int eventId)
                 {
                     var taskScheduledEvent =
-                        request
-                            .PastEvents
+                        pastEvents
                             .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled)
                             .LastOrDefault(x => x.EventId == eventId);
 
@@ -718,10 +785,10 @@ sealed partial class GrpcDurableTaskWorker
             bool versionFailure = false;
             try
             {
-                OrchestrationRuntimeState runtimeState = await this.BuildRuntimeStateAsync(
+                OrchestrationRuntimeState runtimeState = BuildRuntimeState(
                     request,
-                    entityConversionState,
-                    cancellationToken);
+                    pastEvents,
+                    entityConversionState);
 
                 bool filterPassed = true;
                 if (this.orchestrationFilter != null)

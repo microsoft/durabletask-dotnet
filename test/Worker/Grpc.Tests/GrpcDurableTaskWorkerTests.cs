@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using DurableTask.Core;
@@ -12,6 +13,7 @@ using Microsoft.DurableTask;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
@@ -36,9 +38,15 @@ public class GrpcDurableTaskWorkerTests
         .GetMethod("DispatchWorkItem", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo TryRecreateChannelAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("TryRecreateChannelAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
-    static readonly MethodInfo BuildRuntimeStateAsyncMethod = typeof(GrpcDurableTaskWorker)
+    static readonly MethodInfo BuildRuntimeStateMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
-        .GetMethod("BuildRuntimeStateAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        .GetMethod("BuildRuntimeState", BindingFlags.Static | BindingFlags.NonPublic)!;
+    static readonly MethodInfo GetPastEventsAsyncMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("GetPastEventsAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo OnRunOrchestratorAsyncMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("OnRunOrchestratorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     [Fact]
     public async Task ExecuteAsync_ConnectFailureThreshold_RecreatesConfiguredChannel()
@@ -665,6 +673,645 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
+    public async Task OnRunOrchestratorAsync_StreamingHistory_StartsTraceFromExecutionStarted()
+    {
+        // Arrange
+        const string ParentTraceId = "11111111111111111111111111111111";
+        const string ParentSpanId = "2222222222222222";
+        SequenceAsyncStreamReader<P.HistoryChunk> historyReader = new(
+            new P.HistoryChunk
+            {
+                Events =
+                {
+                    new P.HistoryEvent
+                    {
+                        Timestamp = Timestamp.FromDateTime(
+                            new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+                        ExecutionStarted = new P.ExecutionStartedEvent
+                        {
+                            Name = "TestOrchestration",
+                            OrchestrationInstance = new P.OrchestrationInstance
+                            {
+                                InstanceId = "instance-1",
+                                ExecutionId = "execution-1",
+                            },
+                            ParentTraceContext = new P.TraceContext
+                            {
+                                TraceParent = $"00-{ParentTraceId}-{ParentSpanId}-01",
+                            },
+                        },
+                    },
+                },
+            });
+
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.StreamInstanceHistory(
+                It.IsAny<P.StreamInstanceHistoryRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(CreateServerStreamingCall(historyReader));
+        clientMock
+            .Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        factoryMock
+            .Setup(factory => factory.TryCreateOrchestrator(
+                It.IsAny<TaskName>(),
+                It.IsAny<IServiceProvider>(),
+                out It.Ref<ITaskOrchestrator?>.IsAny))
+            .Returns(false);
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            new DurableTaskWorkerOptions(),
+            NullLoggerFactory.Instance,
+            factoryMock.Object,
+            services);
+
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            ExecutionId = "execution-1",
+            RequiresHistoryStreaming = true,
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    Timestamp = Timestamp.FromDateTime(
+                        new DateTime(2025, 1, 1, 0, 0, 1, DateTimeKind.Utc)),
+                    OrchestratorStarted = new P.OrchestratorStartedEvent(),
+                },
+            },
+        };
+
+        Activity? orchestrationActivity = null;
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStarted = activity => orchestrationActivity = activity,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        await InvokeOnRunOrchestratorAsync(
+            CreateProcessor(worker, clientMock.Object),
+            request,
+            "completion-token",
+            CancellationToken.None);
+
+        // Assert
+        orchestrationActivity.Should().NotBeNull();
+        orchestrationActivity!.TraceId.Should().Be(ActivityTraceId.CreateFromString(ParentTraceId.AsSpan()));
+        orchestrationActivity.ParentSpanId.Should().Be(ActivitySpanId.CreateFromString(ParentSpanId.AsSpan()));
+        clientMock.VerifyAll();
+        factoryMock.VerifyAll();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OnRunOrchestratorAsync_RewindRequest_CreatesFreshTraceContext(
+        bool rewindHasParentTraceContext)
+    {
+        // Arrange
+        const string ExecutionTraceId = "11111111111111111111111111111111";
+        const string ExecutionParentSpanId = "2222222222222222";
+        const string ExecutionTraceState = "execution=value";
+        const string PreviousOrchestrationSpanId = "3333333333333333";
+        const string RewindTraceId = "44444444444444444444444444444444";
+        const string RewindParentSpanId = "5555555555555555";
+        const string RewindTraceState = "rewind=value";
+
+        P.ExecutionRewoundEvent rewindEvent = new() { Reason = "fixed" };
+        if (rewindHasParentTraceContext)
+        {
+            rewindEvent.ParentTraceContext = new P.TraceContext
+            {
+                TraceParent = $"00-{RewindTraceId}-{RewindParentSpanId}-01",
+                TraceState = RewindTraceState,
+            };
+        }
+
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            OrchestrationTraceContext = new P.OrchestrationTraceContext
+            {
+                SpanID = PreviousOrchestrationSpanId,
+                SpanStartTime = Timestamp.FromDateTime(
+                    new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            },
+            PastEvents =
+            {
+                new P.HistoryEvent
+                {
+                    ExecutionStarted = new P.ExecutionStartedEvent
+                    {
+                        Name = "TestOrchestration",
+                        OrchestrationInstance = new P.OrchestrationInstance
+                        {
+                            InstanceId = "instance-1",
+                            ExecutionId = "execution-1",
+                        },
+                        ParentTraceContext = new P.TraceContext
+                        {
+                            TraceParent = $"00-{ExecutionTraceId}-{ExecutionParentSpanId}-01",
+                            TraceState = ExecutionTraceState,
+                        },
+                    },
+                },
+                new P.HistoryEvent
+                {
+                    ExecutionCompleted = new P.ExecutionCompletedEvent
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Failed,
+                    },
+                },
+            },
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    OrchestratorStarted = new P.OrchestratorStartedEvent(),
+                },
+                new P.HistoryEvent
+                {
+                    ExecutionRewound = rewindEvent,
+                },
+            },
+        };
+
+        P.OrchestratorResponse? completedResponse = null;
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<P.OrchestratorResponse, Metadata, DateTime?, CancellationToken>(
+                (response, _, _, _) => completedResponse = response)
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            new DurableTaskWorkerOptions(),
+            NullLoggerFactory.Instance,
+            factoryMock.Object);
+
+        Activity? rewindActivity = null;
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStarted = activity => rewindActivity = activity,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        try
+        {
+            // Act
+            await InvokeOnRunOrchestratorAsync(
+                CreateProcessor(worker, clientMock.Object),
+                request,
+                "completion-token",
+                CancellationToken.None);
+
+            // Assert
+            factoryMock.VerifyNoOtherCalls();
+            completedResponse.Should().NotBeNull();
+            rewindActivity.Should().NotBeNull();
+            P.OrchestratorResponse response = completedResponse!;
+            Activity activity = rewindActivity!;
+            response.OrchestrationTraceContext.SpanID.Should().NotBeNullOrEmpty();
+            response.OrchestrationTraceContext.SpanID.Should().NotBe(PreviousOrchestrationSpanId);
+            response.OrchestrationTraceContext.SpanID.Should().Be(activity.SpanId.ToString());
+
+            string expectedTraceId = rewindHasParentTraceContext ? RewindTraceId : ExecutionTraceId;
+            string expectedParentSpanId =
+                rewindHasParentTraceContext ? RewindParentSpanId : ExecutionParentSpanId;
+            string expectedTraceState =
+                rewindHasParentTraceContext ? RewindTraceState : ExecutionTraceState;
+            activity.TraceId.Should().Be(ActivityTraceId.CreateFromString(expectedTraceId.AsSpan()));
+            activity.ParentSpanId.Should().Be(
+                ActivitySpanId.CreateFromString(expectedParentSpanId.AsSpan()));
+            activity.TraceStateString.Should().Be(expectedTraceState);
+            clientMock.VerifyAll();
+        }
+        finally
+        {
+            rewindActivity?.Stop();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OnRunOrchestratorAsync_RewindRequest_ReturnsRewrittenHistory(
+        bool rewindHasParentTraceContext)
+    {
+        // Arrange
+        const string ExecutionTraceId = "11111111111111111111111111111111";
+        const string ExecutionParentSpanId = "2222222222222222";
+        const string ExecutionTraceState = "execution=value";
+        const string SuccessfulChildSpanId = "3333333333333333";
+        const string FailedChildSpanId = "4444444444444444";
+        const string RewindTraceId = "55555555555555555555555555555555";
+        const string RewindParentSpanId = "6666666666666666";
+        const string RewindTraceState = "rewind=value";
+
+        P.TraceContext? rewindParentTraceContext = rewindHasParentTraceContext
+            ? new P.TraceContext
+            {
+                TraceParent = $"00-{RewindTraceId}-{RewindParentSpanId}-01",
+                TraceState = RewindTraceState,
+            }
+            : null;
+
+        P.HistoryEvent executionStarted = new()
+        {
+            EventId = -1,
+            ExecutionStarted = new P.ExecutionStartedEvent
+            {
+                Name = "TestOrchestration",
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance-1",
+                    ExecutionId = "old-execution",
+                },
+                ParentInstance = new P.ParentInstanceInfo
+                {
+                    OrchestrationInstance = new P.OrchestrationInstance
+                    {
+                        InstanceId = "parent-instance",
+                        ExecutionId = "old-parent-execution",
+                    },
+                },
+                ParentTraceContext = new P.TraceContext
+                {
+                    TraceParent = $"00-{ExecutionTraceId}-{ExecutionParentSpanId}-01",
+                    TraceState = ExecutionTraceState,
+                },
+            },
+        };
+        P.HistoryEvent successfulChildCreated = new()
+        {
+            EventId = 4,
+            SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+            {
+                InstanceId = "successful-child",
+                ParentTraceContext = new P.TraceContext
+                {
+                    TraceParent = $"00-{ExecutionTraceId}-{SuccessfulChildSpanId}-01",
+                },
+            },
+        };
+        P.HistoryEvent failedChildCreated = new()
+        {
+            EventId = 6,
+            SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+            {
+                InstanceId = "failed-child",
+                ParentTraceContext = new P.TraceContext
+                {
+                    TraceParent = $"00-{ExecutionTraceId}-{FailedChildSpanId}-01",
+                },
+            },
+        };
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            PastEvents =
+            {
+                executionStarted,
+                new P.HistoryEvent
+                {
+                    EventId = 0,
+                    TaskScheduled = new P.TaskScheduledEvent { Name = "SuccessfulActivity" },
+                },
+                new P.HistoryEvent
+                {
+                    EventId = 1,
+                    TaskCompleted = new P.TaskCompletedEvent { TaskScheduledId = 0 },
+                },
+                new P.HistoryEvent
+                {
+                    EventId = 2,
+                    TaskScheduled = new P.TaskScheduledEvent { Name = "FailedActivity" },
+                },
+                new P.HistoryEvent
+                {
+                    EventId = 3,
+                    TaskFailed = new P.TaskFailedEvent { TaskScheduledId = 2 },
+                },
+                successfulChildCreated,
+                new P.HistoryEvent
+                {
+                    EventId = 5,
+                    SubOrchestrationInstanceCompleted =
+                        new P.SubOrchestrationInstanceCompletedEvent { TaskScheduledId = 4 },
+                },
+                failedChildCreated,
+                new P.HistoryEvent
+                {
+                    EventId = 7,
+                    SubOrchestrationInstanceFailed =
+                        new P.SubOrchestrationInstanceFailedEvent { TaskScheduledId = 6 },
+                },
+                new P.HistoryEvent
+                {
+                    EventId = 8,
+                    ExecutionCompleted = new P.ExecutionCompletedEvent
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Failed,
+                    },
+                },
+            },
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    EventId = 9,
+                    OrchestratorStarted = new P.OrchestratorStartedEvent(),
+                },
+                new P.HistoryEvent
+                {
+                    EventId = 10,
+                    ExecutionRewound = new P.ExecutionRewoundEvent
+                    {
+                        Reason = "fixed",
+                        ParentExecutionId = "new-parent-execution",
+                        ParentTraceContext = rewindParentTraceContext,
+                    },
+                },
+            },
+        };
+
+        P.OrchestratorResponse? completedResponse = null;
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<P.OrchestratorResponse, Metadata, DateTime?, CancellationToken>(
+                (response, _, _, _) => completedResponse = response)
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            new DurableTaskWorkerOptions(),
+            NullLoggerFactory.Instance,
+            factoryMock.Object);
+
+        // Act
+        await InvokeOnRunOrchestratorAsync(
+            CreateProcessor(worker, clientMock.Object),
+            request,
+            "completion-token",
+            CancellationToken.None);
+
+        // Assert
+        factoryMock.VerifyNoOtherCalls();
+        P.OrchestratorAction action = completedResponse!.Actions.Should().ContainSingle().Subject;
+        action.Id.Should().Be(-1);
+        action.OrchestratorActionTypeCase.Should().Be(
+            P.OrchestratorAction.OrchestratorActionTypeOneofCase.RewindOrchestration);
+        P.HistoryEvent[] newHistory = action.RewindOrchestration.NewHistory.ToArray();
+
+        // Confirm the shape of the new history (failed tasks removed, etc.)
+        newHistory.Should().HaveCount(8);
+        newHistory.Should().NotContain(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskFailed
+            || e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed
+            || e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted
+            || (e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled && e.EventId == 2));
+        newHistory.Should().ContainSingle(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled && e.EventId == 0);
+        newHistory.Should().ContainSingle(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskCompleted && e.EventId == 1);
+        newHistory.Should().ContainSingle(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated
+            && e.EventId == 4);
+        newHistory.Should().ContainSingle(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted
+            && e.EventId == 5);
+        newHistory.Should().ContainSingle(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.OrchestratorStarted
+            && e.EventId == 9);
+
+        // Confirm the new execution ID and trace state of the rewritten ExecutionStartedEvent
+        P.ExecutionStartedEvent rewrittenStart = newHistory
+            .Single(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+            .ExecutionStarted;
+        Guid.TryParseExact(
+            rewrittenStart.OrchestrationInstance.ExecutionId,
+            "N",
+            out _).Should().BeTrue();
+        rewrittenStart.OrchestrationInstance.ExecutionId.Should().NotBe("old-execution");
+        rewrittenStart.ParentInstance.OrchestrationInstance.ExecutionId
+            .Should().Be("new-parent-execution");
+        rewrittenStart.ParentTraceContext.TraceParent.Should().Be(
+            rewindParentTraceContext?.TraceParent
+            ?? executionStarted.ExecutionStarted.ParentTraceContext.TraceParent);
+        rewrittenStart.ParentTraceContext.TraceState.Should().Be(
+            rewindParentTraceContext?.TraceState
+            ?? executionStarted.ExecutionStarted.ParentTraceContext.TraceState);
+
+        // Confirm the new trace information of the failed suborchestration
+        P.SubOrchestrationInstanceCreatedEvent rewrittenFailedChild = newHistory
+            .Single(e =>
+                e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated
+                && e.EventId == 6)
+            .SubOrchestrationInstanceCreated;
+        ActivityContext.TryParse(
+            rewrittenFailedChild.ParentTraceContext.TraceParent,
+            rewrittenFailedChild.ParentTraceContext.TraceState,
+            out ActivityContext failedChildTraceContext).Should().BeTrue();
+        string expectedTraceId = rewindHasParentTraceContext ? RewindTraceId : ExecutionTraceId;
+        string expectedTraceState = rewindHasParentTraceContext ? RewindTraceState : ExecutionTraceState;
+        failedChildTraceContext.TraceId.Should().Be(
+            ActivityTraceId.CreateFromString(expectedTraceId.AsSpan()));
+        // A new span ID should be generated for the failed suborchestration
+        failedChildTraceContext.SpanId.ToString().Should().NotBe(FailedChildSpanId);
+        failedChildTraceContext.SpanId.ToString().Should().NotBe(ExecutionParentSpanId);
+        failedChildTraceContext.SpanId.ToString().Should().NotBe(RewindParentSpanId);
+        failedChildTraceContext.TraceFlags.Should().Be(ActivityTraceFlags.Recorded);
+        failedChildTraceContext.TraceState.Should().Be(expectedTraceState);
+
+        // For successful suborchestrations, their trace information should not be altered
+        P.SubOrchestrationInstanceCreatedEvent rewrittenSuccessfulChild = newHistory
+            .Single(e =>
+                e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated
+                && e.EventId == 4)
+            .SubOrchestrationInstanceCreated;
+        rewrittenSuccessfulChild.ParentTraceContext.TraceParent
+            .Should().Be(successfulChildCreated.SubOrchestrationInstanceCreated.ParentTraceContext.TraceParent);
+
+        // Confirm the presence of the rewind event and its reason
+        P.HistoryEvent rewindEvent = newHistory.Should().ContainSingle(e =>
+            e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionRewound
+            && e.EventId == 10).Subject;
+        rewindEvent.ExecutionRewound.Reason.Should().Be("fixed");
+
+        // The original events should remain unaltered
+        executionStarted.ExecutionStarted.OrchestrationInstance.ExecutionId.Should().Be("old-execution");
+        executionStarted.ExecutionStarted.ParentInstance.OrchestrationInstance.ExecutionId
+            .Should().Be("old-parent-execution");
+        failedChildCreated.SubOrchestrationInstanceCreated.ParentTraceContext.TraceParent
+            .Should().Be($"00-{ExecutionTraceId}-{FailedChildSpanId}-01");
+        clientMock.VerifyAll();
+    }
+
+    [Fact]
+    public async Task OnRunOrchestratorAsync_RewindRequestForNonFailedOrchestration_Throws()
+    {
+        // Arrange
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            PastEvents =
+            {
+                new P.HistoryEvent
+                {
+                    ExecutionStarted = new P.ExecutionStartedEvent
+                    {
+                        Name = "TestOrchestration",
+                        OrchestrationInstance = new P.OrchestrationInstance
+                        {
+                            InstanceId = "instance-1",
+                            ExecutionId = "execution-1",
+                        },
+                    },
+                },
+                new P.HistoryEvent
+                {
+                    ExecutionCompleted = new P.ExecutionCompletedEvent
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Completed,
+                    },
+                },
+            },
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    OrchestratorStarted = new P.OrchestratorStartedEvent(),
+                },
+                new P.HistoryEvent
+                {
+                    ExecutionRewound = new P.ExecutionRewoundEvent
+                    {
+                        Reason = "invalid rewind",
+                    },
+                },
+            },
+        };
+
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            new DurableTaskWorkerOptions(),
+            NullLoggerFactory.Instance,
+            factoryMock.Object);
+
+        // Act
+        Func<Task> act = () => InvokeOnRunOrchestratorAsync(
+            CreateProcessor(worker, clientMock.Object),
+            request,
+            "completion-token",
+            CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*ExecutionCompleted event to have status Failed*Completed*");
+        factoryMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task OnRunOrchestratorAsync_RewindRequestWithoutExecutionStarted_Throws()
+    {
+        // Arrange
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance-1",
+            PastEvents =
+            {
+                new P.HistoryEvent
+                {
+                    ExecutionCompleted = new P.ExecutionCompletedEvent
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Failed,
+                    },
+                },
+            },
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    OrchestratorStarted = new P.OrchestratorStartedEvent(),
+                },
+                new P.HistoryEvent
+                {
+                    ExecutionRewound = new P.ExecutionRewoundEvent
+                    {
+                        Reason = "invalid rewind",
+                        ParentTraceContext = new P.TraceContext
+                        {
+                            TraceParent =
+                                "00-11111111111111111111111111111111-2222222222222222-01",
+                        },
+                    },
+                },
+            },
+        };
+
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            new DurableTaskWorkerOptions(),
+            NullLoggerFactory.Instance,
+            factoryMock.Object);
+
+        // Act
+        Func<Task> act = () => InvokeOnRunOrchestratorAsync(
+            CreateProcessor(worker, clientMock.Object),
+            request,
+            "completion-token",
+            CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*no ExecutionStartedEvent*");
+        factoryMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task BuildRuntimeStateAsync_HistoryStreamCanceledMidStream_PropagatesCancellation()
     {
         // Arrange — the second chunk read observes a canceled token. Cancellation must propagate out of
@@ -1013,9 +1660,24 @@ public class GrpcDurableTaskWorkerTests
         object? entityConversionState,
         CancellationToken cancellationToken)
     {
-        object result = BuildRuntimeStateAsyncMethod.Invoke(
-            processor, new object?[] { orchestratorRequest, entityConversionState, cancellationToken })!;
-        return await (ValueTask<OrchestrationRuntimeState>)result;
+        object result = GetPastEventsAsyncMethod.Invoke(
+            processor, new object?[] { orchestratorRequest, cancellationToken })!;
+        IReadOnlyList<P.HistoryEvent> pastEvents =
+            await (ValueTask<IReadOnlyList<P.HistoryEvent>>)result;
+
+        return (OrchestrationRuntimeState)BuildRuntimeStateMethod.Invoke(
+            null, new object?[] { orchestratorRequest, pastEvents, entityConversionState })!;
+    }
+
+    static async Task InvokeOnRunOrchestratorAsync(
+        object processor,
+        P.OrchestratorRequest orchestratorRequest,
+        string completionToken,
+        CancellationToken cancellationToken)
+    {
+        Task task = (Task)OnRunOrchestratorAsyncMethod.Invoke(
+            processor, new object?[] { orchestratorRequest, completionToken, cancellationToken })!;
+        await task;
     }
 
     static T GetResultProperty<T>(object result, string propertyName)

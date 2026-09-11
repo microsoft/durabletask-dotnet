@@ -29,6 +29,7 @@ static class RewindOrchestrationHandler
         Check.NotNull(pastEvents);
 
         if (request.NewEvents.Count != 2
+            || request.NewEvents[0].EventTypeCase != P.HistoryEvent.EventTypeOneofCase.OrchestratorStarted
             || request.NewEvents[1].EventTypeCase != P.HistoryEvent.EventTypeOneofCase.ExecutionRewound)
         {
             throw new InvalidOperationException(

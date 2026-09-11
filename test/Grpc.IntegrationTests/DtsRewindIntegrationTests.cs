@@ -208,7 +208,7 @@ public sealed class DtsRewindIntegrationTests : IDisposable
     /// <summary>
     /// Verifies that rewind recursively re-executes failed sub-orchestrations without restarting them.
     /// </summary>
-    [DtsEmulatorFact(Skip = "Requires a DTS emulator image containing the sidecar rewind history fix.")]
+    [DtsEmulatorFact(Skip = "Requires a DTS emulator image containing the fix for rewinding multiple failed suborchestrations.")]
     public async Task CanRewindFailedSubOrchestrationsAsync()
     {
         // Arrange
@@ -493,7 +493,7 @@ public sealed class DtsRewindIntegrationTests : IDisposable
     /// <summary>
     /// Verifies that purged failed sub-orchestrations are recreated when their parent is rewound.
     /// </summary>
-    [DtsEmulatorFact]
+    [DtsEmulatorFact(Skip = "Requires a DTS emulator image containing the fix for rewinding multiple failed suborchestrations.")]
     public async Task RewindPurgedSubOrchestrationsAsync()
     {
         // Arrange

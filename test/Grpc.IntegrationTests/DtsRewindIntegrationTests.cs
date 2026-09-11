@@ -82,7 +82,10 @@ public sealed class DtsRewindIntegrationTests : IDisposable
         // Act
         Volatile.Write(ref shouldFail, 0);
         await server.Client.RewindInstanceAsync(instanceId, "retry after fix", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -142,7 +145,10 @@ public sealed class DtsRewindIntegrationTests : IDisposable
         // Act
         Volatile.Write(ref shouldFailSecond, 0);
         await server.Client.RewindInstanceAsync(instanceId, "retry", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -272,7 +278,10 @@ public sealed class DtsRewindIntegrationTests : IDisposable
         // Act
         Volatile.Write(ref shouldFail, 0);
         await server.Client.RewindInstanceAsync(instanceId, "retry failed children", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         // Assert
@@ -346,7 +355,10 @@ public sealed class DtsRewindIntegrationTests : IDisposable
 
         // Act
         await server.Client.RewindInstanceAsync(instanceId, "retry nested child", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -450,19 +462,15 @@ public sealed class DtsRewindIntegrationTests : IDisposable
 
         // Act
         await server.Client.RewindInstanceAsync(instanceId, "purge and retry nested child", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
-        await Task.Delay(TimeSpan.FromSeconds(2));
-
-        OrchestrationMetadata recreatedChild = await server.Client.GetInstanceAsync(
-            childInstanceId,
-            getInputsAndOutputs: true,
-            this.TimeoutToken)
-            ?? throw new InvalidOperationException("The recreated child orchestration was not found.");
-        OrchestrationMetadata recreatedNestedChild = await server.Client.GetInstanceAsync(
-            nestedInstanceId,
-            getInputsAndOutputs: true,
-            this.TimeoutToken)
-            ?? throw new InvalidOperationException("The recreated nested child orchestration was not found.");
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
+        OrchestrationMetadata[] recreatedInstances = await Task.WhenAll(
+            this.WaitForRecreatedInstanceCompletionAsync(server.Client, childInstanceId),
+            this.WaitForRecreatedInstanceCompletionAsync(server.Client, nestedInstanceId));
+        OrchestrationMetadata recreatedChild = recreatedInstances[0];
+        OrchestrationMetadata recreatedNestedChild = recreatedInstances[1];
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -576,16 +584,13 @@ public sealed class DtsRewindIntegrationTests : IDisposable
 
         // Act
         await server.Client.RewindInstanceAsync(instanceId, "purge and retry", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
-        await Task.Delay(TimeSpan.FromSeconds(2));
-        OrchestrationMetadata?[] recreatedChildren = new OrchestrationMetadata?[childInstanceIds.Length];
-        for (int childIndex = 0; childIndex < childInstanceIds.Length; childIndex++)
-        {
-            recreatedChildren[childIndex] = await server.Client.GetInstanceAsync(
-                childInstanceIds[childIndex],
-                getInputsAndOutputs: true,
-                this.TimeoutToken);
-        }
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
+        OrchestrationMetadata[] recreatedChildren = await Task.WhenAll(
+            childInstanceIds.Select(childInstanceId =>
+                this.WaitForRecreatedInstanceCompletionAsync(server.Client, childInstanceId)));
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -603,9 +608,7 @@ public sealed class DtsRewindIntegrationTests : IDisposable
 
         for (int childIndex = 0; childIndex < childInstanceIds.Length; childIndex++)
         {
-            OrchestrationMetadata recreatedChild = recreatedChildren[childIndex]
-                ?? throw new InvalidOperationException(
-                    $"The recreated child orchestration {childIndex} was not found.");
+            OrchestrationMetadata recreatedChild = recreatedChildren[childIndex];
             Assert.Equal(childOrchestratorName.Name, recreatedChild.Name);
             Assert.Equal(childInstanceIds[childIndex], recreatedChild.InstanceId);
             Assert.Equal(OrchestrationRuntimeStatus.Completed, recreatedChild.RuntimeStatus);
@@ -654,7 +657,10 @@ public sealed class DtsRewindIntegrationTests : IDisposable
 
         // Act
         await server.Client.RewindInstanceAsync(instanceId, string.Empty, this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            failed);
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -699,12 +705,18 @@ public sealed class DtsRewindIntegrationTests : IDisposable
         Assert.Equal(OrchestrationRuntimeStatus.Failed, firstFailure.RuntimeStatus);
 
         await server.Client.RewindInstanceAsync(instanceId, "first rewind", this.TimeoutToken);
-        OrchestrationMetadata secondFailure = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata secondFailure = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            firstFailure);
         Assert.Equal(OrchestrationRuntimeStatus.Failed, secondFailure.RuntimeStatus);
 
         // Act
         await server.Client.RewindInstanceAsync(instanceId, "second rewind", this.TimeoutToken);
-        OrchestrationMetadata completed = await this.WaitForCompletionAsync(server.Client, instanceId);
+        OrchestrationMetadata completed = await this.WaitForRewindCompletionAsync(
+            server.Client,
+            instanceId,
+            secondFailure);
 
         // Assert
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
@@ -762,6 +774,51 @@ public sealed class DtsRewindIntegrationTests : IDisposable
         {
             host.Dispose();
             throw;
+        }
+    }
+
+    async Task<OrchestrationMetadata> WaitForRecreatedInstanceCompletionAsync(
+        DurableTaskClient client,
+        string instanceId)
+    {
+        while (true)
+        {
+            OrchestrationMetadata? metadata = await client.GetInstanceAsync(
+                instanceId,
+                getInputsAndOutputs: true,
+                this.TimeoutToken);
+            if (metadata is not null)
+            {
+                return metadata.IsCompleted
+                    ? metadata
+                    : await this.WaitForCompletionAsync(client, instanceId);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), this.TimeoutToken);
+        }
+    }
+
+    async Task<OrchestrationMetadata> WaitForRewindCompletionAsync(
+        DurableTaskClient client,
+        string instanceId,
+        OrchestrationMetadata previousState)
+    {
+        while (true)
+        {
+            OrchestrationMetadata? currentState = await client.GetInstanceAsync(
+                instanceId,
+                getInputsAndOutputs: true,
+                this.TimeoutToken);
+            if (currentState is not null
+                && (currentState.LastUpdatedAt > previousState.LastUpdatedAt
+                    || !currentState.IsCompleted))
+            {
+                return currentState.IsCompleted
+                    ? currentState
+                    : await this.WaitForCompletionAsync(client, instanceId);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), this.TimeoutToken);
         }
     }
 

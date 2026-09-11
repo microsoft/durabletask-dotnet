@@ -1278,11 +1278,6 @@ public class GrpcDurableTaskWorkerTests
                     ExecutionRewound = new P.ExecutionRewoundEvent
                     {
                         Reason = "invalid rewind",
-                        ParentTraceContext = new P.TraceContext
-                        {
-                            TraceParent =
-                                "00-11111111111111111111111111111111-2222222222222222-01",
-                        },
                     },
                 },
             },

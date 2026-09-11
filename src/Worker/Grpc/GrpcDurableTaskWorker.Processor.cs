@@ -651,16 +651,18 @@ sealed partial class GrpcDurableTaskWorker
                     .Select(e => e.ExecutionStarted)
                     .FirstOrDefault();
 
-            if (isInitialRewind
-                && rewindEvent!.ParentTraceContext is not null)
+            if (isInitialRewind)
             {
                 if (executionStartedEvent is null)
                 {
                     throw new InvalidOperationException("Rewinding orchestration has no ExecutionStartedEvent in its history");
                 }
 
-                executionStartedEvent = executionStartedEvent.Clone();
-                executionStartedEvent.ParentTraceContext = rewindEvent.ParentTraceContext;
+                if (rewindEvent!.ParentTraceContext is not null)
+                {
+                    executionStartedEvent = executionStartedEvent.Clone();
+                    executionStartedEvent.ParentTraceContext = rewindEvent.ParentTraceContext;
+                }
             }
 
             // A rewind starts a new orchestration span instead of continuing the failed execution's stored span.

@@ -226,6 +226,54 @@ public class DurableTaskRegistryVersioningTests
         act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
     }
 
+    [Fact]
+    public void AddOrchestrator_MultiVersionAttribute_RegistersUnderEachVersion()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+
+        // Act
+        registry.AddOrchestrator<MultiVersionWorkflow>();
+
+        // Assert — a single class declaring "v1,v2" is registered once per declared version.
+        registry.OrchestratorsByVersion.Keys.Should().BeEquivalentTo(new[]
+        {
+            new TaskVersionKey("MultiVersionWorkflow", "v1"),
+            new TaskVersionKey("MultiVersionWorkflow", "v2"),
+        });
+    }
+
+    [Fact]
+    public void AddActivity_MultiVersionAttribute_RegistersUnderEachVersion()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+
+        // Act
+        registry.AddActivity<MultiVersionActivity>();
+
+        // Assert
+        registry.ActivitiesByVersion.Keys.Should().BeEquivalentTo(new[]
+        {
+            new TaskVersionKey("MultiVersionActivity", "v1"),
+            new TaskVersionKey("MultiVersionActivity", "v2"),
+        });
+    }
+
+    [Fact]
+    public void AddOrchestrator_MultiVersionAttribute_CollidingVersionWithExistingRegistration_Throws()
+    {
+        // Arrange — "v2" is shared between the multi-version class and the single-version class.
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator("MultiVersionWorkflow", new TaskVersion("v2"), () => Mock.Of<ITaskOrchestrator>());
+
+        // Act
+        Action act = () => registry.AddOrchestrator<MultiVersionWorkflow>();
+
+        // Assert
+        act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
+    }
+
     [DurableTask("ShippingWorkflow", Version = "v1")]
     sealed class ShippingWorkflowV1 : TaskOrchestrator<string, string>
     {
@@ -306,5 +354,19 @@ public class DurableTaskRegistryVersioningTests
 
         public override Task<string> RunAsync(TaskActivityContext context, string input)
             => Task.FromResult(this.marker);
+    }
+
+    [DurableTask("MultiVersionWorkflow", Version = "v1,v2")]
+    sealed class MultiVersionWorkflow : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+            => Task.FromResult(input);
+    }
+
+    [DurableTask("MultiVersionActivity", Version = "v1,v2")]
+    sealed class MultiVersionActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+            => Task.FromResult(input);
     }
 }

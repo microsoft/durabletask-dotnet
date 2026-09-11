@@ -34,7 +34,7 @@ public sealed class DurableTaskAttribute : Attribute
     public TaskName Name { get; }
 
     /// <summary>
-    /// Gets or sets the version of the durable task. Multiple classes may declare the same
+    /// Gets or sets the version(s) of the durable task. Multiple classes may declare the same
     /// <see cref="Name"/> as long as each declares a unique <see cref="Version"/>.
     /// </summary>
     /// <remarks>
@@ -42,6 +42,13 @@ public sealed class DurableTaskAttribute : Attribute
     /// Leave unset (or set to <c>null</c> / <see cref="string.Empty"/>) for an unversioned task.
     /// Whitespace-only values are rejected at compile time by source generator diagnostic
     /// <c>DURABLE3005</c> and at registration time by the <see cref="TaskVersion"/> constructor.
+    /// </para>
+    /// <para>
+    /// A single class may declare multiple versions by supplying a comma-separated list (for example
+    /// <c>"v1,v2"</c>). Each listed version is plumbed through exactly as a single version is: the type is
+    /// registered under every declared version, and the source generator emits version-aware call helpers
+    /// for them. Empty entries (such as a trailing comma) are ignored, whitespace-only entries are rejected,
+    /// and duplicate entries are coalesced (case-insensitive).
     /// </para>
     /// <para>
     /// Entities ignore this property.

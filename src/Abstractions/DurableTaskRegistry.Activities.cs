@@ -62,9 +62,9 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(TaskName name, Type type)
     {
         Check.ConcreteType<ITaskActivity>(type);
-        return this.AddActivity(
+        return this.AddActivityAllVersions(
             name,
-            type.GetDurableTaskVersion(),
+            type.GetDurableTaskVersions(),
             sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
     }
 
@@ -77,9 +77,9 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(Type type)
     {
         Check.ConcreteType<ITaskActivity>(type);
-        return this.AddActivity(
+        return this.AddActivityAllVersions(
             type.GetTaskName(),
-            type.GetDurableTaskVersion(),
+            type.GetDurableTaskVersions(),
             sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
     }
 
@@ -112,7 +112,7 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(TaskName name, ITaskActivity activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity(name, activity.GetType().GetDurableTaskVersion(), () => activity);
+        return this.AddActivityAllVersions(name, activity.GetType().GetDurableTaskVersions(), _ => activity);
     }
 
     /// <summary>
@@ -123,10 +123,10 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(ITaskActivity activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity(
+        return this.AddActivityAllVersions(
             activity.GetType().GetTaskName(),
-            activity.GetType().GetDurableTaskVersion(),
-            () => activity);
+            activity.GetType().GetDurableTaskVersions(),
+            _ => activity);
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Abstractions;
+
 namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
@@ -57,7 +59,9 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(
+                    group.Select(entry => entry.Key.Version),
+                    workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder ? workerOptions.Versioning.Version : null);
 
                 return new OrchestrationFilter
                 {
@@ -71,7 +75,9 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(
+                    group.Select(entry => entry.Key.Version),
+                    workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder ? workerOptions.Versioning.Version : null);
 
                 return new ActivityFilter
                 {
@@ -92,13 +98,14 @@ public class DurableTaskWorkerWorkItemFilters
             }).ToList(),
         };
 
-        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions)
+        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions, string? workerVersion)
         {
             // Normalize null to "" so an unversioned registration appears consistently.
             string[] normalized = versions
                 .Select(version => version ?? string.Empty)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                .Where(version => workerVersion == null || TaskOrchestrationVersioningUtils.CompareVersions(workerVersion, version) >= 0)
                 .ToArray();
 
             // Unversioned-only: emit the wildcard match-all (empty list) so the backend can deliver

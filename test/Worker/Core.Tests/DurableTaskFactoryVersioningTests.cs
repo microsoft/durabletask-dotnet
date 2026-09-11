@@ -153,6 +153,45 @@ public class DurableTaskFactoryVersioningTests
         orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
     }
 
+    [Fact]
+    public void TryCreateActivity_UnversionedAndMultiVersionRegistrations_ServesEveryDeclaredVersion()
+    {
+        // Arrange — an "original" unversioned activity registered with a bare [DurableTask] attribute
+        // coexists with a newer class that declares multiple versions in one attribute
+        // ([DurableTask("InvoiceActivity", Version = "1.0.0,1.1.0")]). All three logical endpoints —
+        // the unversioned original plus each comma-separated version — must be independently servable.
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<OriginalInvoiceActivity>();
+        registry.AddActivity<MultiVersionInvoiceActivity>();
+        IVersionedTaskFactory factory = (IVersionedTaskFactory)registry.BuildFactory();
+
+        // Act
+        bool unversionedFound = factory.TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            default,
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? unversionedActivity);
+        bool v1Found = factory.TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("1.0.0"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? v1Activity);
+        bool v11Found = factory.TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("1.1.0"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? v11Activity);
+
+        // Assert — the unversioned request resolves to the original, and each declared version resolves
+        // to the multi-version class.
+        unversionedFound.Should().BeTrue();
+        unversionedActivity.Should().BeOfType<OriginalInvoiceActivity>();
+        v1Found.Should().BeTrue();
+        v1Activity.Should().BeOfType<MultiVersionInvoiceActivity>();
+        v11Found.Should().BeTrue();
+        v11Activity.Should().BeOfType<MultiVersionInvoiceActivity>();
+    }
+
     [DurableTask("InvoiceWorkflow", Version = "v1")]
     sealed class InvoiceWorkflowV1 : TaskOrchestrator<string, string>
     {
@@ -172,5 +211,19 @@ public class DurableTaskFactoryVersioningTests
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult("unversioned");
+    }
+
+    [DurableTask("InvoiceActivity")]
+    sealed class OriginalInvoiceActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+            => Task.FromResult("original");
+    }
+
+    [DurableTask("InvoiceActivity", Version = "1.0.0,1.1.0")]
+    sealed class MultiVersionInvoiceActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+            => Task.FromResult(context.Version);
     }
 }

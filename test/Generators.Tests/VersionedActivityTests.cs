@@ -72,6 +72,70 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
     }
 
     [Fact]
+    public Task Standalone_MultiVersionedActivity_GeneratesVersionParameterHelper()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+[DurableTask(""ProcessInvoice"", Version = ""v1,v2"")]
+class ProcessInvoice : TaskActivity<int, string>
+{
+    public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""ProcessInvoice""/> activity.
+/// </summary>
+/// <remarks>Stamps the supplied <paramref name=""version""/> on the activity call; it must be one of the declared versions: v1, v2. A non-null <paramref name=""options""/>.Version overrides it.</remarks>
+/// <param name=""version"">The declared task version to stamp on the call. Must be one of: v1, v2.</param>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallProcessInvoiceAsync(this TaskOrchestrationContext ctx, int input, string version, TaskOptions? options = null)
+{
+    if (!(version == ""v1"" || version == ""v2""))
+    {
+        throw new ArgumentException(
+            ""Version '"" + version + ""' is not a declared version of activity 'ProcessInvoice'. Declared versions: v1, v2."",
+            nameof(version));
+    }
+
+    return ctx.CallActivityAsync<string>(""ProcessInvoice"", input, ApplyGeneratedActivityVersion(options, version));
+}
+
+static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+{
+    // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+    // stamp the version that the generated helper was emitted for.
+    if (options is null)
+    {
+        return new TaskOptions
+        {
+            Version = version,
+        };
+    }
+
+    return options.Version is not null
+        ? options
+        : new TaskOptions(options) { Version = version };
+}
+
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{
+    builder.AddActivity<ProcessInvoice>();
+    return builder;
+}");
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+    }
+
+    [Fact]
     public Task Standalone_MultiVersionedActivities_GenerateVersionQualifiedHelpersOnly()
     {
         string code = @"

@@ -59,6 +59,61 @@ public class DurableTaskAttributeVersionTests
             .WithMessage("*whitespace*");
     }
 
+    [Fact]
+    public void GetDurableTaskVersions_MultipleVersions_ReturnsEachInOrder()
+    {
+        // Arrange
+        Type type = typeof(MultiVersionTestOrchestrator);
+
+        // Act
+        IReadOnlyList<TaskVersion> versions = type.GetDurableTaskVersions();
+
+        // Assert
+        versions.Select(v => v.Version).Should().Equal("v1", "v2", "v3");
+    }
+
+    [Fact]
+    public void GetDurableTaskVersions_WithWhitespaceAndDuplicateEntries_TrimsSkipsAndDedups()
+    {
+        // Arrange
+        Type type = typeof(MessyMultiVersionTestOrchestrator);
+
+        // Act
+        IReadOnlyList<TaskVersion> versions = type.GetDurableTaskVersions();
+
+        // Assert — surrounding whitespace is trimmed, the trailing-comma empty entry is dropped, and the
+        // duplicate "v1" is coalesced (case-insensitively).
+        versions.Select(v => v.Version).Should().Equal("v1", "v2");
+    }
+
+    [Fact]
+    public void GetDurableTaskVersions_Unversioned_ReturnsSingleUnversionedEntry()
+    {
+        // Arrange
+        Type type = typeof(UnversionedTestOrchestrator);
+
+        // Act
+        IReadOnlyList<TaskVersion> versions = type.GetDurableTaskVersions();
+
+        // Assert
+        versions.Should().ContainSingle().Which.Should().Be(TaskVersion.Unversioned);
+    }
+
+    [Fact]
+    public void GetDurableTaskVersions_WhitespaceOnlyEntry_ThrowsArgumentException()
+    {
+        // Arrange — a whitespace-only entry between commas must fail closed, mirroring the source
+        // generator's DURABLE3005 diagnostic.
+        Type type = typeof(WhitespaceEntryMultiVersionTestOrchestrator);
+
+        // Act
+        Action act = () => type.GetDurableTaskVersions();
+
+        // Assert
+        act.Should().ThrowExactly<ArgumentException>()
+            .WithMessage("*whitespace*");
+    }
+
     [DurableTask(Version = "v1")]
     sealed class VersionedTestOrchestrator : TaskOrchestrator<string, string>
     {
@@ -74,6 +129,27 @@ public class DurableTaskAttributeVersionTests
 
     [DurableTask("WhitespaceVersioned", Version = "   ")]
     sealed class WhitespaceVersionedTestOrchestrator : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+            => Task.FromResult(input);
+    }
+
+    [DurableTask("MultiVersion", Version = "v1,v2,v3")]
+    sealed class MultiVersionTestOrchestrator : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+            => Task.FromResult(input);
+    }
+
+    [DurableTask("MessyMultiVersion", Version = " v1 , v2 ,v1,")]
+    sealed class MessyMultiVersionTestOrchestrator : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+            => Task.FromResult(input);
+    }
+
+    [DurableTask("WhitespaceEntryMultiVersion", Version = "v1, ,v2")]
+    sealed class WhitespaceEntryMultiVersionTestOrchestrator : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult(input);

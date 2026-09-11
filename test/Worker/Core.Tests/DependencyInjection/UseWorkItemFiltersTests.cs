@@ -156,6 +156,133 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
+    public void WorkItemFilters_CurrentOrOlder_FiltersOutNewerThanWorkerVersion()
+    {
+        // Arrange — register v1 and v2 of the same logical name. With CurrentOrOlder at worker version
+        // "v1", the backend should only be asked for versions <= v1 so it never streams v2 work items
+        // the worker would reject after the fact.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<VersionedFilterWorkflowV1>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<VersionedFilterActivityV1>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "v1",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert — v2 is dropped because it is newer than the worker version.
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["v1"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["v1"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_CurrentOrOlder_KeepsVersionsEqualToOrOlderThanWorkerVersion()
+    {
+        // Arrange — register v1 and v2 with CurrentOrOlder at worker version "v2". Both are <= v2, so
+        // both should survive the filter.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<VersionedFilterWorkflowV1>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<VersionedFilterActivityV1>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "v2",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["v1", "v2"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["v1", "v2"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_CurrentOrOlder_RetainsUnversionedAlongsideOlderVersions()
+    {
+        // Arrange — register an unversioned, v1, and v2 registration under the same logical name with
+        // CurrentOrOlder at worker version "v1". The unversioned ("") entry is always older than any
+        // defined worker version, so it stays as a fallback; v2 is dropped as newer.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV1>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV1>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "v1",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert — "" (unversioned) and v1 are retained, v2 is filtered out.
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo([string.Empty, "v1"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty, "v1"]);
+    }
+
+    [Fact]
     public void WorkItemFilters_DefaultNullWithVersioningNone_WhenExplicitlyOptedIn()
     {
         // Arrange

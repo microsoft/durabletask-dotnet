@@ -161,4 +161,20 @@ public sealed partial class DurableTaskRegistry
         this.ActivitiesByVersion.Add(key, factory);
         return this;
     }
+
+    /// <summary>
+    /// Registers an activity factory under every supplied version. This is the shared fan-out used by the
+    /// type- and singleton-based registration overloads so that a class declaring multiple versions via
+    /// <see cref="DurableTaskAttribute.Version"/> is registered once per declared version.
+    /// </summary>
+    DurableTaskRegistry AddActivityAllVersions(
+        TaskName name, IReadOnlyList<TaskVersion> versions, Func<IServiceProvider, ITaskActivity> factory)
+    {
+        foreach (TaskVersion version in versions)
+        {
+            this.AddActivity(name, version, factory);
+        }
+
+        return this;
+    }
 }

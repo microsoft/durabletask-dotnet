@@ -341,6 +341,50 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task ResolveResponsePayloadsAsync_WorkItemOrchestratorRequest_ResolvesExecutionRewoundReasons()
+    {
+        // Arrange
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.WorkItem workItem = new()
+        {
+            OrchestratorRequest = new P.OrchestratorRequest
+            {
+                InstanceId = "instance-1",
+                PastEvents =
+                {
+                    new P.HistoryEvent
+                    {
+                        ExecutionRewound = new P.ExecutionRewoundEvent
+                        {
+                            Reason = store.Seed("previous rewind reason"),
+                        },
+                    },
+                },
+                NewEvents =
+                {
+                    new P.HistoryEvent
+                    {
+                        ExecutionRewound = new P.ExecutionRewoundEvent
+                        {
+                            Reason = store.Seed("current rewind reason"),
+                        },
+                    },
+                },
+            },
+        };
+
+        // Act
+        await ResolveAsync(interceptor, workItem, CancellationToken.None);
+
+        // Assert
+        workItem.OrchestratorRequest.PastEvents[0].ExecutionRewound.Reason
+            .Should().Be("previous rewind reason");
+        workItem.OrchestratorRequest.NewEvents[0].ExecutionRewound.Reason
+            .Should().Be("current rewind reason");
+    }
+
+    [Fact]
     public async Task ResolveResponsePayloadsAsync_WorkItemEntityRequestV1_ResolvesEntityStateAndOperationsInOrder()
     {
         // Arrange
@@ -410,6 +454,119 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
         store.MaxObservedConcurrency.Should().BeGreaterThan(1, "independent payload operations should overlap, not run strictly sequentially");
         store.MaxObservedConcurrency.Should().BeLessOrEqualTo(8, "concurrency must be bounded to avoid Azure Storage throttling");
+    }
+
+    [Fact]
+    public async Task ExternalizeRequestPayloadsAsync_RewindInstanceRequest_ExternalizesReason()
+    {
+        // Arrange
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.RewindInstanceRequest request = new()
+        {
+            InstanceId = "instance-1",
+            Reason = "rewind reason",
+        };
+
+        // Act
+        await ExternalizeAsync(interceptor, request, CancellationToken.None);
+
+        // Assert
+        store.GetUploadedValue(request.Reason).Should().Be("rewind reason");
+    }
+
+    [Theory]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.EventRaised)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.TaskScheduled)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.TaskCompleted)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.EventSent)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.GenericEvent)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ContinueAsNew)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ExecutionResumed)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.ExecutionRewound)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted)]
+    [InlineData(P.HistoryEvent.EventTypeOneofCase.HistoryState)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_ExternalizesRewindHistoryPayloads(
+        P.HistoryEvent.EventTypeOneofCase eventType)
+    {
+        // Arrange
+        string payload = new('x', 64);
+        P.HistoryEvent historyEvent = CreateHistoryEventWithPayload(eventType, payload);
+        P.OrchestratorResponse response = new()
+        {
+            InstanceId = "instance-1",
+            Actions =
+            {
+                new P.OrchestratorAction
+                {
+                    RewindOrchestration = new P.RewindOrchestrationAction
+                    {
+                        NewHistory = { historyEvent },
+                    },
+                },
+            },
+        };
+
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        IReadOnlyList<string> tokens = GetHistoryEventPayloads(historyEvent);
+        foreach (string token in tokens)
+        {
+            token.Should().NotBe(payload);
+            store.GetUploadedValue(token).Should().Be(payload);
+        }
+
+        store.UploadCount.Should().Be(tokens.Count);
+    }
+
+    [Fact]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_ShrinksOversizedRewindHistory()
+    {
+        // Arrange: ExecutionStarted is representative because every replacement history contains
+        // one; response-size handling is otherwise independent of the history event type.
+        const int MaxInlineResponseSize = 4_089_446;
+        string payload = new('x', MaxInlineResponseSize + 1024);
+        P.HistoryEvent historyEvent = CreateHistoryEventWithPayload(
+            P.HistoryEvent.EventTypeOneofCase.ExecutionStarted,
+            payload);
+        P.OrchestratorResponse response = new()
+        {
+            InstanceId = "instance-1",
+            Actions =
+            {
+                new P.OrchestratorAction
+                {
+                    RewindOrchestration = new P.RewindOrchestrationAction
+                    {
+                        NewHistory = { historyEvent },
+                    },
+                },
+            },
+        };
+        response.CalculateSize().Should().BeGreaterThan(MaxInlineResponseSize);
+
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        store.GetUploadedValue(historyEvent.ExecutionStarted.Input).Should().Be(payload);
+        response.CalculateSize().Should().BeLessThan(MaxInlineResponseSize);
     }
 
     [Fact]
@@ -935,6 +1092,110 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         // Assert: cancellation did not prevent a dispatch, so successful work remains successful.
         await act.Should().NotThrowAsync();
         completedOperations.Should().Be(2);
+    }
+
+    static P.HistoryEvent CreateHistoryEventWithPayload(
+        P.HistoryEvent.EventTypeOneofCase eventType,
+        string payload)
+    {
+        return eventType switch
+        {
+            P.HistoryEvent.EventTypeOneofCase.ExecutionStarted =>
+                new() { ExecutionStarted = new P.ExecutionStartedEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted =>
+                new() { ExecutionCompleted = new P.ExecutionCompletedEvent { Result = payload } },
+            P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated =>
+                new() { ExecutionTerminated = new P.ExecutionTerminatedEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.EventRaised =>
+                new() { EventRaised = new P.EventRaisedEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.TaskScheduled =>
+                new() { TaskScheduled = new P.TaskScheduledEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.TaskCompleted =>
+                new() { TaskCompleted = new P.TaskCompletedEvent { Result = payload } },
+            P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated =>
+                new()
+                {
+                    SubOrchestrationInstanceCreated =
+                        new P.SubOrchestrationInstanceCreatedEvent { Input = payload },
+                },
+            P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted =>
+                new()
+                {
+                    SubOrchestrationInstanceCompleted =
+                        new P.SubOrchestrationInstanceCompletedEvent { Result = payload },
+                },
+            P.HistoryEvent.EventTypeOneofCase.EventSent =>
+                new() { EventSent = new P.EventSentEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.GenericEvent =>
+                new() { GenericEvent = new P.GenericEvent { Data = payload } },
+            P.HistoryEvent.EventTypeOneofCase.ContinueAsNew =>
+                new() { ContinueAsNew = new P.ContinueAsNewEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended =>
+                new() { ExecutionSuspended = new P.ExecutionSuspendedEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.ExecutionResumed =>
+                new() { ExecutionResumed = new P.ExecutionResumedEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.ExecutionRewound =>
+                new() { ExecutionRewound = new P.ExecutionRewoundEvent { Reason = payload } },
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled =>
+                new() { EntityOperationSignaled = new P.EntityOperationSignaledEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled =>
+                new() { EntityOperationCalled = new P.EntityOperationCalledEvent { Input = payload } },
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted =>
+                new() { EntityOperationCompleted = new P.EntityOperationCompletedEvent { Output = payload } },
+            P.HistoryEvent.EventTypeOneofCase.HistoryState =>
+                new()
+                {
+                    HistoryState = new P.HistoryStateEvent
+                    {
+                        OrchestrationState = new P.OrchestrationState
+                        {
+                            Input = payload,
+                            Output = payload,
+                            CustomStatus = payload,
+                        },
+                    },
+                },
+            _ => throw new ArgumentOutOfRangeException(nameof(eventType), eventType, null),
+        };
+    }
+
+    static IReadOnlyList<string> GetHistoryEventPayloads(P.HistoryEvent historyEvent)
+    {
+        return historyEvent.EventTypeCase switch
+        {
+            P.HistoryEvent.EventTypeOneofCase.ExecutionStarted => [historyEvent.ExecutionStarted.Input],
+            P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted => [historyEvent.ExecutionCompleted.Result],
+            P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated => [historyEvent.ExecutionTerminated.Input],
+            P.HistoryEvent.EventTypeOneofCase.EventRaised => [historyEvent.EventRaised.Input],
+            P.HistoryEvent.EventTypeOneofCase.TaskScheduled => [historyEvent.TaskScheduled.Input],
+            P.HistoryEvent.EventTypeOneofCase.TaskCompleted => [historyEvent.TaskCompleted.Result],
+            P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated =>
+                [historyEvent.SubOrchestrationInstanceCreated.Input],
+            P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted =>
+                [historyEvent.SubOrchestrationInstanceCompleted.Result],
+            P.HistoryEvent.EventTypeOneofCase.EventSent => [historyEvent.EventSent.Input],
+            P.HistoryEvent.EventTypeOneofCase.GenericEvent => [historyEvent.GenericEvent.Data],
+            P.HistoryEvent.EventTypeOneofCase.ContinueAsNew => [historyEvent.ContinueAsNew.Input],
+            P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended => [historyEvent.ExecutionSuspended.Input],
+            P.HistoryEvent.EventTypeOneofCase.ExecutionResumed => [historyEvent.ExecutionResumed.Input],
+            P.HistoryEvent.EventTypeOneofCase.ExecutionRewound => [historyEvent.ExecutionRewound.Reason],
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled =>
+                [historyEvent.EntityOperationSignaled.Input],
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled =>
+                [historyEvent.EntityOperationCalled.Input],
+            P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted =>
+                [historyEvent.EntityOperationCompleted.Output],
+            P.HistoryEvent.EventTypeOneofCase.HistoryState =>
+                [
+                    historyEvent.HistoryState.OrchestrationState.Input,
+                    historyEvent.HistoryState.OrchestrationState.Output,
+                    historyEvent.HistoryState.OrchestrationState.CustomStatus,
+                ],
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(historyEvent),
+                historyEvent.EventTypeCase,
+                null),
+        };
     }
 
     static LargePayloadStorageOptions CreateOptions() => new() { ThresholdBytes = 1 };

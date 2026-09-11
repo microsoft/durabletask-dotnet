@@ -48,6 +48,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             case P.ResumeRequest r:
                 r.Reason = await this.MaybeExternalizeAsync(r.Reason, cancellation);
                 break;
+            case P.RewindInstanceRequest r:
+                r.Reason = await this.MaybeExternalizeAsync(r.Reason, cancellation);
+                break;
             case P.SignalEntityRequest r:
                 r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
                 break;
@@ -432,9 +435,89 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     }
                 }
             }
+
+            if (a.RewindOrchestration is { } rewind)
+            {
+                foreach (P.HistoryEvent historyEvent in rewind.NewHistory)
+                {
+                    operations.Add(() => this.ExternalizeHistoryEventAsync(historyEvent, cancellation));
+                }
+            }
         }
 
         await RunWithBoundedConcurrencyAsync(operations, cancellation);
+    }
+
+    async Task ExternalizeHistoryEventAsync(
+        P.HistoryEvent historyEvent,
+        CancellationToken cancellation)
+    {
+        // Keep these fields aligned with ResolveEventPayloadsAsync
+        switch (historyEvent.EventTypeCase)
+        {
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted when historyEvent.ExecutionStarted is { } es:
+                es.Input = await this.MaybeExternalizeAsync(es.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted when historyEvent.ExecutionCompleted is { } ec:
+                ec.Result = await this.MaybeExternalizeAsync(ec.Result, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated when historyEvent.ExecutionTerminated is { } et:
+                et.Input = await this.MaybeExternalizeAsync(et.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EventRaised when historyEvent.EventRaised is { } er:
+                er.Input = await this.MaybeExternalizeAsync(er.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.TaskScheduled when historyEvent.TaskScheduled is { } ts:
+                ts.Input = await this.MaybeExternalizeAsync(ts.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.TaskCompleted when historyEvent.TaskCompleted is { } tc:
+                tc.Result = await this.MaybeExternalizeAsync(tc.Result, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated
+                when historyEvent.SubOrchestrationInstanceCreated is { } soc:
+                soc.Input = await this.MaybeExternalizeAsync(soc.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted
+                when historyEvent.SubOrchestrationInstanceCompleted is { } sox:
+                sox.Result = await this.MaybeExternalizeAsync(sox.Result, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EventSent when historyEvent.EventSent is { } esent:
+                esent.Input = await this.MaybeExternalizeAsync(esent.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.GenericEvent when historyEvent.GenericEvent is { } ge:
+                ge.Data = await this.MaybeExternalizeAsync(ge.Data, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew when historyEvent.ContinueAsNew is { } can:
+                can.Input = await this.MaybeExternalizeAsync(can.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended when historyEvent.ExecutionSuspended is { } esus:
+                esus.Input = await this.MaybeExternalizeAsync(esus.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed when historyEvent.ExecutionResumed is { } eres:
+                eres.Input = await this.MaybeExternalizeAsync(eres.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionRewound when historyEvent.ExecutionRewound is { } erew:
+                erew.Reason = await this.MaybeExternalizeAsync(erew.Reason, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled
+                when historyEvent.EntityOperationSignaled is { } eos:
+                eos.Input = await this.MaybeExternalizeAsync(eos.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled
+                when historyEvent.EntityOperationCalled is { } eoc:
+                eoc.Input = await this.MaybeExternalizeAsync(eoc.Input, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted
+                when historyEvent.EntityOperationCompleted is { } ecomp:
+                ecomp.Output = await this.MaybeExternalizeAsync(ecomp.Output, cancellation);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.HistoryState
+                when historyEvent.HistoryState?.OrchestrationState is { } state:
+                state.Input = await this.MaybeExternalizeAsync(state.Input, cancellation);
+                state.Output = await this.MaybeExternalizeAsync(state.Output, cancellation);
+                state.CustomStatus = await this.MaybeExternalizeAsync(state.CustomStatus, cancellation);
+                break;
+        }
     }
 
     async Task ExternalizeEntityBatchResultAsync(P.EntityBatchResult r, CancellationToken cancellation)
@@ -554,6 +637,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 this.RequiresResolution(e.ExecutionSuspended?.Input),
             P.HistoryEvent.EventTypeOneofCase.ExecutionResumed =>
                 this.RequiresResolution(e.ExecutionResumed?.Input),
+            P.HistoryEvent.EventTypeOneofCase.ExecutionRewound =>
+                this.RequiresResolution(e.ExecutionRewound?.Reason),
             P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled =>
                 this.RequiresResolution(e.EntityOperationSignaled?.Input),
             P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled =>
@@ -661,6 +746,13 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 if (e.ExecutionResumed is { } eres)
                 {
                     eres.Input = await this.MaybeResolveAsync(eres.Input, cancellation);
+                }
+
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionRewound:
+                if (e.ExecutionRewound is { } erew)
+                {
+                    erew.Reason = await this.MaybeResolveAsync(erew.Reason, cancellation);
                 }
 
                 break;

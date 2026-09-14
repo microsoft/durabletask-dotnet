@@ -42,8 +42,8 @@ static class RewindOrchestrationHandler
         P.HistoryEvent? executionStartedEvent = allEvents.FirstOrDefault(
             e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted);
 
-        ActivityContext orchestrationParentContext = default;
-        bool hasOrchestrationParentContext = false;
+        ActivityContext childTraceContextSource = orchestrationActivity?.Context ?? default;
+        bool hasChildTraceContextSource = orchestrationActivity is not null;
 
         HashSet<int> failedTaskIds = [];
         foreach (P.HistoryEvent historyEvent in allEvents)
@@ -92,10 +92,13 @@ static class RewindOrchestrationHandler
                     eventCopy.ExecutionStarted.ParentTraceContext = rewindEvent.ParentTraceContext.Clone();
                 }
 
-                hasOrchestrationParentContext = ActivityContext.TryParse(
-                    eventCopy.ExecutionStarted.ParentTraceContext?.TraceParent,
-                    eventCopy.ExecutionStarted.ParentTraceContext?.TraceState,
-                    out orchestrationParentContext);
+                if (!hasChildTraceContextSource)
+                {
+                    hasChildTraceContextSource = ActivityContext.TryParse(
+                        eventCopy.ExecutionStarted.ParentTraceContext?.TraceParent,
+                        eventCopy.ExecutionStarted.ParentTraceContext?.TraceState,
+                        out childTraceContextSource);
+                }
 
                 rewindAction.NewHistory.Add(eventCopy);
                 continue;
@@ -103,15 +106,13 @@ static class RewindOrchestrationHandler
 
             if (historyEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated
                 && failedTaskIds.Contains(historyEvent.EventId)
-                && hasOrchestrationParentContext)
+                && hasChildTraceContextSource)
             {
-                // We set a new client span ID here so that the execution of the rewound suborchestration is not tied to the
-                // old parent.
                 ActivityContext newParentTraceContext = new(
-                    orchestrationParentContext.TraceId,
+                    childTraceContextSource.TraceId,
                     ActivitySpanId.CreateRandom(),
-                    orchestrationParentContext.TraceFlags,
-                    orchestrationParentContext.TraceState);
+                    childTraceContextSource.TraceFlags,
+                    childTraceContextSource.TraceState);
 
                 P.HistoryEvent eventCopy = historyEvent.Clone();
                 eventCopy.SubOrchestrationInstanceCreated.ParentTraceContext =

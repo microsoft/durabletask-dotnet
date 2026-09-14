@@ -229,6 +229,79 @@ public class RewindOrchestrationHandlerTests
     }
 
     [Fact]
+    public void CreateResponse_ReplacesFailedSubOrchestrationTraceContext_UsesCurrentActivity()
+    {
+        // Arrange
+        const string TraceId = "11111111111111111111111111111111";
+        const string StoredParentSpanId = "2222222222222222";
+        const string StoredTraceState = "stored=value";
+        const string ActivityTraceState = "activity=value";
+        const string OldChildSpanId = "3333333333333333";
+
+        P.HistoryEvent failedChildCreated = new()
+        {
+            EventId = 4,
+            SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+            {
+                InstanceId = "failed-child",
+                ParentTraceContext = CreateTraceContext(TraceId, OldChildSpanId),
+            },
+        };
+        P.HistoryEvent[] pastEvents =
+        [
+            CreateExecutionStarted(
+                "old-execution",
+                parentTraceContext: CreateTraceContext(TraceId, StoredParentSpanId, StoredTraceState)),
+            failedChildCreated,
+            new()
+            {
+                EventId = 5,
+                SubOrchestrationInstanceFailed =
+                    new P.SubOrchestrationInstanceFailedEvent { TaskScheduledId = 4 },
+            },
+        ];
+
+        using Activity orchestrationActivity = new("rewind");
+        orchestrationActivity.SetIdFormat(ActivityIdFormat.W3C);
+        orchestrationActivity.SetParentId(
+            ActivityTraceId.CreateFromString(TraceId.AsSpan()),
+            ActivitySpanId.CreateFromString(StoredParentSpanId.AsSpan()),
+            ActivityTraceFlags.Recorded);
+        orchestrationActivity.TraceStateString = StoredTraceState;
+        orchestrationActivity.Start();
+        orchestrationActivity.ActivityTraceFlags = ActivityTraceFlags.None;
+        orchestrationActivity.TraceStateString = ActivityTraceState;
+
+        // Act
+        P.OrchestratorResponse response = RewindOrchestrationHandler.CreateResponse(
+            CreateRewindRequest(),
+            pastEvents,
+            "completion-token",
+            orchestrationActivity);
+
+        // Assert
+        P.SubOrchestrationInstanceCreatedEvent rewrittenChild = response
+            .Actions[0]
+            .RewindOrchestration
+            .NewHistory
+            .Single(e => e.EventId == 4)
+            .SubOrchestrationInstanceCreated;
+        ActivityContext.TryParse(
+            rewrittenChild.ParentTraceContext.TraceParent,
+            rewrittenChild.ParentTraceContext.TraceState,
+            out ActivityContext childTraceContext).Should().BeTrue();
+
+        childTraceContext.TraceId.Should().Be(orchestrationActivity.TraceId);
+        childTraceContext.SpanId.Should().NotBe(orchestrationActivity.SpanId);
+        childTraceContext.SpanId.ToString().Should().NotBe(OldChildSpanId);
+        childTraceContext.TraceFlags.Should().Be(ActivityTraceFlags.None);
+        childTraceContext.TraceState.Should().Be(ActivityTraceState);
+
+        // The stored parent context should remain unchanged.
+        pastEvents[0].ExecutionStarted.ParentTraceContext.TraceState.Should().Be(StoredTraceState);
+    }
+
+    [Fact]
     public void CreateResponse_RejectsUnexpectedNewEvents()
     {
         // Arrange

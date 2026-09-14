@@ -42,8 +42,6 @@ static class RewindOrchestrationHandler
         P.HistoryEvent? executionStartedEvent = allEvents.FirstOrDefault(
             e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted);
 
-        P.TraceContext? orchestrationParentTraceContext = rewindEvent.ParentTraceContext
-            ?? executionStartedEvent?.ExecutionStarted.ParentTraceContext;
         ActivityContext orchestrationParentContext = default;
         bool hasOrchestrationParentContext = false;
 

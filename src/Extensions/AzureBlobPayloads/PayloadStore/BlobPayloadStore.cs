@@ -8,6 +8,7 @@ using Azure;
 using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
 
 namespace Microsoft.DurableTask;
 
@@ -194,79 +195,14 @@ public sealed class BlobPayloadStore : PayloadStore
     /// <inheritdoc/>
     public override async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
     {
-        DecodeTokenResult decoded = DecodeToken(token);
-
-        if (!decoded.IsV2)
-        {
-            // v1 tokens do not carry the account, so the payload is assumed to live in the configured container.
-            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
-            {
-                throw new ArgumentException("Token container does not match configured container.", nameof(token));
-            }
-
-            return await DownloadFromBlobAsync(this.containerClient.GetBlobClient(decoded.Name), cancellationToken);
-        }
-
-        // v2 tokens are self-describing: honor the account and container encoded in the token.
-        BlobClient blob;
-        if (this.IsConfiguredContainer(decoded.ContainerUri!))
-        {
-            // Same account and container as the configured store: reuse it (works with any auth mode).
-            blob = this.containerClient.GetBlobClient(decoded.Name);
-        }
-        else if (this.options.Credential != null)
-        {
-            // The payload lives in a different account (e.g. the store was repointed). Identity auth can still
-            // read it as long as the credential has RBAC access to that account.
-            blob = new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
-        }
-        else
-        {
-            throw new PayloadStorageException(
-                $"The externalized payload lives in a different storage account ('{decoded.ContainerUri}') than the " +
-                $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload reads " +
-                "require identity (AAD) authentication with access to both accounts; connection-string / " +
-                "account-key credentials are account-specific and cannot read another account.");
-        }
-
+        BlobClient blob = this.GetBlobClient(token);
         return await DownloadFromBlobAsync(blob, cancellationToken);
     }
 
     /// <inheritdoc/>
     public override async Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken)
     {
-        DecodeTokenResult decoded = DecodeToken(token);
-
-        BlobClient blob;
-        if (!decoded.IsV2)
-        {
-            // v1 tokens do not carry the account, so the payload is assumed to live in the configured container.
-            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
-            {
-                throw new ArgumentException("Token container does not match configured container.", nameof(token));
-            }
-
-            blob = this.containerClient.GetBlobClient(decoded.Name);
-        }
-        else if (this.IsConfiguredContainer(decoded.ContainerUri!))
-        {
-            // Same account and container as the configured store: reuse it (works with any auth mode).
-            blob = this.containerClient.GetBlobClient(decoded.Name);
-        }
-        else if (this.options.Credential != null)
-        {
-            // The payload lives in a different account (e.g. the store was repointed). Identity auth can still
-            // delete it as long as the credential has RBAC access to that account.
-            blob = new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
-        }
-        else
-        {
-            throw new PayloadStorageException(
-                $"The externalized payload lives in a different storage account ('{decoded.ContainerUri}') than the " +
-                $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload deletes " +
-                "require identity (AAD) authentication with access to both accounts; connection-string / " +
-                "account-key credentials are account-specific and cannot delete in another account.");
-        }
+        BlobClient blob = this.GetBlobClient(token);
 
         // Recognizing the token proves only that its text matches this store's grammar - not that this store
         // wrote the blob. A customer may keep an expensive dataset in Blob Storage and have orchestrations
@@ -460,16 +396,60 @@ public sealed class BlobPayloadStore : PayloadStore
         }
     }
 
-    bool IsConfiguredContainer(Uri tokenContainerUri)
+    static Uri GetServiceUri(Uri containerUri)
     {
-        Uri configured = this.containerClient.Uri;
-        return string.Equals(tokenContainerUri.Scheme, configured.Scheme, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(tokenContainerUri.Host, configured.Host, StringComparison.OrdinalIgnoreCase)
-            && tokenContainerUri.Port == configured.Port
+        // The SDK preserves the account path for path-style endpoints such as Azurite.
+        BlobUriBuilder builder = new(containerUri) { BlobContainerName = string.Empty, BlobName = string.Empty };
+        return builder.ToUri();
+    }
+
+    static bool IsSameEndpoint(Uri left, Uri right) =>
+        string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase)
+            && left.Port == right.Port
             && string.Equals(
-                tokenContainerUri.AbsolutePath.TrimEnd('/'),
-                configured.AbsolutePath.TrimEnd('/'),
+                left.AbsolutePath.TrimEnd('/'),
+                right.AbsolutePath.TrimEnd('/'),
                 StringComparison.Ordinal);
+
+    BlobClient GetBlobClient(string token)
+    {
+        DecodeTokenResult decoded = DecodeToken(token);
+        if (!decoded.IsV2)
+        {
+            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Token container does not match configured container.", nameof(token));
+            }
+
+            return this.containerClient.GetBlobClient(decoded.Name);
+        }
+
+        Uri configured = this.containerClient.Uri;
+        if (IsSameEndpoint(decoded.ContainerUri!, configured))
+        {
+            return this.containerClient.GetBlobClient(decoded.Name);
+        }
+
+        if (IsSameEndpoint(GetServiceUri(decoded.ContainerUri!), GetServiceUri(configured)))
+        {
+            // Preserve the configured credential and pipeline without forwarding an account key to another
+            // endpoint. A SAS retains its original permissions; storage may still reject this container.
+            return this.containerClient.GetParentBlobServiceClient()
+                .GetBlobContainerClient(decoded.Container).GetBlobClient(decoded.Name);
+        }
+
+        if (this.options.Credential != null)
+        {
+            return new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
+        }
+
+        throw new PayloadStorageException(
+            $"The externalized payload lives in a different storage account or service endpoint " +
+            $"('{decoded.ContainerUri!.GetLeftPart(UriPartial.Path)}') than the currently-configured payload store " +
+            $"('{configured.GetLeftPart(UriPartial.Path)}'). Cross-account payload access requires identity (AAD) " +
+            "authentication with access to both accounts; configured connection-string credentials cannot be " +
+            "reused for another account or endpoint.");
     }
 
     /// <summary>

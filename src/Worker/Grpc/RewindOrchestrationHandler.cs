@@ -61,8 +61,6 @@ static class RewindOrchestrationHandler
         string newExecutionId = Guid.NewGuid().ToString("N");
         P.RewindOrchestrationAction rewindAction = new();
 
-        // Retry timers are retained to match the existing rewind protocol. Rewinding failed activities
-        // that were scheduled with retry policies is not currently supported.
         foreach (P.HistoryEvent historyEvent in allEvents)
         {
             // Do not add any failed tasks or the failed execution completed event to the new history

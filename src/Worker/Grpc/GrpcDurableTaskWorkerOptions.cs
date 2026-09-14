@@ -126,12 +126,11 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public bool InsertEntityUnlocksOnCompletion { get; set; }
 
         /// <summary>
-        /// Gets or sets the maximum amount of time to wait for a single connection-setup RPC against the
-        /// backend before treating the connect attempt as failed and retrying. Each pre-stream RPC - the
-        /// Hello handshake, and the large-payload auto-purge announcement when the worker has one to make -
-        /// gets this much time on its own rather than sharing one budget. A non-positive value disables the
-        /// deadline. Defaults to 30 seconds. This guards against half-open HTTP/2 connections that can
-        /// otherwise cause reconnect to hang indefinitely.
+        /// Gets or sets the maximum amount of time to wait for the Hello handshake with the backend before
+        /// treating the connect attempt as failed and retrying. A non-positive value disables the deadline.
+        /// Defaults to 30 seconds. The absolute deadline is clamped to UTC <see cref="DateTime.MaxValue"/>
+        /// if the interval would exceed it. This guards against half-open HTTP/2 connections that can
+        /// otherwise cause reconnect to hang indefinitely; it does not apply to the work-item stream.
         /// </summary>
         public TimeSpan HelloDeadline { get; set; } = TimeSpan.FromSeconds(30);
 

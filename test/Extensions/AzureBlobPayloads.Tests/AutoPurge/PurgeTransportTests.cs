@@ -203,7 +203,7 @@ public class PurgeTransportTests
     }
 
     [Fact]
-    public void RebindableCallInvoker_BeforeAnythingIsPublished_Throws()
+    public async Task RebindableCallInvoker_BeforeAnythingIsPublished_ThrowsAsync()
     {
         // Arrange - reaching a purge call with no worker transport is a wiring defect. Surfacing it beats
         // inventing a connection or returning a null the caller would dereference somewhere less obvious.
@@ -215,7 +215,7 @@ public class PurgeTransportTests
             client.GetLargePayloadTombstonesAsync(new LP.GetLargePayloadTombstonesRequest { Limit = 1 }).ResponseAsync;
 
         // Assert
-        call.Should().ThrowAsync<InvalidOperationException>();
+        await call.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
@@ -452,7 +452,7 @@ public class PurgeTransportTests
 
             // Returning a real gRPC status rather than throwing keeps the classification out of the transport
             // library's exception-mapping rules: the worker must see Unavailable for the connect loop to count
-            // the failure toward a channel recreate.
+            // the failure toward a channel recreate. The caller owns and disposes the returned response.
             HttpResponseMessage response = new(HttpStatusCode.OK)
             {
                 Version = new Version(2, 0),

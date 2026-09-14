@@ -19,6 +19,33 @@ public class DeleteExternalBlobActivityTests
 {
     const string V2Token = "blob:v2:https://acct.blob.core.windows.net/payloads/abc123";
 
+    /// <summary>
+    /// An unconfirmed store outcome must preserve the tombstone for retry rather than resolve it.
+    /// </summary>
+    [Theory]
+    [InlineData(default(PayloadDeleteOutcome))]
+    [InlineData((PayloadDeleteOutcome)999)]
+    [InlineData((PayloadDeleteOutcome)(-1))]
+    public async Task RunAsync_WhenDeleteOutcomeIsUnspecifiedOrUnknown_RetriesAsync(PayloadDeleteOutcome deleteOutcome)
+    {
+        // Arrange
+        Mock<PayloadStore> store = new(MockBehavior.Strict);
+        store.Setup(s => s.DeleteAsync(V2Token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(deleteOutcome);
+        TestLogger<DeleteExternalBlobActivity> logger = new();
+        DeleteExternalBlobActivity activity = new(store.Object, logger);
+
+        // Act
+        BlobPurgeOutcome outcome = (await activity.RunAsync(null!, [V2Token])).Should().ContainSingle().Subject;
+
+        // Assert
+        outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
+        logger.Logs.Should().ContainSingle(l => l.Message.Contains("UnexpectedDeleteOutcome"));
+        logger.Logs.Should().NotContain(l => l.Message.Contains(V2Token));
+        store.Verify(s => s.DeleteAsync(V2Token, It.IsAny<CancellationToken>()), Times.Once);
+        store.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task RunAsync_WhenDeleteThrowsRequestFailed400_Quarantines()
     {

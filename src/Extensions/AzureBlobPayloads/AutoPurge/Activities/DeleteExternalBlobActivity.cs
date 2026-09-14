@@ -167,18 +167,23 @@ public class DeleteExternalBlobActivity(
             using CancellationTokenSource timeout = new(this.SingleDeleteTimeout);
             PayloadDeleteOutcome outcome = await this.store.DeleteAsync(token, timeout.Token);
 
-            // The blob exists but this store never wrote it, so it was left untouched. That is an expected
-            // outcome, not a defect - the token text merely matched the v2 grammar - and quarantining it would
-            // fill the quarantine set with non-defects. The tombstone is still resolved, because a blob the
-            // store does not own is not the store's to delete.
-            if (outcome == PayloadDeleteOutcome.NotStoreOwned)
+            switch (outcome)
             {
-                this.logger.BlobPurgeBlobNotStoreOwned();
-            }
+                case PayloadDeleteOutcome.Deleted:
+                case PayloadDeleteOutcome.AlreadyAbsent:
+                    return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted);
 
-            // Deleted, AlreadyAbsent, and NotStoreOwned are all terminal successes: none can be improved by
-            // trying again.
-            return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted);
+                case PayloadDeleteOutcome.NotStoreOwned:
+                    // The store left this blob untouched because it never wrote it. Resolving its tombstone is
+                    // terminal: retrying cannot make a blob the store does not own eligible for deletion.
+                    this.logger.BlobPurgeBlobNotStoreOwned();
+                    return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted);
+
+                default:
+                    // Unspecified or unknown values do not confirm success. Preserve the tombstone for retry.
+                    this.logger.BlobPurgeDeleteRetryable("UnexpectedDeleteOutcome", null);
+                    return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
+            }
         }
         catch (ArgumentException)
         {

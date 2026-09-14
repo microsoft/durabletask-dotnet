@@ -31,7 +31,9 @@ public abstract class PayloadStore
     /// <remarks>
     /// The default implementation throws <see cref="NotSupportedException"/>. Stores that externalize
     /// payloads to deletable storage (for example Azure Blob Storage) should override it. It is declared
-    /// virtual rather than abstract so that adding it does not break existing external subclasses.
+    /// virtual rather than abstract so existing upload/download implementations are not required to add an
+    /// override. A preexisting same-named method does not automatically override this member; subclasses that
+    /// support deletion must explicitly override it.
     /// Implementations must delete only objects they created; an object that carries no proof of the
     /// store's ownership must be left untouched and reported as
     /// <see cref="PayloadDeleteOutcome.NotStoreOwned"/>.
@@ -44,7 +46,8 @@ public abstract class PayloadStore
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// The outcome of the deletion: whether the object was deleted, was already absent, or was left in
-    /// place because the store does not own it.
+    /// place because the store does not own it. <see cref="PayloadDeleteOutcome.Unspecified"/> does not
+    /// confirm any of these terminal outcomes and must not be treated as success.
     /// </returns>
     public virtual Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken) =>
         throw new NotSupportedException(

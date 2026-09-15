@@ -8,6 +8,7 @@ using Azure;
 using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
 
 namespace Microsoft.DurableTask;
 
@@ -23,8 +24,33 @@ namespace Microsoft.DurableTask;
     Justification = "SemaphoreSlim does not allocate a disposable resource unless AvailableWaitHandle is accessed.")]
 public sealed class BlobPayloadStore : PayloadStore
 {
-    const string TokenPrefixV1 = "blob:v1:";
-    const string TokenPrefixV2 = "blob:v2:";
+    /// <summary>
+    /// The prefix of legacy v1 payload tokens, which identify the container by name only and not the storage
+    /// account. Auto-purge uses this to detect and skip v1 tokens.
+    /// </summary>
+    internal const string TokenPrefixV1 = "blob:v1:";
+
+    /// <summary>
+    /// The prefix of self-describing v2 payload tokens, which carry the blob's absolute URI including the
+    /// storage account. Auto-purge uses this to tell a malformed v2 token (a protocol defect) apart from an
+    /// unrecognized version prefix (a token written by a newer SDK).
+    /// </summary>
+    internal const string TokenPrefixV2 = "blob:v2:";
+
+    /// <summary>
+    /// The metadata name of the ownership marker written on every blob this store creates. Recognizing a
+    /// token proves only that its text matches the store's grammar; the marker is what proves the store
+    /// actually wrote the blob, so a customer's own blob is never deleted just because an orchestration
+    /// referenced it. Azure requires metadata names to follow the naming rules for C# identifiers, so the
+    /// marker is spelled with an underscore rather than a hyphen.
+    /// </summary>
+    internal const string OwnershipMarkerName = "managed_by";
+
+    /// <summary>
+    /// The fixed value of the ownership marker written on every blob this store creates.
+    /// </summary>
+    internal const string OwnershipMarkerValue = "dts";
+
     const string ContentEncodingGzip = "gzip";
     const int MaxRetryAttempts = 8;
     const int BaseDelayMs = 250;
@@ -120,6 +146,7 @@ public sealed class BlobPayloadStore : PayloadStore
                     BlobOpenWriteOptions writeOptions = new()
                     {
                         HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
+                        Metadata = CreateOwnershipMetadata(),
                     };
                     using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
                     using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
@@ -133,7 +160,15 @@ public sealed class BlobPayloadStore : PayloadStore
                 }
                 else
                 {
-                    using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+                    // The uncompressed path still needs write options purely to carry the ownership marker:
+                    // the marker must be written by every path that creates a blob, or auto-purge would later
+                    // decline to delete the store's own uncompressed payloads. It rides along in the PUT the
+                    // upload already issues, so it costs no extra request.
+                    BlobOpenWriteOptions writeOptions = new()
+                    {
+                        Metadata = CreateOwnershipMetadata(),
+                    };
+                    using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
 
                     // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
                     // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
@@ -160,42 +195,61 @@ public sealed class BlobPayloadStore : PayloadStore
     /// <inheritdoc/>
     public override async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
     {
-        DecodeTokenResult decoded = DecodeToken(token);
-
-        if (!decoded.IsV2)
-        {
-            // v1 tokens do not carry the account, so the payload is assumed to live in the configured container.
-            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
-            {
-                throw new ArgumentException("Token container does not match configured container.", nameof(token));
-            }
-
-            return await DownloadFromBlobAsync(this.containerClient.GetBlobClient(decoded.Name), cancellationToken);
-        }
-
-        // v2 tokens are self-describing: honor the account and container encoded in the token.
-        BlobClient blob;
-        if (this.IsConfiguredContainer(decoded.ContainerUri!))
-        {
-            // Same account and container as the configured store: reuse it (works with any auth mode).
-            blob = this.containerClient.GetBlobClient(decoded.Name);
-        }
-        else if (this.options.Credential != null)
-        {
-            // The payload lives in a different account (e.g. the store was repointed). Identity auth can still
-            // read it as long as the credential has RBAC access to that account.
-            blob = new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
-        }
-        else
-        {
-            throw new PayloadStorageException(
-                $"The externalized payload lives in a different storage account ('{decoded.ContainerUri}') than the " +
-                $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload reads " +
-                "require identity (AAD) authentication with access to both accounts; connection-string / " +
-                "account-key credentials are account-specific and cannot read another account.");
-        }
-
+        BlobClient blob = this.GetBlobClient(token);
         return await DownloadFromBlobAsync(blob, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public override async Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken)
+    {
+        BlobClient blob = this.GetBlobClient(token);
+
+        // Recognizing the token proves only that its text matches this store's grammar - not that this store
+        // wrote the blob. A customer may keep an expensive dataset in Blob Storage and have orchestrations
+        // reference it by URL; deleting that would destroy data the store never created. So ownership is read
+        // from the object itself before anything is deleted.
+        BlobProperties properties;
+        try
+        {
+            Response<BlobProperties> response = await blob.GetPropertiesAsync(
+                conditions: null, cancellationToken: cancellationToken);
+            properties = response.Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
+        {
+            // Already gone. Deletion is idempotent, so a re-delivered tombstone or a concurrent worker
+            // replica that won the race is a success, not an error.
+            return PayloadDeleteOutcome.AlreadyAbsent;
+        }
+
+        if (!HasOwnershipMarker(properties.Metadata))
+        {
+            // Positive evidence that the blob is customer-owned: leave it untouched. The caller still resolves
+            // the payload reference, because a blob this store never wrote is not this store's to delete.
+            return PayloadDeleteOutcome.NotStoreOwned;
+        }
+
+        // Pair the ownership read with the delete using the ETag from that same read. If anything rewrites the
+        // blob in between - including a customer overwriting it with content that no longer carries the marker
+        // - the If-Match condition fails the delete instead of removing the newer content, so the read-then-
+        // delete behaves as a single check-and-delete without taking a lease.
+        // Idempotent by design: DeleteIfExistsAsync returns false (rather than throwing) when the blob is
+        // already gone, so re-delivered tombstones and concurrent purges from multiple worker replicas are safe.
+        // IncludeSnapshots removes the blob's snapshots along with the base blob, but it does NOT delete blob
+        // *versions*: with versioning enabled, deleting the base blob turns the current version into a retained
+        // previous version. Versions are deliberately not enumerated and deleted here - doing so still would not
+        // guarantee the bytes are reclaimed, because blob soft delete is a storage-account-level policy that
+        // retains deleted content for its retention period regardless of how the delete was issued and regardless
+        // of which container the blob lives in. Immediate reclamation is therefore unobtainable client-side and
+        // belongs to an account lifecycle-management policy (whose rule can be scoped to the payload container's
+        // blob prefix) or the retention expiry, so Deleted means "accepted by storage", not "bytes reclaimed"
+        // (see PayloadDeleteOutcome.Deleted).
+        Response<bool> deleted = await blob.DeleteIfExistsAsync(
+            DeleteSnapshotsOption.IncludeSnapshots,
+            conditions: new BlobRequestConditions { IfMatch = properties.ETag },
+            cancellationToken: cancellationToken);
+
+        return deleted.Value ? PayloadDeleteOutcome.Deleted : PayloadDeleteOutcome.AlreadyAbsent;
     }
 
     /// <inheritdoc/>
@@ -261,6 +315,38 @@ public sealed class BlobPayloadStore : PayloadStore
         throw new ArgumentException("Invalid external payload token.", nameof(token));
     }
 
+    /// <summary>
+    /// Creates the ownership metadata stamped on every blob this store writes, so a later purge can prove the
+    /// store created the blob before deleting it.
+    /// </summary>
+    static Dictionary<string, string> CreateOwnershipMetadata() =>
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [OwnershipMarkerName] = OwnershipMarkerValue,
+        };
+
+    /// <summary>
+    /// Returns whether the supplied blob metadata carries this store's ownership marker. Azure treats metadata
+    /// names as case-insensitive, so the lookup is too.
+    /// </summary>
+    static bool HasOwnershipMarker(IDictionary<string, string>? metadata)
+    {
+        if (metadata is null)
+        {
+            return false;
+        }
+
+        foreach (KeyValuePair<string, string> entry in metadata)
+        {
+            if (string.Equals(entry.Key, OwnershipMarkerName, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(entry.Value, OwnershipMarkerValue, StringComparison.Ordinal);
+            }
+        }
+
+        return false;
+    }
+
     static async Task WritePayloadAsync(byte[] payloadBuffer, Stream target, CancellationToken cancellationToken)
     {
 #if NETSTANDARD2_0
@@ -310,16 +396,60 @@ public sealed class BlobPayloadStore : PayloadStore
         }
     }
 
-    bool IsConfiguredContainer(Uri tokenContainerUri)
+    static Uri GetServiceUri(Uri containerUri)
     {
-        Uri configured = this.containerClient.Uri;
-        return string.Equals(tokenContainerUri.Scheme, configured.Scheme, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(tokenContainerUri.Host, configured.Host, StringComparison.OrdinalIgnoreCase)
-            && tokenContainerUri.Port == configured.Port
+        // The SDK preserves the account path for path-style endpoints such as Azurite.
+        BlobUriBuilder builder = new(containerUri) { BlobContainerName = string.Empty, BlobName = string.Empty };
+        return builder.ToUri();
+    }
+
+    static bool IsSameEndpoint(Uri left, Uri right) =>
+        string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase)
+            && left.Port == right.Port
             && string.Equals(
-                tokenContainerUri.AbsolutePath.TrimEnd('/'),
-                configured.AbsolutePath.TrimEnd('/'),
+                left.AbsolutePath.TrimEnd('/'),
+                right.AbsolutePath.TrimEnd('/'),
                 StringComparison.Ordinal);
+
+    BlobClient GetBlobClient(string token)
+    {
+        DecodeTokenResult decoded = DecodeToken(token);
+        if (!decoded.IsV2)
+        {
+            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Token container does not match configured container.", nameof(token));
+            }
+
+            return this.containerClient.GetBlobClient(decoded.Name);
+        }
+
+        Uri configured = this.containerClient.Uri;
+        if (IsSameEndpoint(decoded.ContainerUri!, configured))
+        {
+            return this.containerClient.GetBlobClient(decoded.Name);
+        }
+
+        if (IsSameEndpoint(GetServiceUri(decoded.ContainerUri!), GetServiceUri(configured)))
+        {
+            // Preserve the configured credential and pipeline without forwarding an account key to another
+            // endpoint. A SAS retains its original permissions; storage may still reject this container.
+            return this.containerClient.GetParentBlobServiceClient()
+                .GetBlobContainerClient(decoded.Container).GetBlobClient(decoded.Name);
+        }
+
+        if (this.options.Credential != null)
+        {
+            return new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
+        }
+
+        throw new PayloadStorageException(
+            $"The externalized payload lives in a different storage account or service endpoint " +
+            $"('{decoded.ContainerUri!.GetLeftPart(UriPartial.Path)}') than the currently-configured payload store " +
+            $"('{configured.GetLeftPart(UriPartial.Path)}'). Cross-account payload access requires identity (AAD) " +
+            "authentication with access to both accounts; configured connection-string credentials cannot be " +
+            "reused for another account or endpoint.");
     }
 
     /// <summary>

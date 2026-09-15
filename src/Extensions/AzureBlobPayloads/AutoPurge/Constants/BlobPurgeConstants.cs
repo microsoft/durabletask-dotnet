@@ -34,7 +34,7 @@ static class BlobPurgeConstants
     public const int RpcTimeoutSeconds = 60;
 
     /// <summary>
-    /// The prefix for legacy and generation-specific purge runner instance IDs.
+    /// The prefix for generation-specific purge runner instance IDs.
     /// </summary>
     public const string OrchestratorInstanceIdPrefix = "BlobPurgeJob-";
 
@@ -42,10 +42,8 @@ static class BlobPurgeConstants
     /// Generates an orchestrator instance ID for a given blob purge job ID.
     /// </summary>
     /// <param name="jobId">The blob purge job ID.</param>
-    /// <param name="generation">The activation generation, or null for the legacy fixed ID.</param>
+    /// <param name="generation">The required activation generation.</param>
     /// <returns>The orchestrator instance ID.</returns>
-    public static string GetOrchestratorInstanceId(string jobId, string? generation = null) =>
-        generation is null
-            ? $"{OrchestratorInstanceIdPrefix}{jobId}"
-            : $"{OrchestratorInstanceIdPrefix}{jobId}-{generation}";
+    public static string GetOrchestratorInstanceId(string jobId, string generation) =>
+        $"{OrchestratorInstanceIdPrefix}{jobId}-{Check.NotNullOrEmpty(generation)}";
 }

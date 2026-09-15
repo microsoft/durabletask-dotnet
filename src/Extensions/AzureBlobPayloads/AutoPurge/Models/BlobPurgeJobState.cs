@@ -14,7 +14,7 @@ public sealed class BlobPurgeJobState
     public BlobPurgeJobStatus Status { get; set; }
 
     /// <summary>
-    /// Gets or sets the current activation's opaque generation. A null value identifies legacy state.
+    /// Gets or sets the current activation's opaque generation. Null before the first activation.
     /// </summary>
     public string? Generation { get; set; }
 

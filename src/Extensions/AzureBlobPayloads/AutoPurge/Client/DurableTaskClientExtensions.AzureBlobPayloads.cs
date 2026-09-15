@@ -62,13 +62,6 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// wall-clock guarantee.
     /// </para>
     /// <para>
-    /// When upgrading from a preview without generations, disable the job and wait for its existing runner to
-    /// finish, update every worker that can process this task hub's purge entity and orchestrations, then
-    /// explicitly re-enable. Missing generation fields remain readable by updated workers, but old worker
-    /// binaries do not enforce the generation checks and may discard new state fields. Mixing those preview
-    /// worker versions during activation is not supported.
-    /// </para>
-    /// <para>
     /// If the setting succeeds and the entity signal then fails or is cancelled, the setting is NOT rolled back
     /// and this throws. Rolling back would be its own operation that can fail in turn, and it would be wrong as
     /// often as it was right - a concurrent caller may have set the value the rollback would undo. Retry the

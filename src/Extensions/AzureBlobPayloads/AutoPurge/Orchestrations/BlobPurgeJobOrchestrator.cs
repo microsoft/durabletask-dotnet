@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
@@ -13,16 +12,10 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// </summary>
 /// <param name="JobEntityId">The entity ID of the owning <see cref="BlobPurgeJob"/>.</param>
 /// <param name="PurgeBatchSize">The maximum number of tombstoned payloads to request per cycle.</param>
+/// <param name="Generation">The required activation generation.</param>
 /// <param name="ProcessedCycles">The number of cycles processed since the last continue-as-new.</param>
 public sealed record BlobPurgeJobRunRequest(
-    EntityInstanceId JobEntityId, int PurgeBatchSize, int ProcessedCycles = 0)
-{
-    /// <summary>
-    /// Gets the activation generation, or null for legacy orchestration input.
-    /// </summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Generation { get; init; }
-}
+    EntityInstanceId JobEntityId, int PurgeBatchSize, string Generation, int ProcessedCycles = 0);
 
 /// <summary>
 /// Perpetual orchestrator that drains due large-payload tombstones from the backend, deletes their blobs with
@@ -65,10 +58,15 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
     /// <inheritdoc/>
     public override async Task<object?> RunAsync(TaskOrchestrationContext context, BlobPurgeJobRunRequest input)
     {
+        Check.NotNull(input);
+        Check.NotNullOrEmpty(input.Generation);
+        Check.Argument(
+            input.PurgeBatchSize > 0 && input.PurgeBatchSize <= BlobPurgeConstants.MaxBatchSize,
+            nameof(input.PurgeBatchSize),
+            "Purge batch size is out of range.");
         ILogger logger = context.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>();
         string jobId = input.JobEntityId.Key;
 
-        int batchSize = input.PurgeBatchSize;
         int processedCycles = input.ProcessedCycles;
 
         while (true)
@@ -76,7 +74,7 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             processedCycles++;
             if (processedCycles > ContinueAsNewFrequency)
             {
-                context.ContinueAsNew(input with { PurgeBatchSize = batchSize, ProcessedCycles = 0 });
+                context.ContinueAsNew(input with { ProcessedCycles = 0 });
                 return null!;
             }
 
@@ -108,15 +106,15 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                 // state fetch this cycle already performs costs no extra call and is what lets a changed batch
                 // size actually take effect. That matters because a batch size the backend rejects fails every
                 // fetch: without this the job would be wedged with no recovery short of deleting the entity.
-                //
-                // Fall back to the input when the stored value is not positive. An entity written by an older
-                // build carries no batch size at all, and asking the backend for zero rows every cycle would be
-                // a silent, permanent stall.
-                int cycleBatchSize = state.PurgeBatchSize > 0 ? state.PurgeBatchSize : batchSize;
+                if (state.PurgeBatchSize <= 0 || state.PurgeBatchSize > BlobPurgeConstants.MaxBatchSize)
+                {
+                    logger.BlobPurgeJobOrchestratorStopping(jobId, "invalid batch size");
+                    return null;
+                }
 
                 List<LargePayloadTombstone> tombstones = await context.CallActivityAsync<List<LargePayloadTombstone>>(
                     nameof(GetLargePayloadTombstonesActivity),
-                    cycleBatchSize,
+                    state.PurgeBatchSize,
                     new TaskOptions(PurgeActivityRetryPolicy));
 
                 if (tombstones is null || tombstones.Count == 0)
@@ -162,19 +160,10 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                 // stale local emulator image). Await the generation-fenced disable request and exit rather
                 // than retrying forever. A superseded runner cannot disable a newer activation.
                 logger.BlobPurgeBackendUnsupported(jobId, ex.FailureDetails.ErrorMessage);
-                if (input.Generation is null)
-                {
-                    // Preserve the operation name and string input recorded by legacy orchestrations.
-                    await context.Entities.CallEntityAsync(
-                        input.JobEntityId, nameof(BlobPurgeJob.MarkUnsupported), ex.FailureDetails.ErrorMessage);
-                }
-                else
-                {
-                    await context.Entities.CallEntityAsync(
-                        input.JobEntityId,
-                        nameof(BlobPurgeJob.MarkGenerationUnsupported),
-                        new BlobPurgeUnsupportedRequest(input.Generation, ex.FailureDetails.ErrorMessage));
-                }
+                await context.Entities.CallEntityAsync(
+                    input.JobEntityId,
+                    nameof(BlobPurgeJob.MarkGenerationUnsupported),
+                    new BlobPurgeUnsupportedRequest(input.Generation, ex.FailureDetails.ErrorMessage));
 
                 return null;
             }

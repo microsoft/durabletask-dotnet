@@ -5,16 +5,40 @@ using FluentAssertions;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
+using Microsoft.DurableTask.Worker;
 using Xunit;
 
 namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.AutoPurge;
 
 public class BlobPurgeJobOrchestratorTests
 {
+    const string Generation = "current-generation";
     static readonly EntityInstanceId JobEntityId = new(nameof(BlobPurgeJob), BlobPurgeConstants.JobId);
 
     readonly List<int> requested = [];
     readonly TestLogger<BlobPurgeJobOrchestrator> logger = new();
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task RunAsync_WithoutGeneration_RejectsInputAsync(string? generation)
+    {
+        // Arrange - deserialization can produce missing/null values despite non-nullable C# declarations.
+        DataConverter converter = new DurableTaskWorkerOptions().DataConverter;
+        string json = generation is null
+            ? converter.Serialize(new { JobEntityId, PurgeBatchSize = 250 })!
+            : converter.Serialize(new { JobEntityId, PurgeBatchSize = 250, Generation = generation })!;
+        BlobPurgeJobRunRequest input = converter.Deserialize<BlobPurgeJobRunRequest>(json)!;
+        Mock<TaskOrchestrationContext> context = this.ContextFor(
+            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = generation, PurgeBatchSize = 250 });
+
+        // Act
+        Func<Task> act = () => new BlobPurgeJobOrchestrator().RunAsync(context.Object, input);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentException>();
+        context.Invocations.Should().BeEmpty();
+    }
 
     [Fact]
     public async Task RunAsync_UsesBatchSizeFromEntity_NotFromInput()
@@ -24,32 +48,35 @@ public class BlobPurgeJobOrchestratorTests
         // the very first Create for the life of the job, which is what made a configuration change impossible
         // to apply. The entity is the authority.
         Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 777 });
+            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 777 });
 
         // Act
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
 
         // Assert
         this.AssertNoCycleFailed();
         this.requested.Should().Equal(777);
     }
 
-    [Fact]
-    public async Task RunAsync_WhenEntityBatchSizeIsUnset_FallsBackToInput()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1001)]
+    public async Task RunAsync_WhenEntityBatchSizeIsInvalid_StopsWithoutFetchingAsync(int batchSize)
     {
-        // Arrange - an entity written by an older build carries no batch size at all. Passing that zero to the
-        // fetch activity would ask the backend for nothing on every cycle: a silent, permanent stall.
+        // Arrange
         Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 0 });
+            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = batchSize });
 
         // Act
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
 
         // Assert
         this.AssertNoCycleFailed();
-        this.requested.Should().Equal(100);
+        this.requested.Should().BeEmpty();
+        this.logger.Logs.Should().Contain(entry => entry.Message.Contains("invalid batch size"));
     }
 
     [Fact]
@@ -62,7 +89,7 @@ public class BlobPurgeJobOrchestratorTests
 
         // Act
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
 
         // Assert - an empty fetch list is also what a broken mock produces, so the stopping log is asserted
         // too: it is the only evidence that the orchestrator read the state and chose to exit.
@@ -71,10 +98,8 @@ public class BlobPurgeJobOrchestratorTests
         this.logger.Logs.Should().Contain(entry => entry.Message.Contains("stopping"));
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("current-generation")]
-    public async Task RunAsync_WhenBackendDoesNotImplementPurgeRpcs_DisablesJobAndExits(string? generation)
+    [Fact]
+    public async Task RunAsync_WhenBackendDoesNotImplementPurgeRpcs_DisablesJobAndExits()
     {
         // Arrange - the fetch activity surfaced a gRPC Unimplemented as NotImplementedException (mixed rollout /
         // stale emulator). The orchestrator must disable the job durably and exit its perpetual loop, rather
@@ -95,7 +120,7 @@ public class BlobPurgeJobOrchestratorTests
                 It.IsAny<CallEntityOptions?>()))
             .ReturnsAsync(new BlobPurgeJobState
             {
-                Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250, Generation = generation,
+                Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250, Generation = Generation,
             });
 
         entities
@@ -116,30 +141,19 @@ public class BlobPurgeJobOrchestratorTests
 
         // Act
         object? result = await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100) { Generation = generation });
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
 
-        // Assert - disabled through an AWAITED MarkUnsupported so the write is durable before the loop exits, a
+        // Assert - disabled through an awaited generation-aware callback before the loop exits, a
         // dedicated diagnostic is logged (not the generic cycle-failed one), and RunAsync returns rather than
         // continuing. The awaited call, not a signal, is what guarantees the disable is committed here.
         result.Should().BeNull();
         entities.Verify(
             e => e.CallEntityAsync(
                 JobEntityId,
-                generation == null ? nameof(BlobPurgeJob.MarkUnsupported) : nameof(BlobPurgeJob.MarkGenerationUnsupported),
-                It.IsAny<object?>(),
+                nameof(BlobPurgeJob.MarkGenerationUnsupported),
+                It.Is<BlobPurgeUnsupportedRequest>(request => request.Generation == Generation),
                 It.IsAny<CallEntityOptions?>()),
             Times.Once);
-        if (generation != null)
-        {
-            entities.Verify(
-                e => e.CallEntityAsync(
-                    JobEntityId,
-                    nameof(BlobPurgeJob.MarkGenerationUnsupported),
-                    It.Is<BlobPurgeUnsupportedRequest>(request => request.Generation == generation),
-                    It.IsAny<CallEntityOptions?>()),
-                Times.Once);
-        }
-
         this.logger.Logs.Should().Contain(
             entry => entry.Message.Contains("does not implement the large-payload purge RPCs"));
         this.AssertNoCycleFailed();
@@ -176,7 +190,7 @@ public class BlobPurgeJobOrchestratorTests
                 nameof(BlobPurgeJob.Get),
                 It.IsAny<object?>(),
                 It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = batchSize })
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = batchSize })
             .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
 
         entities
@@ -228,7 +242,7 @@ public class BlobPurgeJobOrchestratorTests
 
         // Act
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: batchSize));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: batchSize, Generation));
 
         // Assert - 20 chunk activities for the whole batch, not 1000; every token was still handled exactly once;
         // and one result is reported per row so the backend hears about all 1000.
@@ -266,7 +280,7 @@ public class BlobPurgeJobOrchestratorTests
                 nameof(BlobPurgeJob.Get),
                 It.IsAny<object?>(),
                 It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 100 })
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 100 })
             .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
 
         entities
@@ -314,7 +328,7 @@ public class BlobPurgeJobOrchestratorTests
 
         // Act
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
 
         // Assert - storage saw only payload tokens, the backend heard only tombstone tokens, and each row kept
         // its own disposition rather than the batch collapsing onto one.
@@ -337,11 +351,11 @@ public class BlobPurgeJobOrchestratorTests
         // response has to cost a wait and nothing else, or every quiet worker would hammer storage and the
         // backend on every tick.
         Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250 });
+            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 250 });
 
         // Act
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
 
         // Assert - the fetch ran (recording the batch size) and the one-minute idle timer was created, but
         // neither the delete nor the report activity was ever invoked on the empty batch. The duration is
@@ -389,7 +403,7 @@ public class BlobPurgeJobOrchestratorTests
                 nameof(BlobPurgeJob.Get),
                 It.IsAny<object?>(),
                 It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250 });
+            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 250 });
 
         context
             .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
@@ -404,7 +418,7 @@ public class BlobPurgeJobOrchestratorTests
 
         // Act - start fresh (zero processed cycles).
         await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 250));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 250, Generation));
 
         // Assert - five cycles ran (one empty fetch each) before a single continue-as-new that reset the cycle
         // count while carrying the same job identity and batch size forward. The five recorded fetches are what

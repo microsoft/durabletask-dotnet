@@ -31,26 +31,30 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// </param>
     public void Create(TaskEntityContext context, int purgeBatchSize)
     {
+        Check.Argument(
+            purgeBatchSize > 0 && purgeBatchSize <= BlobPurgeConstants.MaxBatchSize,
+            nameof(purgeBatchSize),
+            "Purge batch size is out of range.");
         if (this.State.Status == BlobPurgeJobStatus.Active)
         {
+            Check.NotNullOrEmpty(this.State.Generation);
+
             // The batch size is taken because this is the only path by which a changed size reaches an active
             // job - the orchestrator re-reads it from here every cycle. Without this the value written by the
             // very first Create would be the only one the job ever used, and a batch size the backend rejects
             // would wedge it permanently.
             //
-            // Resizing or promoting legacy state is a real change. Repeated enables of a modern activation
-            // preserve LastModifiedAt and its generation.
-            if (this.State.PurgeBatchSize != purgeBatchSize || this.State.Generation is null)
+            // Only resizing changes LastModifiedAt; repeated enables retain the activation's generation.
+            if (this.State.PurgeBatchSize != purgeBatchSize)
             {
                 this.State.PurgeBatchSize = purgeBatchSize;
-                this.State.Generation ??= Guid.NewGuid().ToString("N");
                 this.State.LastModifiedAt = DateTimeOffset.UtcNow;
             }
 
             logger.BlobPurgeJobAlreadyRunning(context.Id.Key);
 
             // Repeated enables reuse this generation's ID: the backend preserves a running instance and can
-            // replace a completed one. Promoting legacy state above gives it a new generation only once.
+            // replace a completed one.
             context.SignalEntity(context.Id, nameof(this.Run));
             return;
         }
@@ -75,7 +79,7 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// <para>
     /// Each activation has its own runner ID. Re-enabling therefore does not lose its start to an older
     /// activation that is still stopping. Repeated Run signals target the current generation and the backend
-    /// deduplicates them while that runner is alive. Legacy generationless state keeps its original fixed ID.
+    /// deduplicates them while that runner is alive.
     /// Older in-flight cycles may overlap this generation; generation checks retire them on their next read.
     /// </para>
     /// <para>
@@ -92,17 +96,17 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             return;
         }
 
-        string instanceId = BlobPurgeConstants.GetOrchestratorInstanceId(context.Id.Key, this.State.Generation);
+        string generation = Check.NotNullOrEmpty(this.State.Generation);
+        Check.Argument(
+            this.State.PurgeBatchSize > 0 && this.State.PurgeBatchSize <= BlobPurgeConstants.MaxBatchSize,
+            nameof(this.State.PurgeBatchSize),
+            "Purge batch size is out of range.");
+        string instanceId = BlobPurgeConstants.GetOrchestratorInstanceId(context.Id.Key, generation);
         StartOrchestrationOptions startOrchestrationOptions = new(instanceId);
 
         context.ScheduleNewOrchestration(
             new TaskName(nameof(BlobPurgeJobOrchestrator)),
-            new BlobPurgeJobRunRequest(
-                context.Id,
-                this.State.PurgeBatchSize > 0 ? this.State.PurgeBatchSize : BlobPurgeConstants.DefaultBatchSize)
-            {
-                Generation = this.State.Generation,
-            },
+            new BlobPurgeJobRunRequest(context.Id, this.State.PurgeBatchSize, generation),
             startOrchestrationOptions);
     }
 
@@ -152,29 +156,6 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     }
 
     /// <summary>
-    /// Marks the job <see cref="BlobPurgeJobStatus.Unsupported"/> because the backend does not implement the
-    /// large-payload purge RPCs.
-    /// </summary>
-    /// <remarks>
-    /// This is a real stop, not a pause. The orchestrator reaches it after the fetch or report activity
-    /// surfaces a gRPC <c>Unimplemented</c> as a <see cref="NotImplementedException"/>, and then exits; nothing
-    /// restarts the job on its own. Recovery is an explicit call to the public enable API once the backend
-    /// implements the RPCs - <see cref="Create"/> revives an unsupported job deliberately.
-    /// </remarks>
-    /// <param name="context">The entity context.</param>
-    /// <param name="detail">A human-readable description of why the backend is unsupported.</param>
-    public void MarkUnsupported(TaskEntityContext context, string detail)
-    {
-        // Keep legacy string operation inputs dispatchable, but never let them disable a modern activation.
-        if (this.State.Generation is not null || this.State.Status != BlobPurgeJobStatus.Active)
-        {
-            return;
-        }
-
-        this.SetUnsupported(context, detail);
-    }
-
-    /// <summary>
     /// Disables only the active generation that observed an unsupported backend.
     /// </summary>
     /// <param name="context">The entity context.</param>
@@ -182,13 +163,17 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     public void MarkGenerationUnsupported(TaskEntityContext context, BlobPurgeUnsupportedRequest request)
     {
         Check.NotNull(request);
-        if (request.Generation is null || this.State.Status != BlobPurgeJobStatus.Active
+        Check.NotNullOrEmpty(request.Generation);
+        if (this.State.Status != BlobPurgeJobStatus.Active
             || !string.Equals(this.State.Generation, request.Generation, StringComparison.Ordinal))
         {
             return;
         }
 
-        this.SetUnsupported(context, request.Detail);
+        this.State.Status = BlobPurgeJobStatus.Unsupported;
+        this.State.LastError = request.Detail;
+        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+        logger.BlobPurgeJobMarkedUnsupported(context.Id.Key, request.Detail);
     }
 
     /// <summary>
@@ -208,12 +193,4 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// <param name="context">The entity context.</param>
     /// <returns>The current job state.</returns>
     public BlobPurgeJobState Get(TaskEntityContext context) => this.State;
-
-    void SetUnsupported(TaskEntityContext context, string detail)
-    {
-        this.State.Status = BlobPurgeJobStatus.Unsupported;
-        this.State.LastError = detail;
-        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
-        logger.BlobPurgeJobMarkedUnsupported(context.Id.Key, detail);
-    }
 }

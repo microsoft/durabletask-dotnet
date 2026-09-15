@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text.Json.Nodes;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using Microsoft.DurableTask.AzureBlobPayloads;
@@ -153,52 +152,17 @@ public sealed class BlobPurgeJobGenerationTests
     }
 
     /// <summary>
-    /// Generationless persisted state retains the old runner mapping until an explicit enable promotes it.
-    /// </summary>
-    [Fact]
-    public async Task LegacyState_RunKeepsLegacyInput_CreatePromotesOnceAsync()
-    {
-        // Arrange
-        DateTimeOffset original = DateTimeOffset.UtcNow.AddDays(-1);
-        EntityDriver entity = new(new BlobPurgeJobState
-        {
-            Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 0, CreatedAt = original, LastModifiedAt = original,
-        });
-
-        // Act
-        EntityBatchResult run = await entity.ExecuteAsync(nameof(BlobPurgeJob.Run));
-        StartNewOrchestrationOperationAction start =
-            Assert.IsType<StartNewOrchestrationOperationAction>(Assert.Single(run.Actions!));
-        BlobPurgeJobRunRequest legacy = entity.Converter.Deserialize<BlobPurgeJobRunRequest>(start.Input)!;
-        await entity.ExecuteAsync(nameof(BlobPurgeJob.Create), 250);
-        string promoted = Assert.IsType<string>(entity.State.Generation);
-        BlobPurgeJobState promotedState = entity.State;
-        await entity.ExecuteAsync(nameof(BlobPurgeJob.Create), 250);
-
-        // Assert
-        Assert.Equal(BlobPurgeConstants.GetOrchestratorInstanceId(BlobPurgeConstants.JobId), start.InstanceId);
-        Assert.Null(legacy.Generation);
-        Assert.DoesNotContain("Generation", start.Input!);
-        Assert.Equal(BlobPurgeConstants.DefaultBatchSize, legacy.PurgeBatchSize);
-        Assert.Equal(promoted, entity.State.Generation);
-        Assert.Equal(original, entity.State.CreatedAt);
-        Assert.True(entity.State.LastModifiedAt > original);
-        AssertCycleCount(await RunWithSnapshotsAsync(legacy, promotedState), 0);
-    }
-
-    /// <summary>
-    /// Only matching generations can begin a cycle, including the legacy null/null pair.
+    /// Only matching, nonempty generations can begin a cycle.
     /// </summary>
     [Theory]
-    [InlineData(null, "new", 0)]
     [InlineData("old", "new", 0)]
     [InlineData("new", null, 0)]
-    [InlineData(null, null, 1)]
+    [InlineData("new", "", 0)]
     [InlineData("new", "new", 1)]
-    public async Task RunAsync_RequiresMatchingActiveGenerationAsync(string? inputGeneration, string? stateGeneration, int cycles)
+    public async Task RunAsync_RequiresMatchingActiveGenerationAsync(string inputGeneration, string? stateGeneration, int cycles)
     {
         // Arrange
-        BlobPurgeJobRunRequest input = new(EntityDriver.Id, 250) { Generation = inputGeneration };
+        BlobPurgeJobRunRequest input = new(EntityDriver.Id, 250, inputGeneration);
 
         // Act
         Mock<TaskOrchestrationContext> context = await RunWithSnapshotsAsync(input,
@@ -221,7 +185,7 @@ public sealed class BlobPurgeJobGenerationTests
         EntityBatchResult get = await entity.ExecuteAsync(nameof(BlobPurgeJob.Get));
         string activeSnapshot = Assert.IsType<string>(Assert.Single(get.Results!).Result);
         BlobPurgeJobState first = entity.Converter.Deserialize<BlobPurgeJobState>(activeSnapshot)!;
-        BlobPurgeJobRunRequest input = new(EntityDriver.Id, 250) { Generation = first.Generation };
+        BlobPurgeJobRunRequest input = new(EntityDriver.Id, 250, first.Generation!);
         await entity.ExecuteAsync(nameof(BlobPurgeJob.Stop));
         await entity.ExecuteAsync(nameof(BlobPurgeJob.Create), 500);
 
@@ -237,10 +201,10 @@ public sealed class BlobPurgeJobGenerationTests
     }
 
     /// <summary>
-    /// Stale and legacy control callbacks cannot change a newer activation, while current callbacks still work.
+    /// Stale control callbacks cannot change a newer activation, while current callbacks still work.
     /// </summary>
     [Fact]
-    public async Task UnsupportedCallbacks_AreFencedWithoutChangingLegacyDispatchAsync()
+    public async Task UnsupportedCallbacks_AreGenerationFencedAsync()
     {
         // Arrange
         EntityDriver entity = new();
@@ -254,8 +218,6 @@ public sealed class BlobPurgeJobGenerationTests
         // Act
         await entity.ExecuteAsync(nameof(BlobPurgeJob.MarkGenerationUnsupported),
             new BlobPurgeUnsupportedRequest(first, "stale"));
-        Assert.Equal(active, entity.SerializedState);
-        await entity.ExecuteAsync(nameof(BlobPurgeJob.MarkUnsupported), "legacy string");
         Assert.Equal(active, entity.SerializedState);
         await entity.ExecuteAsync(nameof(BlobPurgeJob.MarkGenerationUnsupported),
             new BlobPurgeUnsupportedRequest(second, "current"));
@@ -278,15 +240,13 @@ public sealed class BlobPurgeJobGenerationTests
     }
 
     /// <summary>
-    /// Continue-as-new preserves modern generations and the legacy three-argument JSON shape.
+    /// Continue-as-new preserves the activation's generation.
     /// </summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("generation")]
-    public async Task ContinueAsNew_PreservesGenerationAndLegacyInputAsync(string? generation)
+    [Fact]
+    public async Task ContinueAsNew_PreservesGenerationAsync()
     {
         // Arrange
-        BlobPurgeJobRunRequest input = new(EntityDriver.Id, 250, 5) { Generation = generation };
+        BlobPurgeJobRunRequest input = new(EntityDriver.Id, 250, "generation", 5);
         Mock<TaskOrchestrationContext> context = new(MockBehavior.Strict);
         context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>())
             .Returns(new TestLogger<BlobPurgeJobOrchestrator>());
@@ -299,14 +259,9 @@ public sealed class BlobPurgeJobGenerationTests
 
         // Assert
         Assert.NotNull(continued);
-        Assert.Equal(generation, continued.Generation);
+        Assert.Equal(input.Generation, continued.Generation);
         Assert.Equal(0, continued.ProcessedCycles);
         Assert.Equal(250, continued.PurgeBatchSize);
-        string serialized = new DurableTaskWorkerOptions().DataConverter.Serialize(continued)!;
-        if (generation is null)
-        {
-            Assert.DoesNotContain("Generation", serialized);
-        }
     }
 
     static async Task<Mock<TaskOrchestrationContext>> RunWithSnapshotsAsync(
@@ -350,18 +305,11 @@ public sealed class BlobPurgeJobGenerationTests
         public static readonly EntityInstanceId Id = new(nameof(BlobPurgeJob), BlobPurgeConstants.JobId);
         readonly DurableTaskShimFactory factory;
 
-        public EntityDriver(BlobPurgeJobState? initialState = null)
+        public EntityDriver()
         {
             DurableTaskWorkerOptions options = new();
             this.Converter = options.DataConverter;
             this.factory = new DurableTaskShimFactory(options);
-            this.SerializedState = this.Converter.Serialize(initialState);
-            if (initialState is { Generation: null })
-            {
-                JsonObject state = JsonNode.Parse(this.SerializedState!)!.AsObject();
-                state.Remove(nameof(BlobPurgeJobState.Generation));
-                this.SerializedState = state.ToJsonString();
-            }
         }
 
         public DataConverter Converter { get; }

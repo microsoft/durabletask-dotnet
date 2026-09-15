@@ -11,7 +11,30 @@ namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.AutoPurge;
 
 public class BlobPurgeJobTests
 {
+    const string Generation = "existing-generation";
     readonly BlobPurgeJob job = new(new TestLogger<BlobPurgeJob>());
+
+    [Theory]
+    [InlineData(nameof(BlobPurgeJob.Create), null)]
+    [InlineData(nameof(BlobPurgeJob.Create), "")]
+    [InlineData(nameof(BlobPurgeJob.Run), null)]
+    [InlineData(nameof(BlobPurgeJob.Run), "")]
+    public async Task ActiveState_WithoutGeneration_RejectsOperationAsync(string name, string? generation)
+    {
+        // Arrange
+        BlobPurgeJobState state = new() { Status = BlobPurgeJobStatus.Active, Generation = generation, PurgeBatchSize = 250 };
+        TestEntityOperation operation = new(name, new TestEntityState(state), 250);
+
+        // Act
+        Func<Task> act = () => this.job.RunAsync(operation).AsTask();
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentException>();
+        Action getId = () => BlobPurgeConstants.GetOrchestratorInstanceId(BlobPurgeConstants.JobId, generation!);
+        getId.Should().Throw<ArgumentException>();
+        state.Generation.Should().Be(generation);
+        Mock.Get(operation.Context).VerifyNoOtherCalls();
+    }
 
     [Fact]
     public async Task Create_WhenStopped_ActivatesJobAndStoresBatchSize()
@@ -53,6 +76,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             PurgeBatchSize = 100,
         };
         TestEntityOperation operation = new(
@@ -89,6 +113,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             PurgeBatchSize = 100,
         };
         TestEntityOperation operation = new(
@@ -120,7 +145,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
-            Generation = "existing-generation",
+            Generation = Generation,
             LastModifiedAt = configuredAt,
             PurgeBatchSize = 250,
         };
@@ -149,6 +174,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             LastModifiedAt = configuredAt,
             PurgeBatchSize = 250,
         };
@@ -177,6 +203,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             LastModifiedAt = configuredAt,
             PurgeBatchSize = 250,
         };
@@ -203,12 +230,13 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task Run_WhenLegacyActive_SchedulesOrchestratorAtTheFixedInstanceId()
+    public async Task Run_WhenActive_SchedulesGenerationSpecificInstanceIdAsync()
     {
-        // Arrange - generationless state retains the legacy fixed ID until an explicit Create promotes it.
+        // Arrange
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             PurgeBatchSize = 250,
         };
         TestEntityOperation operation = new(
@@ -228,7 +256,7 @@ public class BlobPurgeJobTests
                 It.IsAny<TaskName>(),
                 It.IsAny<object?>(),
                 It.Is<StartOrchestrationOptions>(o =>
-                    o.InstanceId == BlobPurgeConstants.GetOrchestratorInstanceId(BlobPurgeConstants.JobId))),
+                    o.InstanceId == BlobPurgeConstants.GetOrchestratorInstanceId(BlobPurgeConstants.JobId, Generation))),
             Times.Once);
     }
 
@@ -241,7 +269,6 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Pending,
-            PurgeBatchSize = 250,
         };
         TestEntityOperation operation = new(
             nameof(BlobPurgeJob.Run),
@@ -271,6 +298,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             CreatedAt = createdAt,
             PurgedCount = 17,
             PurgeBatchSize = 250,
@@ -324,24 +352,25 @@ public class BlobPurgeJobTests
         state.PurgeBatchSize.Should().Be(250);
     }
 
-    [Fact]
-    public async Task Create_StoresBatchSizeVerbatim_WithoutCoercion()
+    [Theory]
+    [InlineData(nameof(BlobPurgeJob.Create), 0)]
+    [InlineData(nameof(BlobPurgeJob.Create), -1)]
+    [InlineData(nameof(BlobPurgeJob.Create), 1001)]
+    [InlineData(nameof(BlobPurgeJob.Run), 0)]
+    [InlineData(nameof(BlobPurgeJob.Run), -1)]
+    [InlineData(nameof(BlobPurgeJob.Run), 1001)]
+    public async Task InvalidBatchSize_RejectsOperationAsync(string name, int batchSize)
     {
-        // Arrange - the batch size is validated once at specification (LargePayloadStorageOptions), so the
-        // entity trusts its input and performs no coercion of its own. A zero here is stored as-is, proving
-        // the previous non-positive-to-default fallback was removed.
-        TestEntityOperation operation = new(
-            nameof(BlobPurgeJob.Create),
-            new TestEntityState(null),
-            0);
+        // Arrange
+        BlobPurgeJobState state = new() { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = batchSize };
+        TestEntityOperation operation = new(name, new TestEntityState(state), batchSize);
 
         // Act
-        await this.job.RunAsync(operation);
+        Func<Task> act = () => this.job.RunAsync(operation).AsTask();
 
         // Assert
-        BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
-            operation.State.GetState(typeof(BlobPurgeJobState)));
-        state.PurgeBatchSize.Should().Be(0);
+        await act.Should().ThrowAsync<ArgumentException>();
+        Mock.Get(operation.Context).VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -351,6 +380,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             PurgeBatchSize = 42,
         };
         TestEntityOperation operation = new(
@@ -405,18 +435,19 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task MarkUnsupported_WhenActive_DisablesJobAndRecordsDetail()
+    public async Task MarkGenerationUnsupported_WhenActive_DisablesJobAndRecordsDetail()
     {
-        // Arrange - a legacy running job whose fetch/report activity surfaced Unimplemented; retain its detail.
+        // Arrange
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = Generation,
             PurgeBatchSize = 250,
         };
         TestEntityOperation operation = new(
-            nameof(BlobPurgeJob.MarkUnsupported),
+            nameof(BlobPurgeJob.MarkGenerationUnsupported),
             new TestEntityState(existing),
-            "backend does not implement GetLargePayloadTombstones");
+            new BlobPurgeUnsupportedRequest(Generation, "backend does not implement GetLargePayloadTombstones"));
 
         // Act
         await this.job.RunAsync(operation);
@@ -439,7 +470,7 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task MarkUnsupported_WhenAlreadyUnsupported_LeavesStateUntouched()
+    public async Task MarkGenerationUnsupported_WhenAlreadyUnsupported_LeavesStateUntouched()
     {
         // Arrange - a duplicate callback reporting the same unsupported backend. The repeat must be a no-op so
         // LastModifiedAt keeps meaning "when the job was disabled" and the
@@ -448,14 +479,15 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Unsupported,
+            Generation = Generation,
             LastError = "original detail",
             LastModifiedAt = disabledAt,
             PurgeBatchSize = 250,
         };
         TestEntityOperation operation = new(
-            nameof(BlobPurgeJob.MarkUnsupported),
+            nameof(BlobPurgeJob.MarkGenerationUnsupported),
             new TestEntityState(existing),
-            "a different detail");
+            new BlobPurgeUnsupportedRequest(Generation, "a different detail"));
 
         // Act
         await this.job.RunAsync(operation);

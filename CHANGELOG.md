@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v1.26.0
+- Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))
+- Prevent external-event loss after canceled waits in isolated worker by wangbill ([#801](https://github.com/microsoft/durabletask-dotnet/pull/801))
+- Preserve grpc channel recreation when externalized payloads are enabled by wangbill ([#797](https://github.com/microsoft/durabletask-dotnet/pull/797))
+- Perf: bound azure blob payload operation concurrency for fan-out messages by Bernd Verst ([#786](https://github.com/microsoft/durabletask-dotnet/pull/786))
 
 ## v1.25.0
 - Route NuGet restores through Central Feed Service ([#789](https://github.com/microsoft/durabletask-dotnet/pull/789))

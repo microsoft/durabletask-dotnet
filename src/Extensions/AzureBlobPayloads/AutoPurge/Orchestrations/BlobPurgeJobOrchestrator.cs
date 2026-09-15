@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,14 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// <param name="PurgeBatchSize">The maximum number of tombstoned payloads to request per cycle.</param>
 /// <param name="ProcessedCycles">The number of cycles processed since the last continue-as-new.</param>
 public sealed record BlobPurgeJobRunRequest(
-    EntityInstanceId JobEntityId, int PurgeBatchSize, int ProcessedCycles = 0);
+    EntityInstanceId JobEntityId, int PurgeBatchSize, int ProcessedCycles = 0)
+{
+    /// <summary>
+    /// Gets the activation generation, or null for legacy orchestration input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Generation { get; init; }
+}
 
 /// <summary>
 /// Perpetual orchestrator that drains due large-payload tombstones from the backend, deletes their blobs with
@@ -68,7 +76,7 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             processedCycles++;
             if (processedCycles > ContinueAsNewFrequency)
             {
-                context.ContinueAsNew(new BlobPurgeJobRunRequest(input.JobEntityId, batchSize, ProcessedCycles: 0));
+                context.ContinueAsNew(input with { PurgeBatchSize = batchSize, ProcessedCycles = 0 });
                 return null!;
             }
 
@@ -83,9 +91,13 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                 BlobPurgeJobState? state = await context.Entities.CallEntityAsync<BlobPurgeJobState?>(
                     input.JobEntityId, nameof(BlobPurgeJob.Get), input: null);
 
-                if (state is null || state.Status != BlobPurgeJobStatus.Active)
+                if (state is null || state.Status != BlobPurgeJobStatus.Active
+                    || !string.Equals(state.Generation, input.Generation, StringComparison.Ordinal))
                 {
-                    logger.BlobPurgeJobOrchestratorStopping(jobId, state?.Status.ToString() ?? "null");
+                    string reason = state?.Status == BlobPurgeJobStatus.Active
+                        ? "superseded generation"
+                        : state?.Status.ToString() ?? "null";
+                    logger.BlobPurgeJobOrchestratorStopping(jobId, reason);
                     return null;
                 }
 
@@ -124,9 +136,8 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                     results,
                     new TaskOptions(PurgeActivityRetryPolicy));
 
-                // Two different questions, deliberately not conflated. Progress counts only payloads that were
-                // actually purged; the backoff decision asks whether ANY row left the retry queue, because a
-                // quarantined row also stops being re-served even though nothing was reclaimed.
+                // Progress counts reported terminal successes, including already-absent/unowned payloads and
+                // overlap duplicates. Backoff asks whether any row left the retry queue, including quarantine.
                 int purged = CountDisposition(results, LargePayloadPurgeDisposition.Deleted);
                 int resolved = results.Count - CountDisposition(results, LargePayloadPurgeDisposition.Retry);
 
@@ -148,15 +159,23 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             catch (TaskFailedException ex) when (ex.FailureDetails.IsCausedBy<NotImplementedException>())
             {
                 // The backend does not implement the large-payload purge RPCs (an older backend build or a
-                // stale local emulator image). Retrying cannot help, so disable the job durably and exit the
-                // perpetual loop cleanly instead of logging a generic failure and backing off forever.
-                // MarkUnsupported is AWAITED, not signalled, so the disable is committed to the entity before we
-                // return. Nothing restarts the job automatically: it stays Unsupported until a caller
-                // explicitly enables auto-purge again, and that call's Create revives it. This is deliberately
-                // a distinct diagnostic from BlobPurgeCycleFailed below.
+                // stale local emulator image). Await the generation-fenced disable request and exit rather
+                // than retrying forever. A superseded runner cannot disable a newer activation.
                 logger.BlobPurgeBackendUnsupported(jobId, ex.FailureDetails.ErrorMessage);
-                await context.Entities.CallEntityAsync(
-                    input.JobEntityId, nameof(BlobPurgeJob.MarkUnsupported), ex.FailureDetails.ErrorMessage);
+                if (input.Generation is null)
+                {
+                    // Preserve the operation name and string input recorded by legacy orchestrations.
+                    await context.Entities.CallEntityAsync(
+                        input.JobEntityId, nameof(BlobPurgeJob.MarkUnsupported), ex.FailureDetails.ErrorMessage);
+                }
+                else
+                {
+                    await context.Entities.CallEntityAsync(
+                        input.JobEntityId,
+                        nameof(BlobPurgeJob.MarkGenerationUnsupported),
+                        new BlobPurgeUnsupportedRequest(input.Generation, ex.FailureDetails.ErrorMessage));
+                }
+
                 return null;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)

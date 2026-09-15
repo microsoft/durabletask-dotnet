@@ -140,6 +140,112 @@ public class PurgeActivityBackendStatusTests
     }
 
     /// <summary>
+    /// Reports retain their explicit backend-cancellation translation.
+    /// </summary>
+    [Fact]
+    public async Task ReportLargePayloadPurgeResults_WhenBackendCancels_ThrowsOperationCanceledAsync()
+    {
+        // Arrange
+        LargePayloadPurgeClient client = new(
+            new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Cancelled, "canceled"))));
+        ReportLargePayloadPurgeResultsActivity activity =
+            new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>());
+        List<LargePayloadPurgeResult> results = new()
+        {
+            new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
+        };
+
+        // Act
+        Func<Task> act = () => activity.RunAsync(null!, results);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    /// <summary>
+    /// Report failures, including failed preconditions, remain retryable rather than reporting success.
+    /// </summary>
+    [Theory]
+    [InlineData(StatusCode.FailedPrecondition)]
+    [InlineData(StatusCode.Unavailable)]
+    public async Task ReportLargePayloadPurgeResults_WhenBackendFailsOtherwise_PropagatesRpcExceptionAsync(StatusCode statusCode)
+    {
+        // Arrange
+        RpcException error = new(new Status(statusCode, "backend failure"));
+        LargePayloadPurgeClient client = new(new ThrowingCallInvoker(error));
+        TestLogger<ReportLargePayloadPurgeResultsActivity> logger = new();
+        ReportLargePayloadPurgeResultsActivity activity = new(client, logger);
+        List<LargePayloadPurgeResult> results = new()
+        {
+            new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
+        };
+
+        // Act
+        Func<Task> act = () => activity.RunAsync(null!, results);
+
+        // Assert
+        (await act.Should().ThrowAsync<RpcException>()).Which.Should().BeSameAs(error);
+        logger.Logs.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Fetch attempts use a UTC deadline and leave deadline failures available for activity retry.
+    /// </summary>
+    [Fact]
+    public async Task GetLargePayloadTombstones_SetsDefaultUtcDeadlineAsync()
+    {
+        // Arrange
+        RpcException error = new(new Status(StatusCode.DeadlineExceeded, "deadline exceeded"));
+        ThrowingCallInvoker invoker = new(error);
+        LargePayloadPurgeClient client = new(invoker);
+        GetLargePayloadTombstonesActivity activity = new(client, new TestLogger<GetLargePayloadTombstonesActivity>());
+        DateTime earliestDeadline = DateTime.UtcNow.AddSeconds(60);
+
+        // Act
+        Func<Task> act = () => activity.RunAsync(null!, 100);
+        RpcException thrown = (await act.Should().ThrowAsync<RpcException>()).Which;
+        DateTime latestDeadline = DateTime.UtcNow.AddSeconds(60);
+
+        // Assert
+        thrown.Should().BeSameAs(error);
+        invoker.Options.Deadline.Should().NotBeNull();
+        invoker.Options.Deadline!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        invoker.Options.Deadline.Value.Should().BeOnOrAfter(earliestDeadline).And.BeOnOrBefore(latestDeadline);
+        invoker.IsDisposed.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Report attempts use a UTC deadline and leave deadline failures available for activity retry.
+    /// </summary>
+    [Fact]
+    public async Task ReportLargePayloadPurgeResults_SetsDefaultUtcDeadlineAsync()
+    {
+        // Arrange
+        RpcException error = new(new Status(StatusCode.DeadlineExceeded, "deadline exceeded"));
+        ThrowingCallInvoker invoker = new(error);
+        LargePayloadPurgeClient client = new(invoker);
+        ReportLargePayloadPurgeResultsActivity activity =
+            new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>());
+        List<LargePayloadPurgeResult> results = new()
+        {
+            new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
+        };
+        DateTime earliestDeadline = DateTime.UtcNow.AddSeconds(60);
+
+        // Act
+        Func<Task> act = () => activity.RunAsync(null!, results);
+        RpcException thrown = (await act.Should().ThrowAsync<RpcException>()).Which;
+        DateTime latestDeadline = DateTime.UtcNow.AddSeconds(60);
+
+        // Assert
+        thrown.Should().BeSameAs(error);
+        invoker.Options.Deadline.Should().NotBeNull();
+        invoker.Options.Deadline!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        invoker.Options.Deadline.Value.Should().BeOnOrAfter(earliestDeadline).And.BeOnOrBefore(latestDeadline);
+        invoker.IsDisposed.Should().BeTrue();
+    }
+
+    /// <summary>
     /// A minimal <see cref="CallInvoker"/> whose unary calls fault with a configured <see cref="RpcException"/>.
     /// Building a real <see cref="LargePayloadPurgeClient"/> over it exercises the activity's own catch
     /// clause exactly as a live channel would, without mocking the generated client. The faulted
@@ -147,14 +253,21 @@ public class PurgeActivityBackendStatusTests
     /// </summary>
     sealed class ThrowingCallInvoker(RpcException error) : CallInvoker
     {
+        public CallOptions Options { get; private set; }
+
+        public bool IsDisposed { get; private set; }
+
         public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
             Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
-            => new(
+        {
+            this.Options = options;
+            return new(
                 Task.FromException<TResponse>(error),
                 Task.FromResult(new Metadata()),
                 () => error.Status,
                 () => new Metadata(),
-                () => { });
+                () => this.IsDisposed = true);
+        }
 
         public override TResponse BlockingUnaryCall<TRequest, TResponse>(
             Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)

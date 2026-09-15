@@ -13,11 +13,11 @@ static partial class Logs
     [LoggerMessage(EventId = 810, Level = LogLevel.Information, Message = "Blob payload auto-purge job '{jobId}' created.")]
     public static partial void BlobPurgeJobCreated(this ILogger logger, string? jobId);
 
-    [LoggerMessage(EventId = 811, Level = LogLevel.Debug, Message = "Blob payload auto-purge job '{jobId}' is already active. Its batch size was updated to the requested one if it differed, and its orchestrator was re-signalled, which starts one only if none is running.")]
+    [LoggerMessage(EventId = 811, Level = LogLevel.Debug, Message = "Blob payload auto-purge job '{jobId}' is already active. Its configuration was updated if needed and its current generation's runner was re-signalled; older generations may still be retiring.")]
     public static partial void BlobPurgeJobAlreadyRunning(this ILogger logger, string? jobId);
 
-    [LoggerMessage(EventId = 812, Level = LogLevel.Information, Message = "Blob payload auto-purge orchestrator for job '{jobId}' stopping; job status is {status}.")]
-    public static partial void BlobPurgeJobOrchestratorStopping(this ILogger logger, string? jobId, string status);
+    [LoggerMessage(EventId = 812, Level = LogLevel.Information, Message = "Blob payload auto-purge orchestrator for job '{jobId}' stopping; reason: {reason}.")]
+    public static partial void BlobPurgeJobOrchestratorStopping(this ILogger logger, string? jobId, string reason);
 
     [LoggerMessage(EventId = 813, Level = LogLevel.Warning, Message = "Blob payload auto-purge quarantined a payload; cause '{cause}', storage code '{storageCode}'. The failure is deterministic and cannot succeed on a retry. The backend preserves the tombstone row and its token as evidence and stops polling it. The reported result carries the disposition alone, so this log is the only record of the cause.")]
     public static partial void BlobPurgeDeleteQuarantined(this ILogger logger, string cause, string? storageCode);
@@ -46,7 +46,7 @@ static partial class Logs
     [LoggerMessage(EventId = 827, Level = LogLevel.Warning, Message = "Blob payload auto-purge job '{jobId}' was disabled because the backend does not implement the large-payload purge RPCs: {detail}. This is expected against an older backend build or a stale local emulator image. Upgrade the Durable Task backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator'), then enable auto-purge again; the job stays disabled until something enables it.")]
     public static partial void BlobPurgeJobMarkedUnsupported(this ILogger logger, string? jobId, string detail);
 
-    [LoggerMessage(EventId = 830, Level = LogLevel.Error, Message = "Blob payload auto-purge for job '{jobId}' stopped because the backend does not implement the large-payload purge RPCs: {detail}. The job is now disabled and will not delete blobs. Upgrade the Durable Task backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator'), then enable auto-purge again to resume.")]
+    [LoggerMessage(EventId = 830, Level = LogLevel.Error, Message = "Blob payload auto-purge runner for job '{jobId}' is stopping because the backend does not implement the large-payload purge RPCs: {detail}. It will request disabling its activation; a newer activation is not affected. Upgrade the Durable Task backend (or re-pull 'mcr.microsoft.com/dts/dts-emulator'), then enable auto-purge again to resume.")]
     public static partial void BlobPurgeBackendUnsupported(this ILogger logger, string? jobId, string detail);
 
     // Deliberately generic about WHICH precondition. The backend answers FailedPrecondition for more than one

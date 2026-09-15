@@ -53,13 +53,29 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// tombstones already fetched and deletes already in flight run to completion first.
     /// </para>
     /// <para>
+    /// Each activation gets a new generation-specific runner ID. Re-enabling need not wait for an older runner
+    /// to finish: its in-flight cycle may overlap the new generation, but it exits when its next state read
+    /// observes the change. Repeated enables while active retain the current generation and can resize its
+    /// batches or restart a completed runner. This is one logical job per task hub, not a strict execution
+    /// mutex; diagnostic progress counts may include duplicated work. Individual fetch/report RPCs and blob
+    /// delete attempts are bounded, but activity/entity scheduling delays mean shutdown has no global
+    /// wall-clock guarantee.
+    /// </para>
+    /// <para>
+    /// When upgrading from a preview without generations, disable the job and wait for its existing runner to
+    /// finish, update every worker that can process this task hub's purge entity and orchestrations, then
+    /// explicitly re-enable. Missing generation fields remain readable by updated workers, but old worker
+    /// binaries do not enforce the generation checks and may discard new state fields. Mixing those preview
+    /// worker versions during activation is not supported.
+    /// </para>
+    /// <para>
     /// If the setting succeeds and the entity signal then fails or is cancelled, the setting is NOT rolled back
     /// and this throws. Rolling back would be its own operation that can fail in turn, and it would be wrong as
     /// often as it was right - a concurrent caller may have set the value the rollback would undo. Retry the
     /// same call instead; it converges from any partial state.
     /// </para>
     /// <para>
-    /// There is no coordination between callers: no lease, no owner, no fencing. Two clients calling with
+    /// There is no coordination between callers: no caller lease or owner. Two clients calling with
     /// different values race, and the last write wins for the backend setting and, independently, for the job
     /// entity - so a sufficiently unlucky interleaving can leave the setting from one caller with the job state
     /// from the other. Deciding who calls this, and when, is the caller's responsibility.

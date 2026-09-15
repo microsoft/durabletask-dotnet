@@ -24,6 +24,14 @@ internal sealed class GetLargePayloadTombstonesActivity(
     readonly LargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<GetLargePayloadTombstonesActivity> logger = Check.NotNull(logger);
 
+    /// <summary>
+    /// Gets or sets the timeout for one backend RPC attempt.
+    /// </summary>
+    /// <remarks>
+    /// This does not bound stop latency from activity scheduling, retries, or calls made by older workers.
+    /// </remarks>
+    internal TimeSpan RpcTimeout { get; set; } = TimeSpan.FromSeconds(BlobPurgeConstants.RpcTimeoutSeconds);
+
     /// <inheritdoc/>
     public override async Task<List<LargePayloadTombstone>> RunAsync(TaskActivityContext context, int input)
     {
@@ -36,8 +44,10 @@ internal sealed class GetLargePayloadTombstonesActivity(
         LP.GetLargePayloadTombstonesResponse response;
         try
         {
-            response = await this.client.GetLargePayloadTombstonesAsync(
-                new LP.GetLargePayloadTombstonesRequest { Limit = input });
+            using var call = this.client.GetLargePayloadTombstonesAsync(
+                new LP.GetLargePayloadTombstonesRequest { Limit = input },
+                deadline: DateTime.UtcNow.Add(this.RpcTimeout));
+            response = await call;
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
@@ -56,11 +66,12 @@ internal sealed class GetLargePayloadTombstonesActivity(
         catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
         {
             // Mixed-rollout guard: an older backend build (or a stale local emulator image) does not implement
-            // this RPC. Surfacing NotImplementedException lets the orchestrator disable the job instead of
-            // retrying an operation that can never succeed - see BlobPurgeJobOrchestrator's handling of it.
+            // this RPC. Surfacing NotImplementedException lets the orchestrator request disabling its activation
+            // instead of retrying an operation that can never succeed. A stale activation's request is ignored.
             throw new NotImplementedException(
                 "The Durable Task backend does not implement the GetLargePayloadTombstones RPC required for " +
-                "large-payload auto-purge. Auto-purge is now disabled. Upgrade the backend (or re-pull " +
+                "large-payload auto-purge. This runner will request disabling its activation. " +
+                "Upgrade the backend (or re-pull " +
                 "'mcr.microsoft.com/dts/dts-emulator'), then call SetLargePayloadAutoPurgeAsync(true, ...) " +
                 $"again to re-enable it. Backend detail: {e.Status.Detail}",
                 e);

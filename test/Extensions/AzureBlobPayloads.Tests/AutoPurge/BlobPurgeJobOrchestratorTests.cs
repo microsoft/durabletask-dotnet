@@ -71,8 +71,10 @@ public class BlobPurgeJobOrchestratorTests
         this.logger.Logs.Should().Contain(entry => entry.Message.Contains("stopping"));
     }
 
-    [Fact]
-    public async Task RunAsync_WhenBackendDoesNotImplementPurgeRpcs_DisablesJobAndExits()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("current-generation")]
+    public async Task RunAsync_WhenBackendDoesNotImplementPurgeRpcs_DisablesJobAndExits(string? generation)
     {
         // Arrange - the fetch activity surfaced a gRPC Unimplemented as NotImplementedException (mixed rollout /
         // stale emulator). The orchestrator must disable the job durably and exit its perpetual loop, rather
@@ -91,7 +93,10 @@ public class BlobPurgeJobOrchestratorTests
                 nameof(BlobPurgeJob.Get),
                 It.IsAny<object?>(),
                 It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250 });
+            .ReturnsAsync(new BlobPurgeJobState
+            {
+                Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250, Generation = generation,
+            });
 
         entities
             .Setup(e => e.CallEntityAsync(
@@ -111,7 +116,7 @@ public class BlobPurgeJobOrchestratorTests
 
         // Act
         object? result = await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100));
+            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100) { Generation = generation });
 
         // Assert - disabled through an AWAITED MarkUnsupported so the write is durable before the loop exits, a
         // dedicated diagnostic is logged (not the generic cycle-failed one), and RunAsync returns rather than
@@ -120,10 +125,21 @@ public class BlobPurgeJobOrchestratorTests
         entities.Verify(
             e => e.CallEntityAsync(
                 JobEntityId,
-                nameof(BlobPurgeJob.MarkUnsupported),
+                generation == null ? nameof(BlobPurgeJob.MarkUnsupported) : nameof(BlobPurgeJob.MarkGenerationUnsupported),
                 It.IsAny<object?>(),
                 It.IsAny<CallEntityOptions?>()),
             Times.Once);
+        if (generation != null)
+        {
+            entities.Verify(
+                e => e.CallEntityAsync(
+                    JobEntityId,
+                    nameof(BlobPurgeJob.MarkGenerationUnsupported),
+                    It.Is<BlobPurgeUnsupportedRequest>(request => request.Generation == generation),
+                    It.IsAny<CallEntityOptions?>()),
+                Times.Once);
+        }
+
         this.logger.Logs.Should().Contain(
             entry => entry.Message.Contains("does not implement the large-payload purge RPCs"));
         this.AssertNoCycleFailed();

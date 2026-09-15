@@ -120,6 +120,7 @@ public class BlobPurgeJobTests
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
+            Generation = "existing-generation",
             LastModifiedAt = configuredAt,
             PurgeBatchSize = 250,
         };
@@ -202,11 +203,9 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task Run_WhenActive_SchedulesOrchestratorAtTheFixedInstanceId()
+    public async Task Run_WhenLegacyActive_SchedulesOrchestratorAtTheFixedInstanceId()
     {
-        // Arrange - the fixed instance ID is the mechanism the whole restart story rests on. It is what lets the
-        // backend recognize a start as targeting the existing orchestrator, and therefore discard it while that
-        // orchestrator is alive instead of running a second one alongside it.
+        // Arrange - generationless state retains the legacy fixed ID until an explicit Create promotes it.
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
@@ -408,8 +407,7 @@ public class BlobPurgeJobTests
     [Fact]
     public async Task MarkUnsupported_WhenActive_DisablesJobAndRecordsDetail()
     {
-        // Arrange - a running job whose fetch/report activity just surfaced a gRPC Unimplemented. The job must
-        // move to a status Create refuses to revive, and the detail is retained so an operator can see why.
+        // Arrange - a legacy running job whose fetch/report activity surfaced Unimplemented; retain its detail.
         BlobPurgeJobState existing = new()
         {
             Status = BlobPurgeJobStatus.Active,
@@ -443,8 +441,8 @@ public class BlobPurgeJobTests
     [Fact]
     public async Task MarkUnsupported_WhenAlreadyUnsupported_LeavesStateUntouched()
     {
-        // Arrange - a second replica reporting the same unsupported backend before the first orchestrator has
-        // exited. The repeat must be a no-op so LastModifiedAt keeps meaning "when the job was disabled" and the
+        // Arrange - a duplicate callback reporting the same unsupported backend. The repeat must be a no-op so
+        // LastModifiedAt keeps meaning "when the job was disabled" and the
         // original detail is not overwritten by a later, possibly less specific, one.
         DateTimeOffset disabledAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         BlobPurgeJobState existing = new()

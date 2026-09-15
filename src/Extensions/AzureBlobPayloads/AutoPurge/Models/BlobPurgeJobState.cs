@@ -14,6 +14,11 @@ public sealed class BlobPurgeJobState
     public BlobPurgeJobStatus Status { get; set; }
 
     /// <summary>
+    /// Gets or sets the current activation's opaque generation. A null value identifies legacy state.
+    /// </summary>
+    public string? Generation { get; set; }
+
+    /// <summary>
     /// Gets or sets the time when the job was first created.
     /// </summary>
     public DateTimeOffset? CreatedAt { get; set; }
@@ -32,7 +37,8 @@ public sealed class BlobPurgeJobState
     public DateTimeOffset? LastModifiedAt { get; set; }
 
     /// <summary>
-    /// Gets or sets the total number of payload blobs the job has purged.
+    /// Gets or sets the diagnostic count of reported terminal-success outcomes. This is not a distinct blob
+    /// count: already-absent or unowned payloads and overlapping or retried work can contribute.
     /// </summary>
     public long PurgedCount { get; set; }
 

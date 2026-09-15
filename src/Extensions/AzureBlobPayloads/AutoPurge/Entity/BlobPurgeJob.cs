@@ -38,34 +38,25 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             // very first Create would be the only one the job ever used, and a batch size the backend rejects
             // would wedge it permanently.
             //
-            // Written only when the value actually differs, which is what keeps LastModifiedAt tracking real
-            // changes rather than the time of the last call. An entity written by a build that predates this
-            // field carries zero, which differs from any real size, so the first Create after an upgrade still
-            // repairs it.
-            if (this.State.PurgeBatchSize != purgeBatchSize)
+            // Resizing or promoting legacy state is a real change. Repeated enables of a modern activation
+            // preserve LastModifiedAt and its generation.
+            if (this.State.PurgeBatchSize != purgeBatchSize || this.State.Generation is null)
             {
                 this.State.PurgeBatchSize = purgeBatchSize;
+                this.State.Generation ??= Guid.NewGuid().ToString("N");
                 this.State.LastModifiedAt = DateTimeOffset.UtcNow;
             }
 
             logger.BlobPurgeJobAlreadyRunning(context.Id.Key);
 
-            // Run is re-signalled even though the job is already active, and this is what lets a repeated call
-            // heal a job whose orchestrator has died. The signal is deliberately blind. An entity-initiated
-            // start carries no reuse policy, so the backend decides its fate: it discards the start while the
-            // target instance exists in any non-completed status, and purges and replaces it once the instance
-            // has completed, terminated, failed or been canceled. A healthy orchestrator is therefore left
-            // strictly alone and only a dead one is replaced.
-            //
-            // Being blind is the point, not a shortcut. The backend reaches that decision atomically, so
-            // delegating it removes the race entirely. Checking the orchestrator's status here and signalling
-            // only when it looked dead would reintroduce the window in which it dies - or recovers - between
-            // the read and the signal, which is strictly worse than not asking.
+            // Repeated enables reuse this generation's ID: the backend preserves a running instance and can
+            // replace a completed one. Promoting legacy state above gives it a new generation only once.
             context.SignalEntity(context.Id, nameof(this.Run));
             return;
         }
 
         this.State.Status = BlobPurgeJobStatus.Active;
+        this.State.Generation = Guid.NewGuid().ToString("N");
         this.State.PurgeBatchSize = purgeBatchSize;
         this.State.CreatedAt ??= DateTimeOffset.UtcNow;
         this.State.LastModifiedAt = DateTimeOffset.UtcNow;
@@ -82,12 +73,10 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The orchestrator runs under a fixed instance ID, which is what keeps the singleton a singleton. No reuse
-    /// policy is passed, and none can be: the entity's start action has no field to carry one, so anything set
-    /// here would be dropped before it reached the wire. That default is the behaviour the job relies on rather
-    /// than an omission - the backend discards a start aimed at an instance that already exists in a
-    /// non-completed status, and replaces the instance only once it has completed, terminated, failed or been
-    /// canceled. Signalling this operation is therefore always safe, whatever the orchestrator is doing.
+    /// Each activation has its own runner ID. Re-enabling therefore does not lose its start to an older
+    /// activation that is still stopping. Repeated Run signals target the current generation and the backend
+    /// deduplicates them while that runner is alive. Legacy generationless state keeps its original fixed ID.
+    /// Older in-flight cycles may overlap this generation; generation checks retire them on their next read.
     /// </para>
     /// <para>
     /// This operation deliberately writes no state. It schedules an orchestrator and nothing more, so touching
@@ -103,12 +92,17 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
             return;
         }
 
-        string instanceId = BlobPurgeConstants.GetOrchestratorInstanceId(context.Id.Key);
+        string instanceId = BlobPurgeConstants.GetOrchestratorInstanceId(context.Id.Key, this.State.Generation);
         StartOrchestrationOptions startOrchestrationOptions = new(instanceId);
 
         context.ScheduleNewOrchestration(
             new TaskName(nameof(BlobPurgeJobOrchestrator)),
-            new BlobPurgeJobRunRequest(context.Id, this.State.PurgeBatchSize),
+            new BlobPurgeJobRunRequest(
+                context.Id,
+                this.State.PurgeBatchSize > 0 ? this.State.PurgeBatchSize : BlobPurgeConstants.DefaultBatchSize)
+            {
+                Generation = this.State.Generation,
+            },
             startOrchestrationOptions);
     }
 
@@ -119,9 +113,8 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// <para>
     /// The perpetual orchestrator is deliberately not terminated here, and this operation does not touch its
     /// instance ID at all. The orchestrator reads this entity at the top of every cycle and exits on its own
-    /// once the job is no longer <see cref="BlobPurgeJobStatus.Active"/>, so shutdown is cooperative: there is
-    /// no window in which one party terminates an orchestrator that the other believes is healthy, and the
-    /// in-flight cycle finishes rather than being cut off part-way through a batch of deletes.
+    /// once the job is no longer <see cref="BlobPurgeJobStatus.Active"/> or its generation changes. Shutdown is
+    /// cooperative: the in-flight cycle may finish alongside a re-enabled generation rather than being cut off.
     /// </para>
     /// <para>
     /// <see cref="BlobPurgeJobState.CreatedAt"/>, <see cref="BlobPurgeJobState.PurgedCount"/> and
@@ -172,27 +165,37 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// <param name="detail">A human-readable description of why the backend is unsupported.</param>
     public void MarkUnsupported(TaskEntityContext context, string detail)
     {
-        if (this.State.Status == BlobPurgeJobStatus.Unsupported)
+        // Keep legacy string operation inputs dispatchable, but never let them disable a modern activation.
+        if (this.State.Generation is not null || this.State.Status != BlobPurgeJobStatus.Active)
         {
-            // Idempotent no-op. The orchestrator awaits this call and then exits, but concurrent orchestrators
-            // (one per replica, all hitting the same unsupported backend) can each report before the others
-            // exit. Leaving the state untouched on the repeat keeps LastModifiedAt meaning "when the job was
-            // disabled" rather than "when the last replica noticed", mirroring the guard discipline on Stop.
             return;
         }
 
-        this.State.Status = BlobPurgeJobStatus.Unsupported;
-        this.State.LastError = detail;
-        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
-
-        logger.BlobPurgeJobMarkedUnsupported(context.Id.Key, detail);
+        this.SetUnsupported(context, detail);
     }
 
     /// <summary>
-    /// Records progress after a purge cycle completes.
+    /// Disables only the active generation that observed an unsupported backend.
     /// </summary>
     /// <param name="context">The entity context.</param>
-    /// <param name="purgedCount">The number of blobs purged in the cycle.</param>
+    /// <param name="request">The generation and observed failure detail.</param>
+    public void MarkGenerationUnsupported(TaskEntityContext context, BlobPurgeUnsupportedRequest request)
+    {
+        Check.NotNull(request);
+        if (request.Generation is null || this.State.Status != BlobPurgeJobStatus.Active
+            || !string.Equals(this.State.Generation, request.Generation, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        this.SetUnsupported(context, request.Detail);
+    }
+
+    /// <summary>
+    /// Records diagnostic progress after a purge cycle, including work completed by a retiring generation.
+    /// </summary>
+    /// <param name="context">The entity context.</param>
+    /// <param name="purgedCount">The reported terminal-success count; duplicates are not deduplicated.</param>
     public void RecordPurged(TaskEntityContext context, long purgedCount)
     {
         this.State.PurgedCount += purgedCount;
@@ -205,4 +208,12 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// <param name="context">The entity context.</param>
     /// <returns>The current job state.</returns>
     public BlobPurgeJobState Get(TaskEntityContext context) => this.State;
+
+    void SetUnsupported(TaskEntityContext context, string detail)
+    {
+        this.State.Status = BlobPurgeJobStatus.Unsupported;
+        this.State.LastError = detail;
+        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+        logger.BlobPurgeJobMarkedUnsupported(context.Id.Key, detail);
+    }
 }

@@ -59,18 +59,17 @@ internal sealed class GetLargePayloadTombstonesActivity(
             // The backend declined this fetch because a task-hub precondition is not met - auto-purge is
             // disabled, or the hub is being deleted. Return empty and mutate nothing durable: this observation
             // can race with a re-enable, so recording it would let a stale decline outlive the newer state.
-            // The Stop signal, read from the entity on the next cycle, is what authoritatively ends the job.
+            // The eternal runner idles and retries; the backend setting remains authoritative.
             this.logger.BlobPurgeFetchPreconditionFailed(e.Status.Detail);
             return new List<LargePayloadTombstone>();
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
         {
             // Mixed-rollout guard: an older backend build (or a stale local emulator image) does not implement
-            // this RPC. Surfacing NotImplementedException lets the orchestrator request disabling its activation
-            // instead of retrying an operation that can never succeed. A stale activation's request is ignored.
+            // this RPC. The orchestrator waits for an explicit enable event instead of retrying indefinitely.
             throw new NotImplementedException(
                 "The Durable Task backend does not implement the GetLargePayloadTombstones RPC required for " +
-                "large-payload auto-purge. This runner will request disabling its activation. " +
+                "large-payload auto-purge. The runner will wait for an explicit enable event. " +
                 "Upgrade the backend (or re-pull " +
                 "'mcr.microsoft.com/dts/dts-emulator'), then call SetLargePayloadAutoPurgeAsync(true, ...) " +
                 $"again to re-enable it. Backend detail: {e.Status.Detail}",

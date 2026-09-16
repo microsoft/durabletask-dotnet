@@ -78,11 +78,10 @@ internal sealed class ReportLargePayloadPurgeResultsActivity(
         catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
         {
             // Mixed-rollout guard: an older backend build (or a stale local emulator image) does not implement
-            // this RPC. Surfacing NotImplementedException lets the orchestrator request disabling its activation
-            // instead of retrying an operation that can never succeed. A stale activation's request is ignored.
+            // this RPC. The orchestrator waits for an explicit enable event instead of retrying indefinitely.
             throw new NotImplementedException(
                 "The Durable Task backend does not implement the ReportLargePayloadPurgeResults RPC required " +
-                "for large-payload auto-purge. This runner will request disabling its activation. " +
+                "for large-payload auto-purge. The runner will wait for an explicit enable event. " +
                 "Upgrade the backend (or re-pull " +
                 "'mcr.microsoft.com/dts/dts-emulator'), then call SetLargePayloadAutoPurgeAsync(true, ...) " +
                 $"again to re-enable it. Backend detail: {e.Status.Detail}",

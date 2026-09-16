@@ -69,9 +69,7 @@ public class PurgeActivityBackendStatusTests
         // Act
         List<LargePayloadTombstone> tombstones = await activity.RunAsync(null!, 100);
 
-        // Assert - an empty batch routes the orchestrator to its idle timer, after which it rechecks its
-        // durable entity state: an authoritative Stop ends the job, and a re-enable that lands in the
-        // meantime is honoured instead of being overridden by this stale observation.
+        // Assert - an empty batch routes the eternal orchestrator to its idle timer before it fetches again.
         tombstones.Should().BeEmpty();
         (LogLevel Level, string Message) entry = logger.Logs.Should().ContainSingle().Subject;
         entry.Level.Should().Be(LogLevel.Information);

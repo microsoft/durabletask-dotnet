@@ -90,17 +90,6 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 opt.SetCallInvokerPublisher(purgeInvoker.Rebind);
             });
 
-        // The auto-purge job is entity-driven: its orchestrator drives the BlobPurgeJob entity, and an
-        // orchestrator that touches entities with support off throws (TaskOrchestrationContextWrapper). Enable
-        // it whenever externalized payloads are configured - mirroring the client side - so the job can run
-        // whenever a client has turned the feature on, whichever host that client lives in.
-        builder.Services
-            .AddOptions<DurableTaskWorkerOptions>(builder.Name)
-            .Configure(options =>
-            {
-                options.EnableEntitySupport = true;
-            });
-
         // The purge activities talk to the backend over the worker's OWN transport, so a worker-only host
         // (which never registers a DurableTaskClient) can still run the job. The worker's transport is not
         // fixed for the life of the process - it recreates its channel when the current one is wedged, and the
@@ -119,13 +108,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         builder.Services.TryAddSingleton(
             sp => new LargePayloadPurgeClient(sp.GetRequiredService<RebindableCallInvoker>()));
 
-        // Register the entity/orchestrator/activities that run the singleton auto-purge job. These are ALWAYS
+        // Register the orchestrator/activities that run the singleton auto-purge job. These are ALWAYS
         // registered (never gated on configuration) so that a job a client has turned on always has something
         // to execute here. Workers never call SetLargePayloadAutoPurge - the setting is owned by the explicit
         // client API - but they do fetch and report via the worker's LargePayloadPurgeClient above.
         builder.AddTasks(r =>
         {
-            r.AddEntity<BlobPurgeJob>();
             r.AddOrchestrator<BlobPurgeJobOrchestrator>();
             r.AddActivity<GetLargePayloadTombstonesActivity>();
             r.AddActivity<DeleteExternalBlobActivity>();

@@ -1,475 +1,337 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using FluentAssertions;
+using Google.Protobuf;
+using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Entities;
-using Microsoft.DurableTask.Worker;
-using Xunit;
+using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Worker.Grpc;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.AutoPurge;
 
+/// <summary>
+/// Drives the production orchestrator through the real protobuf runner, shim and replay executor.
+/// </summary>
 public class BlobPurgeJobOrchestratorTests
 {
-    const string Generation = "current-generation";
-    static readonly EntityInstanceId JobEntityId = new(nameof(BlobPurgeJob), BlobPurgeConstants.JobId);
-
-    readonly List<int> requested = [];
-    readonly TestLogger<BlobPurgeJobOrchestrator> logger = new();
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public async Task RunAsync_WithoutGeneration_RejectsInputAsync(string? generation)
+    [Fact]
+    public void EmptyFetch_WaitsDurably_AndConfigurationInterruptsTimer()
     {
-        // Arrange - deserialization can produce missing/null values despite non-nullable C# declarations.
-        DataConverter converter = new DurableTaskWorkerOptions().DataConverter;
-        string json = generation is null
-            ? converter.Serialize(new { JobEntityId, PurgeBatchSize = 250 })!
-            : converter.Serialize(new { JobEntityId, PurgeBatchSize = 250, Generation = generation })!;
-        BlobPurgeJobRunRequest input = converter.Deserialize<BlobPurgeJobRunRequest>(json)!;
-        Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = generation, PurgeBatchSize = 250 });
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(100));
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
 
         // Act
-        Func<Task> act = () => new BlobPurgeJobOrchestrator().RunAsync(context.Object, input);
+        driver.Complete(fetch, Array.Empty<LargePayloadTombstone>());
+        P.OrchestratorAction timer = Assert.Single(driver.Response.Actions);
 
         // Assert
-        await act.Should().ThrowAsync<ArgumentException>();
-        context.Invocations.Should().BeEmpty();
+        Assert.NotNull(timer.CreateTimer);
+        Assert.Equal(driver.Now.AddMinutes(1), timer.CreateTimer.FireAt.ToDateTime());
+        Assert.Contains("\"Status\":\"Waiting\"", driver.Response.CustomStatus);
+        driver.Turn(Driver.Configure(777));
+        Assert.Equal("[777]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+        Assert.DoesNotContain(driver.Response.Actions, a => a.CreateTimer is not null || a.CompleteOrchestration is not null);
     }
 
     [Fact]
-    public async Task RunAsync_UsesBatchSizeFromEntity_NotFromInput()
+    public void BufferedAndInFlightConfiguration_UsesLatestValueOnNextCycle()
     {
-        // Arrange - the orchestrator is perpetual, so its input is fixed at creation and carried verbatim
-        // through every continue-as-new. Reading the batch size from the input would pin the value written by
-        // the very first Create for the life of the job, which is what made a configuration change impossible
-        // to apply. The entity is the authority.
-        Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 777 });
+        // Arrange - events received after execution starts apply at the next cycle boundary.
+        Driver driver = new(new BlobPurgeJobRunRequest(100), Driver.Configure(200), Driver.Configure(300));
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        Assert.Equal("[100]", fetch.ScheduleTask.Input);
 
-        // Act
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
+        // Act - the first event completed the one waiter; later events are buffered before its replacement exists.
+        driver.Turn(Driver.Configure(400), Driver.Configure(500));
+        Assert.Empty(driver.Response.Actions);
+        driver.Complete(fetch, Array.Empty<LargePayloadTombstone>());
+
+        // Assert - cancellation does not leave an extra active idle timer or a competing configuration waiter.
+        Assert.Equal("[500]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+        driver.Turn(Driver.Configure(600));
+        Assert.Empty(driver.Response.Actions);
+    }
+
+    [Fact]
+    public void ConfigurationAtContinueAsNew_IsAppliedOrPreserved_AndReplays()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(100, ProcessedCycles: 4, PurgedCount: 9));
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        driver.Complete(fetch, Array.Empty<LargePayloadTombstone>());
+        P.OrchestratorAction timer = Assert.Single(driver.Response.Actions);
+
+        // Act - first event is delivered to the live waiter; a later event in this turn must survive CAN too.
+        driver.Turn(Driver.Configure(700), Driver.TimerFired(timer), Driver.Configure(800));
+        P.CompleteOrchestrationAction completed = Assert.Single(
+            driver.Response.Actions, a => a.CompleteOrchestration is not null).CompleteOrchestration;
 
         // Assert
-        this.AssertNoCycleFailed();
-        this.requested.Should().Equal(777);
+        Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, completed.OrchestrationStatus);
+        BlobPurgeJobRunRequest next = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(completed.Result)!;
+        Assert.Equal(700, next.PurgeBatchSize);
+        Assert.Equal(0, next.ProcessedCycles);
+        Assert.Equal(9, next.PurgedCount);
+        P.HistoryEvent forwarded = Assert.Single(completed.CarryoverEvents);
+        Assert.Equal(BlobPurgeConstants.SetBatchSizeEvent, forwarded.EventRaised.Name);
+        Assert.Equal("800", forwarded.EventRaised.Input);
+        Driver nextDriver = new(next, forwarded.Clone());
+        P.OrchestratorAction nextFetch = nextDriver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        nextDriver.Complete(nextFetch, Array.Empty<LargePayloadTombstone>());
+        Assert.Equal("[800]", nextDriver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+        Assert.Equal(driver.Response.ToByteArray(), driver.ReplayLastTurn().ToByteArray());
+    }
+
+    [Fact]
+    public void FiveEmptyCycles_ContinueAsNewWithoutLosingCurrentBatch()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250));
+
+        // Act
+        for (int i = 0; i < 5; i++)
+        {
+            driver.Complete(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)), Array.Empty<LargePayloadTombstone>());
+            driver.Turn(Driver.TimerFired(Assert.Single(driver.Response.Actions)));
+        }
+
+        // Assert
+        P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+        Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, can.OrchestrationStatus);
+        BlobPurgeJobRunRequest input = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
+        Assert.Equal(250, input.PurgeBatchSize);
+        Assert.Equal(0, input.ProcessedCycles);
+    }
+
+    [Fact]
+    public void ConfigurationDeliveredDuringFinalFetch_IsCarriedBeforeCan()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250, ProcessedCycles: 4));
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+
+        // Act
+        driver.Turn(Driver.Configure(400), Driver.Configure(500));
+        driver.Complete(fetch, Array.Empty<LargePayloadTombstone>());
+
+        // Assert - both the delivered waiter result and buffered event are consumed before history rollover.
+        P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+        Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, can.OrchestrationStatus);
+        BlobPurgeJobRunRequest input = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
+        Assert.Equal(500, input.PurgeBatchSize);
+        Assert.Empty(can.CarryoverEvents);
+    }
+
+    [Fact]
+    public void TransientActivityFailure_BacksOffAndRetriesWithoutCompleting()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250));
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+
+        // Act - after activity retry exhaustion, a transient error must not enter unsupported wait.
+        driver.Turn(Driver.ActivityFailed(fetch, new TimeoutException("transient")));
+
+        // Assert
+        P.OrchestratorAction timer = Assert.Single(driver.Response.Actions);
+        Assert.NotNull(timer.CreateTimer);
+        Assert.Contains("Waiting", driver.Response.CustomStatus);
+        driver.Turn(Driver.TimerFired(timer));
+        driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        Assert.DoesNotContain(driver.Response.Actions, a => a.CompleteOrchestration is not null);
+    }
+
+    [Theory]
+    [InlineData(LargePayloadPurgeDisposition.Deleted)]
+    [InlineData(LargePayloadPurgeDisposition.Retry)]
+    [InlineData(LargePayloadPurgeDisposition.Quarantined)]
+    public void Fanout_PreservesChunkBoundAndOpaqueTokens(LargePayloadPurgeDisposition disposition)
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(500, PurgedCount: 7));
+        LargePayloadTombstone[] batch = Enumerable.Range(0, 500)
+            .Select(i => new LargePayloadTombstone($"opaque-row-{i}", $"blob:v2:https://test.invalid/c/{i}")).ToArray();
+
+        // Act
+        driver.Complete(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)), batch);
+        int chunks = 0;
+        List<string> storageTokens = [];
+        while (driver.Response.Actions.Any(a => a.ScheduleTask?.Name == nameof(DeleteExternalBlobActivity)))
+        {
+            P.OrchestratorAction[] wave = driver.Response.Actions.ToArray();
+            Assert.InRange(wave.Length, 1, 4);
+            foreach (P.OrchestratorAction action in wave)
+            {
+                string[][] inputs = JsonDataConverter.Default.Deserialize<string[][]>(action.ScheduleTask.Input)!;
+                Assert.Equal(50, inputs[0].Length);
+                storageTokens.AddRange(inputs[0]);
+            }
+            chunks += wave.Length;
+            driver.Turn(wave.Select(a => Driver.ActivityCompleted(a,
+                Enumerable.Repeat(new BlobPurgeOutcome(disposition), 50).ToArray())).ToArray());
+        }
+        P.OrchestratorAction report = driver.SingleActivity(nameof(ReportLargePayloadPurgeResultsActivity));
+        LargePayloadPurgeResult[][] reports = JsonDataConverter.Default.Deserialize<LargePayloadPurgeResult[][]>(report.ScheduleTask.Input)!;
+        driver.Complete(report, null);
+
+        // Assert
+        Assert.Equal(10, chunks);
+        Assert.Equal(batch.Select(t => t.PayloadToken), storageTokens);
+        Assert.Equal(batch.Select(t => t.TombstoneToken), reports[0].Select(r => r.TombstoneToken));
+        Assert.All(reports[0], r => Assert.Equal(disposition, r.Disposition));
+        Assert.Contains($"\"PurgedCount\":{(disposition == LargePayloadPurgeDisposition.Deleted ? 507 : 7)}", driver.Response.CustomStatus);
+        if (disposition == LargePayloadPurgeDisposition.Retry)
+        {
+            Assert.NotNull(Assert.Single(driver.Response.Actions).CreateTimer);
+        }
+        else
+        {
+            driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        }
+    }
+
+    [Fact]
+    public void UnsupportedBackend_WaitsForExplicitEnable_WithoutCompleting()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250));
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+
+        // Act
+        driver.Turn(Driver.ActivityFailed(fetch, new NotImplementedException("backend unsupported")));
+
+        // Assert
+        Assert.Empty(driver.Response.Actions);
+        Assert.Contains("BackendUnsupported", driver.Response.CustomStatus);
+        Assert.Equal(driver.Response.ToByteArray(), driver.ReplayLastTurn().ToByteArray());
+        driver.Turn(Driver.Configure(400));
+        Assert.Equal("[400]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+    }
+
+    [Fact]
+    public void UnsupportedAtCan_IsCarriedAndWaitsWithoutFetching()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250, ProcessedCycles: 4));
+
+        // Act
+        driver.Turn(Driver.ActivityFailed(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)),
+            new NotImplementedException("unsupported")));
+        P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+        BlobPurgeJobRunRequest next = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
+        Driver continued = new(next);
+
+        // Assert
+        Assert.True(next.BackendUnsupported);
+        Assert.Empty(continued.Response.Actions);
+        Assert.Contains("BackendUnsupported", continued.Response.CustomStatus);
+        continued.Turn(Driver.Configure(333));
+        Assert.Equal("[333]", continued.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
     }
 
     [Theory]
     [InlineData(0)]
-    [InlineData(-1)]
     [InlineData(1001)]
-    public async Task RunAsync_WhenEntityBatchSizeIsInvalid_StopsWithoutFetchingAsync(int batchSize)
+    public void InvalidInputOrConfiguration_FailsExplicitly(int batch)
     {
         // Arrange
-        Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = batchSize });
+        Driver invalidInput = new(new BlobPurgeJobRunRequest(batch));
+        Driver invalidEvent = new(new BlobPurgeJobRunRequest(250), Driver.Configure(batch));
+        invalidEvent.Complete(invalidEvent.SingleActivity(nameof(GetLargePayloadTombstonesActivity)), Array.Empty<LargePayloadTombstone>());
 
-        // Act
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
-
-        // Assert
-        this.AssertNoCycleFailed();
-        this.requested.Should().BeEmpty();
-        this.logger.Logs.Should().Contain(entry => entry.Message.Contains("invalid batch size"));
-    }
-
-    [Fact]
-    public async Task RunAsync_WhenJobIsStopped_ExitsWithoutFetching()
-    {
-        // Arrange - Stop moves the entity off Active without touching this orchestrator, so the exit is the
-        // orchestrator's own decision on its own schedule. Nothing must be fetched on a stopped job.
-        Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending, PurgeBatchSize = 777 });
-
-        // Act
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
-
-        // Assert - an empty fetch list is also what a broken mock produces, so the stopping log is asserted
-        // too: it is the only evidence that the orchestrator read the state and chose to exit.
-        this.AssertNoCycleFailed();
-        this.requested.Should().BeEmpty();
-        this.logger.Logs.Should().Contain(entry => entry.Message.Contains("stopping"));
-    }
-
-    [Fact]
-    public async Task RunAsync_WhenBackendDoesNotImplementPurgeRpcs_DisablesJobAndExits()
-    {
-        // Arrange - the fetch activity surfaced a gRPC Unimplemented as NotImplementedException (mixed rollout /
-        // stale emulator). The orchestrator must disable the job durably and exit its perpetual loop, rather
-        // than logging a generic cycle failure and retrying on every backoff forever.
-        Mock<TaskOrchestrationContext> context = new();
-        Mock<TaskOrchestrationEntityFeature> entities = new();
-
-        context.Setup(c => c.Entities).Returns(entities.Object);
-        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
-        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        entities
-            .Setup(e => e.CallEntityAsync<BlobPurgeJobState?>(
-                It.IsAny<EntityInstanceId>(),
-                nameof(BlobPurgeJob.Get),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState
-            {
-                Status = BlobPurgeJobStatus.Active, PurgeBatchSize = 250, Generation = Generation,
-            });
-
-        entities
-            .Setup(e => e.CallEntityAsync(
-                It.IsAny<EntityInstanceId>(),
-                It.IsAny<string>(),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .Returns(Task.CompletedTask);
-
-        context
-            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
-                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
-            .ThrowsAsync(new TaskFailedException(
-                nameof(GetLargePayloadTombstonesActivity),
-                1,
-                new NotImplementedException("backend does not implement GetLargePayloadTombstones")));
-
-        // Act
-        object? result = await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
-
-        // Assert - disabled through an awaited generation-aware callback before the loop exits, a
-        // dedicated diagnostic is logged (not the generic cycle-failed one), and RunAsync returns rather than
-        // continuing. The awaited call, not a signal, is what guarantees the disable is committed here.
-        result.Should().BeNull();
-        entities.Verify(
-            e => e.CallEntityAsync(
-                JobEntityId,
-                nameof(BlobPurgeJob.MarkGenerationUnsupported),
-                It.Is<BlobPurgeUnsupportedRequest>(request => request.Generation == Generation),
-                It.IsAny<CallEntityOptions?>()),
-            Times.Once);
-        this.logger.Logs.Should().Contain(
-            entry => entry.Message.Contains("does not implement the large-payload purge RPCs"));
-        this.AssertNoCycleFailed();
-    }
-
-    [Fact]
-    public async Task RunAsync_DeletesLargeBatch_InChunksNotOneActivityPerToken()
-    {
-        // Arrange - a full 1000-row batch. The whole point of chunking is that a batch this size fans out to a
-        // HANDFUL of delete-activity calls (ceil(1000 / 50) = 20), not one per token (1000), which is what
-        // bloated the orchestration history. The activity contract is one outcome per token, so the mock returns
-        // exactly that; the orchestrator asserts the count before zipping.
-        const int batchSize = 1000;
-        List<LargePayloadTombstone> tombstones = [];
-        for (int i = 0; i < batchSize; i++)
+        // Act / Assert
+        foreach (Driver driver in new[] { invalidInput, invalidEvent })
         {
-            tombstones.Add(new LargePayloadTombstone(
-                TombstoneToken: $"tombstone-{i}",
-                PayloadToken: $"blob:v2:https://acct.blob.core.windows.net/c/{i}"));
+            P.CompleteOrchestrationAction result = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+            Assert.NotNull(result);
+            Assert.Equal(P.OrchestrationStatus.Failed, result.OrchestrationStatus);
+            Assert.Contains("ArgumentException", result.FailureDetails.ErrorType);
         }
+    }
 
-        Mock<TaskOrchestrationContext> context = new();
-        Mock<TaskOrchestrationEntityFeature> entities = new();
-
-        context.Setup(c => c.Entities).Returns(entities.Object);
-        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
-        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        // Active on the first read, stopped on the second, so the perpetual loop runs exactly one cycle.
-        entities
-            .SetupSequence(e => e.CallEntityAsync<BlobPurgeJobState?>(
-                It.IsAny<EntityInstanceId>(),
-                nameof(BlobPurgeJob.Get),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = batchSize })
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
-
-        entities
-            .Setup(e => e.CallEntityAsync(
-                It.IsAny<EntityInstanceId>(),
-                It.IsAny<string>(),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .Returns(Task.CompletedTask);
-
-        context
-            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
-                It.Is<TaskName>(n => n.Name == nameof(GetLargePayloadTombstonesActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()))
-            .ReturnsAsync(tombstones);
-
-        int chunkActivityCalls = 0;
-        int tokensDeleted = 0;
-        context
-            .Setup(c => c.CallActivityAsync<List<BlobPurgeOutcome>>(
-                It.Is<TaskName>(n => n.Name == nameof(DeleteExternalBlobActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()))
-            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+    sealed class Driver
+    {
+        readonly List<P.HistoryEvent> history = [];
+        P.OrchestratorRequest lastRequest = null!;
+        int eventId = 10000;
+        public Driver(BlobPurgeJobRunRequest input, params P.HistoryEvent[] events)
+        {
+            P.HistoryEvent start = new()
             {
-                List<string> chunk = (List<string>)input!;
-                Interlocked.Increment(ref chunkActivityCalls);
-                Interlocked.Add(ref tokensDeleted, chunk.Count);
-
-                // One outcome per token, positionally aligned - the shape the orchestrator asserts before zipping.
-                List<BlobPurgeOutcome> outcomes = new(chunk.Count);
-                foreach (string _ in chunk)
+                EventId = -1,
+                ExecutionStarted = new P.ExecutionStartedEvent
                 {
-                    outcomes.Add(new BlobPurgeOutcome(LargePayloadPurgeDisposition.Deleted));
-                }
-
-                return Task.FromResult(outcomes);
-            });
-
-        List<LargePayloadPurgeResult>? reported = null;
-        context
-            .Setup(c => c.CallActivityAsync(
-                It.Is<TaskName>(n => n.Name == nameof(ReportLargePayloadPurgeResultsActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()))
-            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => reported = (List<LargePayloadPurgeResult>)input!)
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: batchSize, Generation));
-
-        // Assert - 20 chunk activities for the whole batch, not 1000; every token was still handled exactly once;
-        // and one result is reported per row so the backend hears about all 1000.
-        this.AssertNoCycleFailed();
-        chunkActivityCalls.Should().Be(20);
-        tokensDeleted.Should().Be(batchSize);
-        reported.Should().NotBeNull();
-        reported!.Should().HaveCount(batchSize);
-    }
-
-    [Fact]
-    public async Task RunAsync_SendsPayloadTokenToStorage_AndEchoesTombstoneTokenToBackend()
-    {
-        // Arrange - a tombstone now carries two opaque strings: PayloadToken addresses the blob, TombstoneToken
-        // identifies the ledger row. Both are plain strings, so swapping them compiles silently and would fail
-        // in the worst possible way - deleting nothing while telling the backend rows were purged. Distinct,
-        // non-overlapping values make a swap impossible to miss.
-        List<LargePayloadTombstone> tombstones =
-        [
-            new("tombstone-a", "blob:v2:https://acct.blob.core.windows.net/c/a"),
-            new("tombstone-b", "blob:v2:https://acct.blob.core.windows.net/c/b"),
-        ];
-
-        Mock<TaskOrchestrationContext> context = new();
-        Mock<TaskOrchestrationEntityFeature> entities = new();
-
-        context.Setup(c => c.Entities).Returns(entities.Object);
-        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
-        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        entities
-            .SetupSequence(e => e.CallEntityAsync<BlobPurgeJobState?>(
-                It.IsAny<EntityInstanceId>(),
-                nameof(BlobPurgeJob.Get),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 100 })
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
-
-        entities
-            .Setup(e => e.CallEntityAsync(
-                It.IsAny<EntityInstanceId>(),
-                It.IsAny<string>(),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .Returns(Task.CompletedTask);
-
-        context
-            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
-                It.Is<TaskName>(n => n.Name == nameof(GetLargePayloadTombstonesActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()))
-            .ReturnsAsync(tombstones);
-
-        List<string> sentToDelete = [];
-        context
-            .Setup(c => c.CallActivityAsync<List<BlobPurgeOutcome>>(
-                It.Is<TaskName>(n => n.Name == nameof(DeleteExternalBlobActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()))
-            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+                    Name = nameof(BlobPurgeJobOrchestrator), Input = JsonDataConverter.Default.Serialize(input),
+                    OrchestrationInstance = new P.OrchestrationInstance { InstanceId = BlobPurgeConstants.OrchestratorInstanceId, ExecutionId = "executor-run" },
+                },
+            };
+            this.Turn([start, .. events]);
+        }
+        public DateTime Now { get; private set; } = new(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc);
+        public P.OrchestratorResponse Response { get; private set; } = null!;
+        public P.OrchestratorAction SingleActivity(string name)
+        {
+            P.OrchestratorAction result = Assert.Single(this.Response.Actions);
+            Assert.NotNull(result.ScheduleTask);
+            Assert.Equal(name, result.ScheduleTask.Name);
+            return result;
+        }
+        public void Complete(P.OrchestratorAction action, object? value) => this.Turn(ActivityCompleted(action, value));
+        public static P.HistoryEvent Configure(int batch) => new() { EventRaised = new P.EventRaisedEvent { Name = BlobPurgeConstants.SetBatchSizeEvent, Input = JsonDataConverter.Default.Serialize(batch) } };
+        public static P.HistoryEvent ActivityCompleted(P.OrchestratorAction action, object? value) => new() { TaskCompleted = new P.TaskCompletedEvent { TaskScheduledId = action.Id, Result = JsonDataConverter.Default.Serialize(value) } };
+        public static P.HistoryEvent ActivityFailed(P.OrchestratorAction action, Exception error) => new()
+        {
+            TaskFailed = new P.TaskFailedEvent
             {
-                List<string> chunk = (List<string>)input!;
-                sentToDelete.AddRange(chunk);
+                TaskScheduledId = action.Id,
+                FailureDetails = new P.TaskFailureDetails { ErrorType = error.GetType().FullName, ErrorMessage = error.Message, IsNonRetriable = true },
+            },
+        };
+        public static P.HistoryEvent TimerFired(P.OrchestratorAction action) => new() { TimerFired = new P.TimerFiredEvent { TimerId = action.Id, FireAt = action.CreateTimer.FireAt } };
 
-                // Distinct dispositions so the zip cannot be proven by a constant.
-                return Task.FromResult<List<BlobPurgeOutcome>>(
-                [
-                    new(LargePayloadPurgeDisposition.Deleted),
-                    new(LargePayloadPurgeDisposition.Quarantined),
-                ]);
+        public void Turn(params P.HistoryEvent[] events)
+        {
+            this.Now = events.Where(e => e.TimerFired is not null).Select(e => e.TimerFired.FireAt.ToDateTime())
+                .Append(this.Now.AddSeconds(1)).Max();
+            this.lastRequest = new P.OrchestratorRequest
+            {
+                InstanceId = BlobPurgeConstants.OrchestratorInstanceId,
+                PastEvents = { this.history.Select(e => e.Clone()) },
+            };
+            this.lastRequest.NewEvents.Add(new P.HistoryEvent
+            {
+                EventId = -1, Timestamp = Timestamp.FromDateTime(this.Now), OrchestratorStarted = new P.OrchestratorStartedEvent(),
             });
-
-        List<LargePayloadPurgeResult>? reported = null;
-        context
-            .Setup(c => c.CallActivityAsync(
-                It.Is<TaskName>(n => n.Name == nameof(ReportLargePayloadPurgeResultsActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()))
-            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => reported = (List<LargePayloadPurgeResult>)input!)
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
-
-        // Assert - storage saw only payload tokens, the backend heard only tombstone tokens, and each row kept
-        // its own disposition rather than the batch collapsing onto one.
-        this.AssertNoCycleFailed();
-        sentToDelete.Should().Equal(
-            "blob:v2:https://acct.blob.core.windows.net/c/a",
-            "blob:v2:https://acct.blob.core.windows.net/c/b");
-        reported.Should().NotBeNull();
-        List<LargePayloadPurgeResult> results = reported!;
-        results.Select(r => r.TombstoneToken).Should().Equal("tombstone-a", "tombstone-b");
-        results.Select(r => r.Disposition).Should().Equal(
-            LargePayloadPurgeDisposition.Deleted, LargePayloadPurgeDisposition.Quarantined);
-    }
-
-    [Fact]
-    public async Task RunAsync_WhenFetchReturnsNoTombstones_IdlesWithoutDeletingOrReporting()
-    {
-        // Arrange - an Active job whose fetch comes back empty. Nothing is due, so the cycle must short-circuit
-        // to the idle timer and touch neither the delete activity nor the report activity: an empty backend
-        // response has to cost a wait and nothing else, or every quiet worker would hammer storage and the
-        // backend on every tick.
-        Mock<TaskOrchestrationContext> context = this.ContextFor(
-            new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 250 });
-
-        // Act
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 100, Generation));
-
-        // Assert - the fetch ran (recording the batch size) and the one-minute idle timer was created, but
-        // neither the delete nor the report activity was ever invoked on the empty batch. The duration is
-        // asserted exactly: it is the pause that bounds how quickly a quiet job re-asks the backend, and it is
-        // also the path a backend that declines the fetch on a precondition takes.
-        this.AssertNoCycleFailed();
-        this.requested.Should().Equal(250);
-        context.Verify(
-            c => c.CreateTimer(TimeSpan.FromMinutes(1), It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
-        context.Verify(
-            c => c.CallActivityAsync<List<BlobPurgeOutcome>>(
-                It.Is<TaskName>(n => n.Name == nameof(DeleteExternalBlobActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()),
-            Times.Never);
-        context.Verify(
-            c => c.CallActivityAsync(
-                It.Is<TaskName>(n => n.Name == nameof(ReportLargePayloadPurgeResultsActivity)),
-                It.IsAny<object?>(),
-                It.IsAny<TaskOptions?>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task RunAsync_ContinuesAsNewOnlyAfterConfiguredCycles()
-    {
-        // Arrange - a job that stays Active with nothing to purge, so the continue-as-new guard is the ONLY
-        // thing that can end the perpetual loop. That guard is the sole bound on history growth here: a fresh
-        // run must process exactly ContinueAsNewFrequency cycles and then continue-as-new with a reset count.
-        // Firing early would reset the job's progress window too often; never firing would let the orchestration
-        // history grow without bound until the instance died days later.
-        Mock<TaskOrchestrationContext> context = new();
-        Mock<TaskOrchestrationEntityFeature> entities = new();
-
-        context.Setup(c => c.Entities).Returns(entities.Object);
-        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
-        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        // Always Active: the job never stops, so continue-as-new is the only exit from the loop.
-        entities
-            .Setup(e => e.CallEntityAsync<BlobPurgeJobState?>(
-                It.IsAny<EntityInstanceId>(),
-                nameof(BlobPurgeJob.Get),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Active, Generation = Generation, PurgeBatchSize = 250 });
-
-        context
-            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
-                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
-            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => this.requested.Add((int)input!))
-            .ReturnsAsync([]);
-
-        BlobPurgeJobRunRequest? restarted = null;
-        context
-            .Setup(c => c.ContinueAsNew(It.IsAny<object?>(), It.IsAny<bool>()))
-            .Callback<object?, bool>((input, _) => restarted = (BlobPurgeJobRunRequest)input!);
-
-        // Act - start fresh (zero processed cycles).
-        await new BlobPurgeJobOrchestrator().RunAsync(
-            context.Object, new BlobPurgeJobRunRequest(JobEntityId, PurgeBatchSize: 250, Generation));
-
-        // Assert - five cycles ran (one empty fetch each) before a single continue-as-new that reset the cycle
-        // count while carrying the same job identity and batch size forward. The five recorded fetches are what
-        // prove it did not continue-as-new early; the single ContinueAsNew is what proves it does not grow the
-        // history forever.
-        this.AssertNoCycleFailed();
-        this.requested.Should().HaveCount(5);
-        context.Verify(c => c.ContinueAsNew(It.IsAny<object?>(), It.IsAny<bool>()), Times.Once);
-        restarted.Should().NotBeNull();
-        restarted!.JobEntityId.Should().Be(JobEntityId);
-        restarted.PurgeBatchSize.Should().Be(250);
-        restarted.ProcessedCycles.Should().Be(0);
-    }
-
-    /// <summary>
-    /// Guards against the whole test passing through the orchestrator's catch-all cycle handler, which would
-    /// leave every observation empty and make the assertions vacuous.
-    /// </summary>
-    void AssertNoCycleFailed() =>
-        this.logger.Logs.Should().NotContain(entry => entry.Message.Contains("cycle for job"));
-
-    /// <summary>
-    /// Builds a context whose first entity read returns <paramref name="first"/> and whose second returns a
-    /// stopped job, so the perpetual loop runs at most one cycle and then exits. Batch sizes passed to the
-    /// fetch activity are recorded.
-    /// </summary>
-    Mock<TaskOrchestrationContext> ContextFor(BlobPurgeJobState first)
-    {
-        Mock<TaskOrchestrationContext> context = new();
-        Mock<TaskOrchestrationEntityFeature> entities = new();
-
-        context.Setup(c => c.Entities).Returns(entities.Object);
-        context.Setup(c => c.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>()).Returns(this.logger);
-        context.Setup(c => c.CreateTimer(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        entities
-            .SetupSequence(e => e.CallEntityAsync<BlobPurgeJobState?>(
-                It.IsAny<EntityInstanceId>(),
-                nameof(BlobPurgeJob.Get),
-                It.IsAny<object?>(),
-                It.IsAny<CallEntityOptions?>()))
-            .ReturnsAsync(first)
-            .ReturnsAsync(new BlobPurgeJobState { Status = BlobPurgeJobStatus.Pending });
-
-        context
-            .Setup(c => c.CallActivityAsync<List<LargePayloadTombstone>>(
-                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
-            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => this.requested.Add((int)input!))
-            .ReturnsAsync([]);
-
-        return context;
+            foreach (P.HistoryEvent item in events)
+            {
+                item.Timestamp = Timestamp.FromDateTime(this.Now);
+                item.EventId = this.eventId++;
+                this.lastRequest.NewEvents.Add(item);
+            }
+            this.Response = this.ReplayLastTurn();
+            this.history.AddRange(this.lastRequest.NewEvents.Select(e => e.Clone()));
+            foreach (P.OrchestratorAction action in this.Response.Actions)
+            {
+                if (action.ScheduleTask is { } task)
+                {
+                    this.history.Add(new P.HistoryEvent
+                    {
+                        EventId = action.Id, Timestamp = Timestamp.FromDateTime(this.Now),
+                        TaskScheduled = new P.TaskScheduledEvent { Name = task.Name, Input = task.Input, Version = task.Version },
+                    });
+                }
+                if (action.CreateTimer is { } timer)
+                {
+                    this.history.Add(new P.HistoryEvent { EventId = action.Id, Timestamp = Timestamp.FromDateTime(this.Now), TimerCreated = new P.TimerCreatedEvent { FireAt = timer.FireAt } });
+                }
+            }
+            this.history.Add(new P.HistoryEvent { EventId = -1, Timestamp = Timestamp.FromDateTime(this.Now), OrchestratorCompleted = new P.OrchestratorCompletedEvent() });
+        }
+        public P.OrchestratorResponse ReplayLastTurn() => P.OrchestratorResponse.Parser.ParseFrom(
+            Convert.FromBase64String(GrpcOrchestrationRunner.LoadAndRun(
+                Convert.ToBase64String(this.lastRequest.ToByteArray()), new BlobPurgeJobOrchestrator())));
     }
 }

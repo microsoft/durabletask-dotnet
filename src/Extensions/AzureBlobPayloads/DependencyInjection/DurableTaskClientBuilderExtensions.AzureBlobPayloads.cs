@@ -79,16 +79,6 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 opt.Interceptors.Add(new AzureBlobPayloadsSideCarInterceptor(store, opts));
             });
 
-        // The explicit auto-purge API (SetLargePayloadAutoPurgeAsync) reaches the singleton job through
-        // client.Entities on BOTH paths - enabling signals Create, disabling signals Stop - so entity support
-        // must be on whenever externalized payloads are configured. Set it on the base options so an explicit
-        // UseGrpc client that disables entity support still wins (DurableTaskClientOptions.ApplyTo copies this
-        // value only when the derived options did not set it explicitly).
-        builder.Configure(options =>
-        {
-            options.EnableEntitySupport = true;
-        });
-
         return builder;
     }
 }

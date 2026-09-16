@@ -128,15 +128,14 @@ public class UseExternalizedPayloadsTests
         grpcOptions.Channel.Should().BeNull();
     }
 
-    [Fact]
-    public void UseExternalizedPayloads_Client_EnablesEntitySupport()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UseExternalizedPayloads_Client_PreservesEntitySupport(bool enabled)
     {
-        // Arrange - the public SetLargePayloadAutoPurgeAsync extension reaches the singleton job through
-        // client.Entities on BOTH the enable and disable paths, so the client must turn entity support on
-        // whenever externalized payloads are configured. Nothing gates this on whether auto-purge is on: the
-        // client cannot know that, and reading client.Entities is what the API does before it touches the
-        // backend.
+        // Arrange
         ServiceCollection services = new();
+        services.Configure<DurableTaskClientOptions>(options => options.EnableEntitySupport = enabled);
         Mock<IDurableTaskClientBuilder> builder = new();
         builder.Setup(b => b.Services).Returns(services);
         builder.Setup(b => b.Name).Returns(string.Empty);
@@ -148,16 +147,17 @@ public class UseExternalizedPayloadsTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskClientOptions>>().Get(string.Empty);
 
         // Assert
-        options.EnableEntitySupport.Should().BeTrue();
+        options.EnableEntitySupport.Should().Be(enabled);
     }
 
-    [Fact]
-    public void UseExternalizedPayloads_Worker_EnablesEntitySupport()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UseExternalizedPayloads_Worker_PreservesEntitySupport(bool enabled)
     {
-        // Arrange - the purge orchestrator drives the BlobPurgeJob entity, and an orchestrator that touches
-        // entities with support off throws, so the worker must turn entity support on whenever externalized
-        // payloads are configured.
+        // Arrange
         ServiceCollection services = new();
+        services.Configure<DurableTaskWorkerOptions>(options => options.EnableEntitySupport = enabled);
         Mock<IDurableTaskWorkerBuilder> builder = new();
         builder.Setup(b => b.Services).Returns(services);
         builder.Setup(b => b.Name).Returns(string.Empty);
@@ -169,7 +169,7 @@ public class UseExternalizedPayloadsTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>().Get(string.Empty);
 
         // Assert
-        options.EnableEntitySupport.Should().BeTrue();
+        options.EnableEntitySupport.Should().Be(enabled);
     }
 
     [Fact]
@@ -210,7 +210,7 @@ public class UseExternalizedPayloadsTests
     public void UseExternalizedPayloads_NamedClientBuilder_ResolvesEverythingUnderThatName()
     {
         // Arrange - every other test in this file drives builder.Name == string.Empty, so the entire named code
-        // path had no coverage: the storage options, the client's entity-support flip and the intercepted gRPC
+        // path had no coverage: the storage options and the intercepted gRPC
         // client options are ALL keyed on builder.Name. Drive a non-empty name end to end.
         const string name = "client-hub";
         ServiceCollection services = new();
@@ -227,12 +227,12 @@ public class UseExternalizedPayloadsTests
             options => options.ConnectionString = "UseDevelopmentStorage=true");
         using ServiceProvider provider = services.BuildServiceProvider();
 
-        // Assert - the storage options, the entity-support flip and the intercepted gRPC client options all
+        // Assert - the storage options and the intercepted gRPC client options all
         // materialize under the builder name, and the store resolves from the built provider.
         provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(name)
             .ConnectionString.Should().Be("UseDevelopmentStorage=true");
         provider.GetRequiredService<IOptionsMonitor<DurableTaskClientOptions>>().Get(name)
-            .EnableEntitySupport.Should().BeTrue();
+            .EnableEntitySupport.Should().BeFalse();
         provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>().Get(name)
             .CallInvoker.Should().NotBeNull();
         provider.GetRequiredService<PayloadStore>().Should().BeOfType<BlobPayloadStore>();
@@ -241,8 +241,8 @@ public class UseExternalizedPayloadsTests
     [Fact]
     public void UseExternalizedPayloads_NamedWorkerBuilder_ResolvesEverythingUnderThatName()
     {
-        // Arrange - the worker mirror of the named-client gap: the storage options, the worker's entity-support
-        // flip and the purge transport the activities inject are all keyed on builder.Name, and every existing
+        // Arrange - the worker mirror of the named-client gap: the storage options
+        // and the purge transport the activities inject are all keyed on builder.Name, and every existing
         // worker test uses the empty name. Drive a non-empty name.
         const string name = "worker-hub";
         ServiceCollection services = new();
@@ -264,7 +264,7 @@ public class UseExternalizedPayloadsTests
         provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(name)
             .ConnectionString.Should().Be("UseDevelopmentStorage=true");
         provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>().Get(name)
-            .EnableEntitySupport.Should().BeTrue();
+            .EnableEntitySupport.Should().BeFalse();
         provider.GetRequiredService<PayloadStore>().Should().BeOfType<BlobPayloadStore>();
 
         Action constructGet = () =>

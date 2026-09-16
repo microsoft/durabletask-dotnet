@@ -19,7 +19,7 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// <param name="client">A Durable Task gRPC client.</param>
     /// <param name="enabled">True to enable cleanup; false to pause new fetches through the backend setting.</param>
     /// <param name="batchSize">The requested batch size, from 1 through 1000. Ignored when disabling.</param>
-    /// <param name="cancellationToken">Cancels any setting, query, start, wait or configuration operation.</param>
+    /// <param name="cancellationToken">Cancels any setting, start, wait or configuration operation.</param>
     /// <returns>A task that completes after the backend setting and, when enabling, start verification and event enqueue.</returns>
     /// <remarks>
     /// <para>
@@ -29,10 +29,12 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// an empty batch. An unsupported backend instead waits for an explicit enable configuration event.
     /// </para>
     /// <para>
-    /// Enabling first writes the setting, then ensures the fixed-ID orchestration without replacing a running,
-    /// pending, suspended or transitioning instance. Completed, failed, canceled or terminated instances can
-    /// be replaced. A manually suspended instance or an ID collision with another orchestration is an error.
-    /// The start wait must return the expected Running orchestration before configuration is enqueued.
+    /// Enabling first writes the setting, then schedules the fixed-ID orchestration and lets the backend
+    /// deduplicate the start without replacing a running, pending, suspended or transitioning instance.
+    /// Completed, failed, canceled or terminated instances can be replaced. This ID is reserved exclusively
+    /// for the SDK's purge runner and must not be used by application code. The start wait must return the
+    /// expected Running orchestration before configuration is enqueued; a suspended instance or live ID
+    /// collision is an error.
     /// Existing input is not overwritten; repeated enables update batch size through an idempotent SetBatchSize
     /// event. Completion acknowledges that event, not that the runner has already applied it.
     /// </para>
@@ -71,38 +73,32 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
             return;
         }
 
-        OrchestrationMetadata? existing = await client.GetInstanceAsync(
-            BlobPurgeConstants.OrchestratorInstanceId, getInputsAndOutputs: false, cancellationToken);
-        if (existing is not null)
+        StartOrchestrationOptions options = new(BlobPurgeConstants.OrchestratorInstanceId)
         {
-            ValidateRunner(existing);
+            // Dedupe is the inverse of the wire's replaceable statuses. Never replace nonterminal work.
+            DedupeStatuses = ["Running", "Pending", "Suspended", "ContinuedAsNew"],
+        };
+        try
+        {
+            string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
+                nameof(BlobPurgeJobOrchestrator), new BlobPurgeJobRunRequest(batchSize), options, cancellationToken);
+            if (instanceId != BlobPurgeConstants.OrchestratorInstanceId)
+            {
+                throw new InvalidOperationException("The backend returned an unexpected auto-purge instance ID.");
+            }
         }
-
-        if (existing is null || IsReplaceable(existing.RuntimeStatus))
+        catch (OrchestrationAlreadyExistsException)
         {
-            StartOrchestrationOptions options = new(BlobPurgeConstants.OrchestratorInstanceId)
-            {
-                // Dedupe is the inverse of the wire's replaceable statuses. Never replace nonterminal work.
-                DedupeStatuses = ["Running", "Pending", "Suspended", "ContinuedAsNew"],
-            };
-            try
-            {
-                string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-                    nameof(BlobPurgeJobOrchestrator), new BlobPurgeJobRunRequest(batchSize), options, cancellationToken);
-                if (instanceId != BlobPurgeConstants.OrchestratorInstanceId)
-                {
-                    throw new InvalidOperationException("The backend returned an unexpected auto-purge instance ID.");
-                }
-            }
-            catch (OrchestrationAlreadyExistsException)
-            {
-                // Another enable may have started it. The awaited metadata below must still validate it.
-            }
+            // The backend retained an existing runner. Its identity and status still require verification.
         }
 
         OrchestrationMetadata started = await client.WaitForInstanceStartAsync(
             BlobPurgeConstants.OrchestratorInstanceId, getInputsAndOutputs: false, cancellationToken);
-        ValidateRunner(started);
+        if (started.InstanceId != BlobPurgeConstants.OrchestratorInstanceId || started.Name != nameof(BlobPurgeJobOrchestrator))
+        {
+            throw new InvalidOperationException("The reserved auto-purge instance ID belongs to a different orchestration.");
+        }
+
         if (started.RuntimeStatus != OrchestrationRuntimeStatus.Running)
         {
             throw new InvalidOperationException($"Auto-purge did not start: its runtime status is {started.RuntimeStatus}.");
@@ -111,24 +107,4 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
         await client.RaiseEventAsync(
             BlobPurgeConstants.OrchestratorInstanceId, BlobPurgeConstants.SetBatchSizeEvent, batchSize, cancellationToken);
     }
-
-    static void ValidateRunner(OrchestrationMetadata runner)
-    {
-        if (runner.InstanceId != BlobPurgeConstants.OrchestratorInstanceId || runner.Name != nameof(BlobPurgeJobOrchestrator))
-        {
-            throw new InvalidOperationException("The reserved auto-purge instance ID belongs to a different orchestration.");
-        }
-
-        if (!IsReplaceable(runner.RuntimeStatus)
-            && runner.RuntimeStatus is not OrchestrationRuntimeStatus.Running and not OrchestrationRuntimeStatus.Pending)
-        {
-            throw new InvalidOperationException($"Auto-purge cannot be enabled while its runtime status is {runner.RuntimeStatus}.");
-        }
-    }
-
-    static bool IsReplaceable(OrchestrationRuntimeStatus status) =>
-        status is OrchestrationRuntimeStatus.Completed or OrchestrationRuntimeStatus.Failed or OrchestrationRuntimeStatus.Terminated
-#pragma warning disable CS0618 // The wire/backend still supports the canceled terminal status.
-            or OrchestrationRuntimeStatus.Canceled;
-#pragma warning restore CS0618
 }

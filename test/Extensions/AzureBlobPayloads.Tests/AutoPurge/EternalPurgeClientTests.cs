@@ -51,7 +51,7 @@ public class EternalPurgeClientTests
         await enable;
 
         // Assert
-        Assert.Equal(new[] { "SetLargePayloadAutoPurge", "GetInstance", "StartInstance", "WaitForInstanceStart", "RaiseEvent" }, invoker.Methods);
+        Assert.Equal(new[] { "SetLargePayloadAutoPurge", "StartInstance", "WaitForInstanceStart", "RaiseEvent" }, invoker.Methods);
         P.CreateInstanceRequest create = Assert.Single(invoker.Starts);
         Assert.Equal(RunnerId, create.InstanceId);
         Assert.Equal(RunnerName, create.Name);
@@ -69,18 +69,28 @@ public class EternalPurgeClientTests
     [Theory]
     [InlineData(P.OrchestrationStatus.Running)]
     [InlineData(P.OrchestrationStatus.Pending)]
-    public async Task Enable_ExistingLiveRunner_IsNotReplacedAsync(P.OrchestrationStatus status)
+    public async Task Enable_ExistingLiveRunner_IsDeduplicatedAndWaitedForAsync(P.OrchestrationStatus status)
     {
         // Arrange
-        RecordingInvoker invoker = new() { Existing = State(status) };
+        TaskCompletionSource<P.GetInstanceResponse> started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RecordingInvoker invoker = new()
+        {
+            StartError = new RpcException(new Status(StatusCode.AlreadyExists, $"Existing runner is {status}")),
+            StartResponse = started.Task,
+        };
         await using GrpcDurableTaskClient client = CreateClient(invoker);
 
         // Act
-        await client.SetLargePayloadAutoPurgeAsync(true, 333);
+        Task enable = client.SetLargePayloadAutoPurgeAsync(true, 333);
+        await invoker.WaitRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(enable.IsCompleted);
+        Assert.Empty(invoker.Events);
+        started.SetResult(State(P.OrchestrationStatus.Running));
+        await enable;
 
         // Assert
-        Assert.Empty(invoker.Starts);
-        Assert.Equal(new[] { "SetLargePayloadAutoPurge", "GetInstance", "WaitForInstanceStart", "RaiseEvent" }, invoker.Methods);
+        Assert.DoesNotContain(status, Assert.Single(invoker.Starts).OrchestrationIdReusePolicy.ReplaceableStatus);
+        Assert.Equal(new[] { "SetLargePayloadAutoPurge", "StartInstance", "WaitForInstanceStart", "RaiseEvent" }, invoker.Methods);
         Assert.Equal("333", Assert.Single(invoker.Events).Input);
     }
 
@@ -91,10 +101,10 @@ public class EternalPurgeClientTests
 #pragma warning disable CS0618
     [InlineData(P.OrchestrationStatus.Canceled)]
 #pragma warning restore CS0618
-    public async Task Enable_TerminalRunner_IsRestartedWithSafePolicyAsync(P.OrchestrationStatus status)
+    public async Task Enable_ExplicitPolicy_AllowsTerminalReplacementAsync(P.OrchestrationStatus status)
     {
         // Arrange
-        RecordingInvoker invoker = new() { Existing = State(status) };
+        RecordingInvoker invoker = new();
         await using GrpcDurableTaskClient client = CreateClient(invoker);
 
         // Act
@@ -109,39 +119,18 @@ public class EternalPurgeClientTests
     }
 
     [Theory]
-    [InlineData(P.OrchestrationStatus.Suspended)]
-    [InlineData(P.OrchestrationStatus.ContinuedAsNew)]
-    [InlineData((P.OrchestrationStatus)999)]
-    public async Task Enable_ManagedOrUnknownStatus_FailsWithoutReplacingAsync(P.OrchestrationStatus status)
-    {
-        // Arrange
-        RecordingInvoker invoker = new() { Existing = State(status) };
-        await using GrpcDurableTaskClient client = CreateClient(invoker);
-
-        // Act
-        Func<Task> act = () => client.SetLargePayloadAutoPurgeAsync(true);
-
-        // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>();
-        Assert.Empty(invoker.Starts);
-        Assert.Empty(invoker.Events);
-    }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Enable_NameCollision_IsNotSuccessAsync(bool duringStartRace)
     {
         // Arrange
-        RecordingInvoker invoker = new();
+        RecordingInvoker invoker = new()
+        {
+            StartResponse = Task.FromResult(State(P.OrchestrationStatus.Running, "CustomerOrchestration")),
+        };
         if (duringStartRace)
         {
             invoker.StartError = new RpcException(new Status(StatusCode.AlreadyExists, "racing start"));
-            invoker.StartResponse = Task.FromResult(State(P.OrchestrationStatus.Running, "CustomerOrchestration"));
-        }
-        else
-        {
-            invoker.Existing = State(P.OrchestrationStatus.Completed, "CustomerOrchestration");
         }
         await using GrpcDurableTaskClient client = CreateClient(invoker);
 
@@ -150,7 +139,7 @@ public class EternalPurgeClientTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>();
-        Assert.Equal(duringStartRace ? 1 : 0, invoker.Starts.Count);
+        Assert.Single(invoker.Starts);
         Assert.Empty(invoker.Events);
     }
 
@@ -176,10 +165,18 @@ public class EternalPurgeClientTests
     [InlineData(P.OrchestrationStatus.Completed)]
     [InlineData(P.OrchestrationStatus.Suspended)]
     [InlineData(P.OrchestrationStatus.Pending)]
+    [InlineData(P.OrchestrationStatus.ContinuedAsNew)]
+    [InlineData((P.OrchestrationStatus)999)]
     public async Task Enable_WaitReturnsNotRunning_IsAnErrorAsync(P.OrchestrationStatus status)
     {
         // Arrange
-        RecordingInvoker invoker = new() { StartResponse = Task.FromResult(State(status)) };
+        RecordingInvoker invoker = new()
+        {
+            StartResponse = Task.FromResult(State(status)),
+            StartError = status == P.OrchestrationStatus.Suspended
+                ? new RpcException(new Status(StatusCode.AlreadyExists, "suspended"))
+                : null,
+        };
         await using GrpcDurableTaskClient client = CreateClient(invoker);
 
         // Act
@@ -195,7 +192,7 @@ public class EternalPurgeClientTests
     public async Task SequentialDisableEnable_UsesSameLiveRunner_AndUpdatesBatchAsync()
     {
         // Arrange
-        RecordingInvoker invoker = new() { Existing = State(P.OrchestrationStatus.Running) };
+        RecordingInvoker invoker = new() { StartError = new RpcException(new Status(StatusCode.AlreadyExists, "running")) };
         await using GrpcDurableTaskClient client = CreateClient(invoker);
 
         // Act
@@ -205,7 +202,14 @@ public class EternalPurgeClientTests
 
         // Assert
         Assert.Equal(new[] { false, true, true }, invoker.Sets.Select(s => s.Enabled));
-        Assert.Empty(invoker.Starts);
+        Assert.Equal(2, invoker.Starts.Count);
+        Assert.All(invoker.Starts, start => Assert.Equal(RunnerId, start.InstanceId));
+        Assert.Equal(new[]
+        {
+            "SetLargePayloadAutoPurge",
+            "SetLargePayloadAutoPurge", "StartInstance", "WaitForInstanceStart", "RaiseEvent",
+            "SetLargePayloadAutoPurge", "StartInstance", "WaitForInstanceStart", "RaiseEvent",
+        }, invoker.Methods);
         Assert.Equal(new[] { "123", "456" }, invoker.Events.Select(e => e.Input));
         Assert.All(invoker.Events, e => Assert.Equal(RunnerId, e.InstanceId));
         Assert.DoesNotContain(invoker.Methods, name => name.Contains("Entity") || name.Contains("Purge") && name != "SetLargePayloadAutoPurge"
@@ -214,12 +218,10 @@ public class EternalPurgeClientTests
 
     [Theory]
     [InlineData("SetLargePayloadAutoPurge", StatusCode.Unavailable)]
-    [InlineData("GetInstance", StatusCode.Unavailable)]
     [InlineData("StartInstance", StatusCode.Unavailable)]
     [InlineData("WaitForInstanceStart", StatusCode.Unavailable)]
     [InlineData("RaiseEvent", StatusCode.Unavailable)]
     [InlineData("SetLargePayloadAutoPurge", StatusCode.Cancelled)]
-    [InlineData("GetInstance", StatusCode.Cancelled)]
     [InlineData("StartInstance", StatusCode.Cancelled)]
     [InlineData("WaitForInstanceStart", StatusCode.Cancelled)]
     [InlineData("RaiseEvent", StatusCode.Cancelled)]
@@ -234,7 +236,7 @@ public class EternalPurgeClientTests
         Func<Task> act = () => client.SetLargePayloadAutoPurgeAsync(true, cancellationToken: cancellation.Token);
 
         // Assert
-        if (status == StatusCode.Cancelled && method is not "GetInstance" and not "RaiseEvent")
+        if (status == StatusCode.Cancelled && method != "RaiseEvent")
         {
             await act.Should().ThrowAsync<OperationCanceledException>();
         }
@@ -304,6 +306,19 @@ public class EternalPurgeClientTests
         Assert.Empty(invoker.Events);
     }
 
+    [Fact]
+    public async Task Enable_WaitReturnsUnexpectedInstanceId_IsRejectedAsync()
+    {
+        // Arrange
+        RecordingInvoker invoker = new() { StartResponse = Task.FromResult(State(P.OrchestrationStatus.Running, id: "unexpected")) };
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act / Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SetLargePayloadAutoPurgeAsync(true));
+        Assert.Single(invoker.Starts);
+        Assert.Empty(invoker.Events);
+    }
+
     static GrpcDurableTaskClient CreateClient(RecordingInvoker invoker) =>
         new("test", new GrpcDurableTaskClientOptions { CallInvoker = invoker, EnableEntitySupport = false }, NullLogger.Instance);
 
@@ -329,7 +344,6 @@ public class EternalPurgeClientTests
         public string? ErrorAt { get; init; }
         public StatusCode ErrorStatus { get; init; }
         public string StartInstanceId { get; init; } = RunnerId;
-        public P.GetInstanceResponse Existing { get; set; } = new();
         public Task<P.GetInstanceResponse> StartResponse { get; set; } = Task.FromResult(State(P.OrchestrationStatus.Running));
         public TaskCompletionSource WaitRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -346,17 +360,11 @@ public class EternalPurgeClientTests
                     result = Task.FromResult((TResponse)(object)new LP.SetLargePayloadAutoPurgeResponse());
                     break;
                 case P.GetInstanceRequest get:
+                    Assert.Equal("WaitForInstanceStart", method.Name);
                     Assert.Equal(RunnerId, get.InstanceId);
                     Assert.False(get.GetInputsAndOutputs);
-                    if (method.Name == "WaitForInstanceStart")
-                    {
-                        this.WaitRequested.TrySetResult();
-                        result = ConvertAsync<TResponse>(this.StartResponse.WaitAsync(options.CancellationToken));
-                    }
-                    else
-                    {
-                        result = Task.FromResult((TResponse)(object)this.Existing);
-                    }
+                    this.WaitRequested.TrySetResult();
+                    result = ConvertAsync<TResponse>(this.StartResponse.WaitAsync(options.CancellationToken));
                     break;
                 case P.CreateInstanceRequest create:
                     this.Starts.Add(create);

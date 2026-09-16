@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using FluentAssertions;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
@@ -12,6 +13,8 @@ using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Client.Grpc.Internal;
+using Microsoft.DurableTask.AzureBlobPayloads;
+using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
@@ -20,11 +23,9 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.AutoPurge;
 
 /// <summary>
-/// Covers the public, explicitly-invoked auto-purge control. One call owns one task-hub transition, and it is
-/// two operations rather than one: the backend setting is written first and awaited, then the singleton job
-/// entity is signalled. Almost everything worth asserting here is about that boundary - what runs before the
-/// backend is touched, what does not run when the first operation fails, and what is deliberately NOT undone
-/// when the second one does.
+/// Covers explicit auto-purge control and enable-time runner cleanup. The setting is written before the job
+/// is signalled, and cleanup begins only after that signal is enqueued. Later failures do not roll back the
+/// completed control steps.
 /// </summary>
 public class SetLargePayloadAutoPurgeAsyncTests
 {
@@ -35,6 +36,276 @@ public class SetLargePayloadAutoPurgeAsyncTests
     /// Mirrored here rather than configured because the internal option is not reachable from this assembly.
     /// </summary>
     const int ConsecutiveFailuresBeforeRecreate = 5;
+
+    [Fact]
+    public async Task Enable_CleanupSnapshotsAllPages_AndPurgesOnlyOldTerminalRunnersAsync()
+    {
+        // Arrange
+        string current = Guid.NewGuid().ToString("N");
+        P.OrchestrationState completed = Runner(P.OrchestrationStatus.Completed);
+        P.OrchestrationState failed = Runner(P.OrchestrationStatus.Failed);
+        P.OrchestrationState terminated = Runner(P.OrchestrationStatus.Terminated);
+        P.OrchestrationState wrongName = Runner(P.OrchestrationStatus.Completed);
+        wrongName.Name = "BusinessOrchestrator";
+        P.OrchestrationState wrongPrefix = Runner(P.OrchestrationStatus.Completed);
+        wrongPrefix.InstanceId = "Business-" + current;
+        P.OrchestrationState invalidSuffix = Runner(P.OrchestrationStatus.Completed);
+        invalidSuffix.InstanceId = RunnerPrefix + new string('z', 32);
+        RecordingCallInvoker invoker = new() { EntityResponse = Job(current) };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse
+        {
+            ContinuationToken = "page-2",
+            OrchestrationState =
+            {
+                completed, Runner(P.OrchestrationStatus.Completed, current), wrongName, wrongPrefix, invalidSuffix,
+                Runner(P.OrchestrationStatus.Running), Runner(P.OrchestrationStatus.Pending),
+                Runner(P.OrchestrationStatus.Suspended),
+            },
+        });
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse { OrchestrationState = { failed, terminated, completed } });
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+        using CancellationTokenSource cancellation = new();
+
+        // Act
+        await client.SetLargePayloadAutoPurgeAsync(true, cancellationToken: cancellation.Token);
+
+        // Assert
+        invoker.Methods.Should().Equal("SetLargePayloadAutoPurge", "SignalEntity",
+            "QueryInstances", "QueryInstances", "GetEntity", "PurgeInstances", "PurgeInstances", "PurgeInstances");
+        invoker.Queries.Should().HaveCount(2).And.OnlyContain(q =>
+            q.Query.InstanceIdPrefix == RunnerPrefix && q.Query.MaxInstanceCount == 100 && !q.Query.FetchInputsAndOutputs
+            && q.Query.TaskHubNames.Count == 0);
+        invoker.Queries[0].Query.RuntimeStatus.Should().BeEquivalentTo(
+            new[] { P.OrchestrationStatus.Completed, P.OrchestrationStatus.Failed, P.OrchestrationStatus.Terminated });
+        invoker.Queries[1].Query.ContinuationToken.Should().Be("page-2");
+        invoker.EntityReads.Should().ContainSingle().Which.IncludeState.Should().BeTrue();
+        invoker.Purges.Select(p => p.InstanceId).Should().BeEquivalentTo(
+            new[] { completed.InstanceId, failed.InstanceId, terminated.InstanceId });
+        invoker.Purges.Should().OnlyContain(p => !p.Recursive && p.IsOrchestration && p.PurgeInstanceFilter == null);
+        invoker.CallTokens.Should().OnlyContain(token => token == cancellation.Token);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enable_CleanupReadsGenerationAfterSnapshot_RegardlessOfCreateDeliveryAsync(bool createDelivered)
+    {
+        // Arrange - the final entity read either sees the newly activated generation or the previous one.
+        string previous = Guid.NewGuid().ToString("N");
+        string next = Guid.NewGuid().ToString("N");
+        P.OrchestrationState old = Runner(P.OrchestrationStatus.Completed);
+        RecordingCallInvoker invoker = new() { EntityResponse = Job(previous, BlobPurgeJobStatus.Pending) };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse
+        {
+            ContinuationToken = "page-2",
+            OrchestrationState = { old, Runner(P.OrchestrationStatus.Completed, previous) },
+        });
+        P.QueryInstancesResponse second = new();
+        if (createDelivered)
+        {
+            second.OrchestrationState.Add(Runner(P.OrchestrationStatus.Completed, next));
+        }
+        invoker.QueryPages.Enqueue(second);
+        invoker.OnQuery = count =>
+        {
+            if (count == 2 && createDelivered)
+            {
+                invoker.EntityResponse = Job(next);
+            }
+        };
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act
+        await client.SetLargePayloadAutoPurgeAsync(true);
+
+        // Assert
+        invoker.Methods.Take(5).Should().Equal(
+            "SetLargePayloadAutoPurge", "SignalEntity", "QueryInstances", "QueryInstances", "GetEntity");
+        invoker.Purges.Select(p => p.InstanceId).Should().BeEquivalentTo(createDelivered
+            ? new[] { old.InstanceId, RunnerPrefix + previous }
+            : new[] { old.InstanceId });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enable_CleanupBeforeFirstActivation_PurgesSnapshotOnlyAsync(bool entityExists)
+    {
+        // Arrange - Create has not yet allocated a generation; any future generation is outside the snapshot.
+        P.OrchestrationState old = Runner(P.OrchestrationStatus.Completed);
+        RecordingCallInvoker invoker = new()
+        {
+            EntityResponse = entityExists ? Job(null, BlobPurgeJobStatus.Pending) : new P.GetEntityResponse(),
+        };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse { OrchestrationState = { old } });
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act
+        await client.SetLargePayloadAutoPurgeAsync(true);
+
+        // Assert
+        invoker.Purges.Should().ContainSingle().Which.InstanceId.Should().Be(old.InstanceId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enable_CleanupCannotDetermineCurrentGeneration_FailsWithoutPurgingAsync(bool stateOmitted)
+    {
+        // Arrange
+        P.GetEntityResponse entity = Job(null);
+        if (stateOmitted)
+        {
+            entity.Entity.SerializedState = null;
+        }
+        RecordingCallInvoker invoker = new() { EntityResponse = entity };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse { OrchestrationState = { Runner(P.OrchestrationStatus.Completed) } });
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act
+        Func<Task> act = () => client.SetLargePayloadAutoPurgeAsync(true);
+
+        // Assert
+        if (stateOmitted)
+        {
+            await act.Should().ThrowAsync<InvalidOperationException>();
+        }
+        else
+        {
+            await act.Should().ThrowAsync<ArgumentException>();
+        }
+        invoker.Methods.Take(2).Should().Equal("SetLargePayloadAutoPurge", "SignalEntity");
+        invoker.Purges.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Enable_CleanupLaterPageFails_DoesNotPurgePartialSnapshotAsync()
+    {
+        // Arrange
+        RecordingCallInvoker invoker = new();
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse
+        {
+            ContinuationToken = "page-2", OrchestrationState = { Runner(P.OrchestrationStatus.Completed) },
+        });
+        invoker.OnQuery = page =>
+        {
+            if (page == 2)
+            {
+                throw new RpcException(new Status(StatusCode.Unavailable, "page unavailable"));
+            }
+        };
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act
+        Func<Task> act = () => client.SetLargePayloadAutoPurgeAsync(true);
+
+        // Assert
+        await act.Should().ThrowAsync<RpcException>().Where(error => error.StatusCode == StatusCode.Unavailable);
+        invoker.Methods.Should().Equal("SetLargePayloadAutoPurge", "SignalEntity", "QueryInstances", "QueryInstances");
+        invoker.Purges.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Enable_CleanupCallerCancelsBeforePurge_DoesNotPurgeAsync()
+    {
+        // Arrange
+        using CancellationTokenSource cancellation = new();
+        RecordingCallInvoker invoker = new() { OnQuery = _ => cancellation.Cancel() };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse { OrchestrationState = { Runner(P.OrchestrationStatus.Completed) } });
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act
+        Func<Task> act = () => client.SetLargePayloadAutoPurgeAsync(true, cancellationToken: cancellation.Token);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        invoker.Signals.Should().ContainSingle().Which.Name.Should().Be("Create");
+        invoker.Purges.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Enable_CleanupCandidateAlreadyPurged_AcceptsZeroCountAsync()
+    {
+        // Arrange - another caller removed the terminal candidate after this call's query snapshot.
+        P.OrchestrationState old = Runner(P.OrchestrationStatus.Completed);
+        RecordingCallInvoker invoker = new() { PurgeDeletedCount = 0, EntityResponse = Job(Guid.NewGuid().ToString("N")) };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse { OrchestrationState = { old } });
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+
+        // Act
+        await client.SetLargePayloadAutoPurgeAsync(true);
+
+        // Assert
+        invoker.Purges.Should().ContainSingle().Which.InstanceId.Should().Be(old.InstanceId);
+        invoker.Sets.Should().ContainSingle().Which.Enabled.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("QueryInstances", false)]
+    [InlineData("GetEntity", false)]
+    [InlineData("PurgeInstances", false)]
+    [InlineData("QueryInstances", true)]
+    [InlineData("GetEntity", true)]
+    [InlineData("PurgeInstances", true)]
+    public async Task Enable_CleanupFailure_PropagatesAfterCreateWithoutRollbackAsync(string method, bool canceled)
+    {
+        // Arrange
+        RecordingCallInvoker invoker = new()
+        {
+            EntityResponse = Job(Guid.NewGuid().ToString("N")),
+            CleanupFailureMethod = method,
+            CleanupFailure = new RpcException(new Status(canceled ? StatusCode.Cancelled : StatusCode.PermissionDenied, "denied")),
+        };
+        invoker.QueryPages.Enqueue(new P.QueryInstancesResponse { OrchestrationState = { Runner(P.OrchestrationStatus.Completed) } });
+        await using GrpcDurableTaskClient client = CreateClient(invoker);
+        using CancellationTokenSource cancellation = new();
+
+        // Act
+        Func<Task> act = () => client.SetLargePayloadAutoPurgeAsync(true, cancellationToken: cancellation.Token);
+
+        // Assert
+        if (canceled)
+        {
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        else
+        {
+            await act.Should().ThrowAsync<RpcException>().Where(error => error.StatusCode == StatusCode.PermissionDenied);
+        }
+        invoker.Methods.Take(2).Should().Equal("SetLargePayloadAutoPurge", "SignalEntity");
+        invoker.Signals.Should().ContainSingle().Which.Name.Should().Be("Create");
+        invoker.Sets.Should().ContainSingle().Which.Enabled.Should().BeTrue();
+        invoker.CallTokens.Should().OnlyContain(token => token == cancellation.Token);
+        if (method != "PurgeInstances")
+        {
+            invoker.Purges.Should().BeEmpty();
+        }
+    }
+
+    static string RunnerPrefix => BlobPurgeConstants.OrchestratorInstanceIdPrefix + BlobPurgeConstants.JobId + "-";
+
+    static P.OrchestrationState Runner(P.OrchestrationStatus status, string? generation = null) => new()
+    {
+        Name = nameof(BlobPurgeJobOrchestrator),
+        InstanceId = RunnerPrefix + (generation ?? Guid.NewGuid().ToString("N")),
+        OrchestrationStatus = status,
+        CreatedTimestamp = Timestamp.FromDateTime(DateTime.UnixEpoch),
+        LastUpdatedTimestamp = Timestamp.FromDateTime(DateTime.UnixEpoch),
+    };
+
+    static P.GetEntityResponse Job(string? generation, BlobPurgeJobStatus status = BlobPurgeJobStatus.Active) => new()
+    {
+        Exists = true,
+        Entity = new P.EntityMetadata
+        {
+            InstanceId = ExpectedEntityId,
+            LastModifiedTime = Timestamp.FromDateTime(DateTime.UnixEpoch),
+            SerializedState = JsonDataConverter.Default.Serialize(new BlobPurgeJobState
+            {
+                Status = status, Generation = generation, PurgeBatchSize = 500,
+            }),
+        },
+    };
 
     [Fact]
     public async Task Enable_WritesTheBackendSettingBeforeSignallingCreate()
@@ -48,7 +319,7 @@ public class SetLargePayloadAutoPurgeAsyncTests
 
         // Assert - the order is the point: enabling the setting before starting the job means the job cannot
         // poll for tombstones the backend is not yet writing.
-        invoker.Methods.Should().Equal("SetLargePayloadAutoPurge", "SignalEntity");
+        invoker.Methods.Should().Equal("SetLargePayloadAutoPurge", "SignalEntity", "QueryInstances");
         invoker.Sets.Should().ContainSingle().Which.Enabled.Should().BeTrue();
 
         P.SignalEntityRequest signal = invoker.Signals.Should().ContainSingle().Subject;
@@ -242,7 +513,7 @@ public class SetLargePayloadAutoPurgeAsyncTests
     }
 
     [Fact]
-    public async Task RepeatedIdenticalCalls_IssueTheSameTwoOperationsAgain()
+    public async Task RepeatedIdenticalCalls_ReissueControlOperationsAndCleanupAsync()
     {
         // Arrange - the retry story. Both operations are idempotent, so a caller that is unsure of the current
         // state, or that is retrying after a partial failure, can simply call again.
@@ -255,7 +526,8 @@ public class SetLargePayloadAutoPurgeAsyncTests
 
         // Assert
         invoker.Methods.Should().Equal(
-            "SetLargePayloadAutoPurge", "SignalEntity", "SetLargePayloadAutoPurge", "SignalEntity");
+            "SetLargePayloadAutoPurge", "SignalEntity", "QueryInstances",
+            "SetLargePayloadAutoPurge", "SignalEntity", "QueryInstances");
         invoker.Sets.Should().HaveCount(2).And.OnlyContain(s => s.Enabled);
         invoker.Signals.Should().HaveCount(2).And.OnlyContain(s => s.Name == "Create" && s.Input == "250");
     }
@@ -365,6 +637,10 @@ public class SetLargePayloadAutoPurgeAsyncTests
         readonly ConcurrentQueue<string> methods = new();
         readonly ConcurrentQueue<LP.SetLargePayloadAutoPurgeRequest> sets = new();
         readonly ConcurrentQueue<P.SignalEntityRequest> signals = new();
+        readonly List<P.QueryInstancesRequest> queries = new();
+        readonly List<P.GetEntityRequest> entityReads = new();
+        readonly List<P.PurgeInstancesRequest> purges = new();
+        readonly List<CancellationToken> callTokens = new();
 
         public IReadOnlyList<string> Methods => this.methods.ToArray();
 
@@ -376,14 +652,40 @@ public class SetLargePayloadAutoPurgeAsyncTests
 
         public RpcException? SignalFailure { get; init; }
 
+        public Queue<P.QueryInstancesResponse> QueryPages { get; } = new();
+        public P.GetEntityResponse EntityResponse { get; set; } = new();
+        public IReadOnlyList<P.QueryInstancesRequest> Queries => this.queries;
+        public IReadOnlyList<P.GetEntityRequest> EntityReads => this.entityReads;
+        public IReadOnlyList<P.PurgeInstancesRequest> Purges => this.purges;
+        public IReadOnlyList<CancellationToken> CallTokens => this.callTokens;
+        public Action<int>? OnQuery { get; set; }
+        public string? CleanupFailureMethod { get; init; }
+        public RpcException? CleanupFailure { get; init; }
+        public int PurgeDeletedCount { get; init; } = 1;
+
         public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
             Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
         {
             this.methods.Enqueue(method.Name);
+            this.callTokens.Add(options.CancellationToken);
 
             Task<TResponse> response;
             switch (request)
             {
+                case P.QueryInstancesRequest query:
+                    this.queries.Add(query);
+                    this.OnQuery?.Invoke(this.queries.Count);
+                    response = Task.FromResult((TResponse)(object)(this.QueryPages.Count == 0
+                        ? new P.QueryInstancesResponse() : this.QueryPages.Dequeue()));
+                    break;
+                case P.GetEntityRequest entity:
+                    this.entityReads.Add(entity);
+                    response = Task.FromResult((TResponse)(object)this.EntityResponse);
+                    break;
+                case P.PurgeInstancesRequest purge:
+                    this.purges.Add(purge);
+                    response = Task.FromResult((TResponse)(object)new P.PurgeInstancesResponse { DeletedInstanceCount = this.PurgeDeletedCount, IsComplete = true });
+                    break;
                 case LP.SetLargePayloadAutoPurgeRequest set:
                     this.sets.Enqueue(set);
                     response = this.SetFailure is null
@@ -400,6 +702,10 @@ public class SetLargePayloadAutoPurgeAsyncTests
                     response = Task.FromException<TResponse>(
                         new RpcException(new Status(StatusCode.Unimplemented, method.Name)));
                     break;
+            }
+            if (method.Name == this.CleanupFailureMethod)
+            {
+                response = Task.FromException<TResponse>(this.CleanupFailure!);
             }
 
             return new AsyncUnaryCall<TResponse>(

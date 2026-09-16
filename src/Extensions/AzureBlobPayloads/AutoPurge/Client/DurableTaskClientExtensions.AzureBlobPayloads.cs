@@ -15,7 +15,8 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
 {
     /// <summary>
     /// Turns large-payload blob auto-purge on or off for the task hub this client is authenticated against, and
-    /// starts or stops the singleton purge job that does the deleting.
+    /// starts or stops the singleton purge job that does the deleting. Enabling also purges eligible old
+    /// terminal runner instances, excluding the current activation.
     /// </summary>
     /// <param name="client">The Durable Task client. Must be the gRPC client, with entity support enabled.</param>
     /// <param name="enabled">
@@ -29,7 +30,7 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// stopped has no cycle to size.
     /// </param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task that completes once both steps below have been performed.</returns>
+    /// <returns>A task that completes after the setting, entity signal, and enable-time cleanup have completed.</returns>
     /// <remarks>
     /// <para>
     /// One call owns one transition, and the caller owns when it happens. There is no host that applies this at
@@ -39,15 +40,32 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// of the current state can simply call again.
     /// </para>
     /// <para>
-    /// This performs TWO separate operations against the task hub, in this order: the backend setting is written
+    /// This first performs two separate operations against the task hub: the backend setting is written
     /// first and awaited, then the singleton job entity is signalled. The order is deliberate on both paths.
     /// Enabling the setting before starting the job means the job cannot poll for tombstones the backend is not
     /// yet writing; disabling it before stopping the job means no new tombstones are created while the job winds
     /// down. There is no transaction across the two, and none is possible: they are different subsystems.
     /// </para>
     /// <para>
-    /// Because they are separate, completion means the backend acknowledged the setting and the entity signal
-    /// was reliably enqueued - not that the job has actually begun or ended. Starting is asynchronous: the
+    /// After the enable signal is enqueued, cleanup snapshots all pages of completed, failed, or terminated
+    /// generation-specific purge runners, reads the job entity state, and purges eligible old instances by
+    /// exact ID without recursion. Metadata queries do not fetch orchestration inputs or outputs. The observed
+    /// current generation is excluded even if its runner has completed, because Create can restart it. If
+    /// Create is still queued, the previous generation is conservatively excluded. Running, pending, or
+    /// suspended runners are not terminated; skipped runners may become eligible on a later enable.
+    /// Disabling does not query or purge runner instances.
+    /// </para>
+    /// <para>
+    /// Cleanup requires entity-state read and orchestration-management permissions in addition to the existing
+    /// setting/signal permissions (for DTS custom roles: OrchestrationsReadAll and OrchestrationsManage).
+    /// Query, entity-read, purge, and cancellation failures are surfaced after Create has been enqueued; the
+    /// setting is not rolled back. This is not an atomic operation with another caller's enable or disable:
+    /// callers must coordinate these transitions, including cleanup. Purge checkpoints use the backend's
+    /// current auto-purge setting, so a concurrent disable can prevent references from becoming tombstones.
+    /// </para>
+    /// <para>
+    /// Completion includes the acknowledged setting, reliably enqueued entity signal, and any enable-time
+    /// cleanup, but does not mean the job has actually begun or ended. Starting is asynchronous: the
     /// entity schedules the perpetual orchestrator, which begins its first cycle shortly after. Stopping is
     /// cooperative: the orchestrator reads the job state at the top of each cycle and exits on its own, so
     /// tombstones already fetched and deletes already in flight run to completion first.
@@ -135,6 +153,7 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
         {
             await entities.SignalEntityAsync(
                 entityId, nameof(BlobPurgeJob.Create), batchSize, cancellation: cancellationToken);
+            await PurgePreviousRunnersAsync(client, entities, entityId, cancellationToken);
         }
         else
         {
@@ -144,6 +163,62 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
             // the signal that follows it, and a Pending job is exactly the state an explicit disable wants.
             await entities.SignalEntityAsync(
                 entityId, nameof(BlobPurgeJob.Stop), cancellation: cancellationToken);
+        }
+    }
+
+    static async Task PurgePreviousRunnersAsync(
+        DurableTaskClient client, DurableEntityClient entities, EntityInstanceId entityId, CancellationToken cancellation)
+    {
+        string prefix = BlobPurgeConstants.OrchestratorInstanceIdPrefix + BlobPurgeConstants.JobId + "-";
+        OrchestrationQuery query = new(
+            InstanceIdPrefix: prefix,
+            Statuses: [OrchestrationRuntimeStatus.Completed, OrchestrationRuntimeStatus.Failed, OrchestrationRuntimeStatus.Terminated],
+            PageSize: 100,
+            FetchInputsAndOutputs: false);
+        HashSet<string> candidates = new(StringComparer.Ordinal);
+        await foreach (OrchestrationMetadata instance in client.GetAllInstancesAsync(query).WithCancellation(cancellation))
+        {
+            if (instance.IsCompleted && instance.Name == nameof(BlobPurgeJobOrchestrator)
+                && instance.InstanceId.StartsWith(prefix, StringComparison.Ordinal)
+                && instance.InstanceId.Length == prefix.Length + 32
+                && Guid.TryParseExact(instance.InstanceId.Substring(prefix.Length), "N", out Guid generation)
+                && instance.InstanceId.Substring(prefix.Length) == generation.ToString("N"))
+            {
+                candidates.Add(instance.InstanceId);
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        // Read AFTER all candidate pages. A Create processed during enumeration is excluded here; a future
+        // activation cannot reuse an ID from this snapshot. Do not mutate the collection while paging it.
+        EntityMetadata<BlobPurgeJobState>? entity =
+            await entities.GetEntityAsync<BlobPurgeJobState>(entityId, includeState: true, cancellation);
+        string? currentId = null;
+        if (entity is not null)
+        {
+            BlobPurgeJobState state = entity.State;
+            if (state.Status == BlobPurgeJobStatus.Active)
+            {
+                Check.NotNullOrEmpty(state.Generation);
+            }
+
+            if (state.Generation is not null)
+            {
+                currentId = BlobPurgeConstants.GetOrchestratorInstanceId(BlobPurgeConstants.JobId, state.Generation);
+            }
+        }
+
+        foreach (string instanceId in candidates)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            if (instanceId != currentId)
+            {
+                await client.PurgeInstanceAsync(instanceId, new PurgeInstanceOptions(Recursive: false), cancellation);
+            }
         }
     }
 }

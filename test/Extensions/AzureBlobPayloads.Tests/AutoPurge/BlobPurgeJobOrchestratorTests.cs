@@ -59,7 +59,8 @@ public class BlobPurgeJobOrchestratorTests
     public void ConfigurationAtContinueAsNew_IsAppliedOrPreserved_AndReplays()
     {
         // Arrange
-        Driver driver = new(new BlobPurgeJobRunRequest(100, ProcessedCycles: 4, PurgedCount: 9));
+        Driver driver = new(new BlobPurgeJobRunRequest(100, PurgedCount: 9));
+        driver.CompleteEmptyCycles(4);
         P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
         driver.Complete(fetch, Array.Empty<LargePayloadTombstone>());
         P.OrchestratorAction timer = Assert.Single(driver.Response.Actions);
@@ -73,7 +74,7 @@ public class BlobPurgeJobOrchestratorTests
         Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, completed.OrchestrationStatus);
         BlobPurgeJobRunRequest next = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(completed.Result)!;
         Assert.Equal(700, next.PurgeBatchSize);
-        Assert.Equal(0, next.ProcessedCycles);
+        Assert.DoesNotContain("ProcessedCycles", completed.Result);
         Assert.Equal(9, next.PurgedCount);
         P.HistoryEvent forwarded = Assert.Single(completed.CarryoverEvents);
         Assert.Equal(BlobPurgeConstants.SetBatchSizeEvent, forwarded.EventRaised.Name);
@@ -92,25 +93,22 @@ public class BlobPurgeJobOrchestratorTests
         Driver driver = new(new BlobPurgeJobRunRequest(250));
 
         // Act
-        for (int i = 0; i < 5; i++)
-        {
-            driver.Complete(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)), Array.Empty<LargePayloadTombstone>());
-            driver.Turn(Driver.TimerFired(Assert.Single(driver.Response.Actions)));
-        }
+        driver.CompleteEmptyCycles(5);
 
         // Assert
         P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
         Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, can.OrchestrationStatus);
         BlobPurgeJobRunRequest input = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
         Assert.Equal(250, input.PurgeBatchSize);
-        Assert.Equal(0, input.ProcessedCycles);
+        Assert.DoesNotContain("ProcessedCycles", can.Result);
     }
 
     [Fact]
     public void ConfigurationDeliveredDuringFinalFetch_IsCarriedBeforeCan()
     {
         // Arrange
-        Driver driver = new(new BlobPurgeJobRunRequest(250, ProcessedCycles: 4));
+        Driver driver = new(new BlobPurgeJobRunRequest(250));
+        driver.CompleteEmptyCycles(4);
         P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
 
         // Act
@@ -215,7 +213,8 @@ public class BlobPurgeJobOrchestratorTests
     public void UnsupportedAtCan_IsCarriedAndWaitsWithoutFetching()
     {
         // Arrange
-        Driver driver = new(new BlobPurgeJobRunRequest(250, ProcessedCycles: 4));
+        Driver driver = new(new BlobPurgeJobRunRequest(250));
+        driver.CompleteEmptyCycles(4);
 
         // Act
         driver.Turn(Driver.ActivityFailed(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)),
@@ -272,6 +271,15 @@ public class BlobPurgeJobOrchestratorTests
         }
         public DateTime Now { get; private set; } = new(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc);
         public P.OrchestratorResponse Response { get; private set; } = null!;
+        public void CompleteEmptyCycles(int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                this.Complete(this.SingleActivity(nameof(GetLargePayloadTombstonesActivity)), Array.Empty<LargePayloadTombstone>());
+                this.Turn(TimerFired(Assert.Single(this.Response.Actions)));
+            }
+        }
+
         public P.OrchestratorAction SingleActivity(string name)
         {
             P.OrchestratorAction result = Assert.Single(this.Response.Actions);

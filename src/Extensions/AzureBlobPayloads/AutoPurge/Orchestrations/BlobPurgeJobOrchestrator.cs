@@ -10,11 +10,10 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// State carried by the eternal purge orchestration across continue-as-new.
 /// </summary>
 /// <param name="PurgeBatchSize">The maximum tombstones requested per cycle.</param>
-/// <param name="ProcessedCycles">Cycles processed since the last continue-as-new.</param>
 /// <param name="PurgedCount">Diagnostic terminal-success count, including duplicates and already-absent payloads.</param>
 /// <param name="BackendUnsupported">Whether an explicit enable event is required before retrying the backend.</param>
 public sealed record BlobPurgeJobRunRequest(
-    int PurgeBatchSize, int ProcessedCycles = 0, long PurgedCount = 0, bool BackendUnsupported = false);
+    int PurgeBatchSize, long PurgedCount = 0, bool BackendUnsupported = false);
 
 /// <summary>
 /// Eternal orchestration that fetches, deletes and reports payload tombstones. The backend setting controls
@@ -45,7 +44,7 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         ValidateBatchSize(input.PurgeBatchSize);
         ILogger logger = context.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>();
         int batchSize = input.PurgeBatchSize;
-        int processedCycles = input.ProcessedCycles;
+        int processedCycles = 0;
         long purgedCount = input.PurgedCount;
         bool unsupported = input.BackendUnsupported;
         using CancellationTokenSource waiterCancellation = new();
@@ -115,23 +114,28 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             if (wait && !configuration.IsCompleted)
             {
                 context.SetCustomStatus(new { Status = "Waiting", BatchSize = batchSize, PurgedCount = purgedCount });
-                using CancellationTokenSource timerCancellation = new();
-                Task timer = context.CreateTimer(IdleDelay, timerCancellation.Token);
-                await Task.WhenAny(timer, configuration);
-                if (!timer.IsCompleted)
-                {
-                    timerCancellation.Cancel();
-                }
-
-                try
-                {
-                    await timer;
-                }
-                catch (OperationCanceledException) when (timerCancellation.IsCancellationRequested)
-                {
-                    // A configuration event interrupted the idle/backoff timer.
-                }
+                await WaitForTimerOrConfigurationAsync(context, configuration);
             }
+        }
+    }
+
+    static async Task WaitForTimerOrConfigurationAsync(TaskOrchestrationContext context, Task configuration)
+    {
+        using CancellationTokenSource timerCancellation = new();
+        Task timer = context.CreateTimer(IdleDelay, timerCancellation.Token);
+        await Task.WhenAny(timer, configuration);
+        if (!timer.IsCompleted)
+        {
+            timerCancellation.Cancel();
+        }
+
+        try
+        {
+            await timer;
+        }
+        catch (OperationCanceledException) when (timerCancellation.IsCancellationRequested)
+        {
+            // The existing configuration waiter interrupted the idle/backoff timer.
         }
     }
 

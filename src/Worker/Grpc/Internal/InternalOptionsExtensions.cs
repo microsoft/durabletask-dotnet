@@ -27,6 +27,38 @@ public enum ActivityNotificationPhase
 public static class InternalOptionsExtensions
 {
     /// <summary>
+    /// Registers infrastructure task names that do not participate in customer worker version checks.
+    /// Names are matched exactly, case-insensitively and separately by task kind, and captured when the worker is built.
+    /// </summary>
+    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="orchestrationNames">The infrastructure orchestration names.</param>
+    /// <param name="activityNames">The infrastructure activity names.</param>
+    /// <remarks>
+    /// This is an internal API that supports the DurableTask infrastructure and is not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release. It does not bypass task registration or other worker filters and does not guarantee
+    /// replay compatibility across SDK versions.
+    /// </remarks>
+    public static void ConfigureVersioningExemptions(
+        this GrpcDurableTaskWorkerOptions options,
+        IEnumerable<string> orchestrationNames,
+        IEnumerable<string> activityNames)
+    {
+        Check.NotNull(options);
+        Check.NotNull(orchestrationNames);
+        Check.NotNull(activityNames);
+        foreach (string name in orchestrationNames)
+        {
+            options.Internal.VersioningExemptOrchestrations.Add(Check.NotNullOrEmpty(name, nameof(orchestrationNames)));
+        }
+
+        foreach (string name in activityNames)
+        {
+            options.Internal.VersioningExemptActivities.Add(Check.NotNullOrEmpty(name, nameof(activityNames)));
+        }
+    }
+
+    /// <summary>
     /// Configure the worker to use the default settings for connecting to the Azure Managed Durable Task service.
     /// </summary>
     /// <param name="options">The gRPC worker options.</param>
@@ -114,5 +146,25 @@ public static class InternalOptionsExtensions
     public static void SetSilentDisconnectTimeout(this GrpcDurableTaskWorkerOptions options, TimeSpan timeout)
     {
         options.Internal.SilentDisconnectTimeout = timeout;
+    }
+
+    /// <summary>
+    /// Sets a callback invoked with the worker's current effective <see cref="CallInvoker"/> - the one that
+    /// remains after the configured interceptors have been applied. The worker invokes it once at startup and
+    /// again after every successful channel recreate, so a component that shares the worker's transport can
+    /// follow it rather than capturing an invoker that is later left pointing at a disposed channel.
+    /// </summary>
+    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="publisher">The publish callback. It must not throw and must not block.</param>
+    /// <remarks>
+    /// This is an internal API that supports the DurableTask infrastructure and not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release.
+    /// </remarks>
+    public static void SetCallInvokerPublisher(
+        this GrpcDurableTaskWorkerOptions options,
+        Action<CallInvoker> publisher)
+    {
+        options.Internal.CallInvokerPublisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
     }
 }

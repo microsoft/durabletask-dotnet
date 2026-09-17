@@ -18,12 +18,11 @@ namespace Microsoft.DurableTask;
 /// Extension methods to enable externalized payloads using Azure Blob Storage for Durable Task Worker.
 /// </summary>
 /// <remarks>
-/// Externalized payloads are configured per host, not per named builder. The <c>PayloadStore</c> and the
-/// purge <c>LargePayloadPurgeClient</c> are registered as container-wide singletons, so the first builder
-/// in the host that calls <c>UseExternalizedPayloads</c> supplies the configuration that both of them use.
-/// Configuring multiple named workers in the same host with different storage accounts or different backends
-/// is therefore not supported: later builders silently share the first builder's registration. A single named
-/// worker, or several named workers that share one configuration, is fully supported.
+/// Payload storage is configured per host: the <c>PayloadStore</c> is shared by all named builders.
+/// If no store is already registered, the first builder calling <c>UseExternalizedPayloads</c> supplies it.
+/// Each named worker has its own purge client, which follows that worker's transport and channel lifecycle.
+/// A single named worker, or several named workers sharing one storage and backend configuration, is supported.
+/// Different storage accounts or different backends in the same host are not supported.
 /// </remarks>
 public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 {
@@ -84,8 +83,8 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>, RebindableCallInvoker>(
-                (opt, store, monitor, purgeInvoker) =>
+            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>, IServiceProvider>(
+                (opt, store, monitor, services) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
 
@@ -99,7 +98,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 // Follow the worker's transport instead of capturing one. The worker publishes its effective
                 // post-interceptor invoker here at startup and after every channel recreate, which is what
                 // keeps the purge activities on the live channel and inside the configured auth chain.
-                opt.SetCallInvokerPublisher(purgeInvoker.Rebind);
+                opt.SetCallInvokerPublisher(services.GetRequiredKeyedService<RebindableCallInvoker>(builder.Name).Rebind);
             });
 
         // The worker resolves gRPC options before reading its filters. Resolve the fully configured and
@@ -108,23 +107,11 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
             .PostConfigure<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>, IOptionsMonitor<DurableTaskWorkerOptions>>(
                 (_, filters, options) => AddAutoPurgeFilters(filters.Get(builder.Name), options.Get(builder.Name)));
 
-        // The purge activities talk to the backend over the worker's OWN transport, so a worker-only host
-        // (which never registers a DurableTaskClient) can still run the job. The worker's transport is not
-        // fixed for the life of the process - it recreates its channel when the current one is wedged, and the
-        // invoker it hands out is the one left after the configured interceptors (auth included) have been
-        // applied. Capturing options.CallInvoker/Channel here would therefore take a RAW invoker, skip the
-        // interceptors, reject the Address-only configuration outright, and keep pointing at channel A after
-        // the worker had moved to channel B. Instead, register an indirection the worker publishes into and
-        // build the client on that.
-        // TryAddSingleton (rather than a keyed/named registration) is deliberate: the consumers -
-        // GetLargePayloadTombstonesActivity and ReportLargePayloadPurgeResultsActivity - are constructed from
-        // the plain IServiceProvider at dispatch with no worker name in scope, so a keyed registration would
-        // have no resolvable consumer. This is the per-host single-configuration constraint documented on the
-        // class remarks: in a multi-named-worker host the first builder's options win here. Do not "fix" this
-        // into keyed DI - without a worker-name-aware consumer there is nothing to resolve the keyed client.
-        builder.Services.TryAddSingleton<RebindableCallInvoker>();
-        builder.Services.TryAddSingleton(
-            sp => new LargePayloadPurgeClient(sp.GetRequiredService<RebindableCallInvoker>()));
+        // Each named worker publishes only to its own invoker. The registry factories below select that
+        // worker's client at dispatch, sharing its intercepted transport without opening another connection.
+        builder.Services.TryAddKeyedSingleton<RebindableCallInvoker>(builder.Name);
+        builder.Services.TryAddKeyedSingleton<LargePayloadPurgeClient>(
+            builder.Name, (sp, key) => new(sp.GetRequiredKeyedService<RebindableCallInvoker>(key)));
 
         // Register the orchestrator/activities that run the singleton auto-purge job. These are ALWAYS
         // registered (never gated on configuration) so that a job a client has turned on always has something
@@ -133,9 +120,13 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         builder.AddTasks(r =>
         {
             r.AddOrchestrator<BlobPurgeJobOrchestrator>();
-            r.AddActivity<GetLargePayloadTombstonesActivity>();
+            r.AddActivity(nameof(GetLargePayloadTombstonesActivity), sp =>
+                ActivatorUtilities.CreateInstance<GetLargePayloadTombstonesActivity>(
+                    sp, sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name)));
             r.AddActivity<DeleteExternalBlobActivity>();
-            r.AddActivity<ReportLargePayloadPurgeResultsActivity>();
+            r.AddActivity(nameof(ReportLargePayloadPurgeResultsActivity), sp =>
+                ActivatorUtilities.CreateInstance<ReportLargePayloadPurgeResultsActivity>(
+                    sp, sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name)));
         });
 
         return builder;

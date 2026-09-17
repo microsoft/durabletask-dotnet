@@ -11,6 +11,7 @@ using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.AzureBlobPayloads;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
@@ -18,6 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
 using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
@@ -49,7 +51,7 @@ public class PurgeTransportTests
         using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
-        Func<LargePayloadPurgeClient> resolve = () => provider.GetRequiredService<LargePayloadPurgeClient>();
+        Func<LargePayloadPurgeClient> resolve = () => provider.GetRequiredKeyedService<LargePayloadPurgeClient>(string.Empty);
 
         // Assert
         resolve.Should().NotThrow();
@@ -81,7 +83,7 @@ public class PurgeTransportTests
         });
 
         await using ServiceProvider provider = services.BuildServiceProvider();
-        LargePayloadPurgeClient client = provider.GetRequiredService<LargePayloadPurgeClient>();
+        var activities = GetRegisteredActivities(provider, string.Empty);
         IHostedService worker = provider.GetServices<IHostedService>().Single();
 
         // Act - start the worker and wait until it has actually opened the work-item stream, which is the point
@@ -91,8 +93,8 @@ public class PurgeTransportTests
         {
             await transport.WorkItemsRequested.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-            await client.GetLargePayloadTombstonesAsync(new LP.GetLargePayloadTombstonesRequest { Limit = 1 });
-            await client.ReportLargePayloadPurgeResultsAsync(new LP.ReportLargePayloadPurgeResultsRequest());
+            await activities.Get.RunAsync(null!, 1);
+            await ReportAsync(activities.Report);
         }
         finally
         {
@@ -150,7 +152,7 @@ public class PurgeTransportTests
         });
 
         await using ServiceProvider provider = services.BuildServiceProvider();
-        LargePayloadPurgeClient client = provider.GetRequiredService<LargePayloadPurgeClient>();
+        LargePayloadPurgeClient client = provider.GetRequiredKeyedService<LargePayloadPurgeClient>(string.Empty);
         IHostedService worker = provider.GetServices<IHostedService>().Single();
 
         // Act
@@ -178,6 +180,88 @@ public class PurgeTransportTests
         finally
         {
             await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task RecreatingOneWorker_UpdatesOnlyItsRegisteredPurgeActivitiesAsync()
+    {
+        // Arrange
+        using RecordingHandler original = new();
+        using RecordingHandler replacement = new();
+        using GrpcChannel originalChannel = CreateChannel("http://original.invalid", original);
+        using GrpcChannel replacementChannel = CreateChannel("http://replacement.invalid", replacement);
+        FakeCallInvoker stable = new();
+        RecordingInterceptor movingInterceptor = new();
+        TaskCompletionSource<bool> releaseReplacement = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ServiceCollection services = new();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddDurableTaskWorker("moving", builder =>
+        {
+            builder.UseGrpc(options =>
+            {
+                options.Channel = originalChannel;
+                options.Interceptors.Add(movingInterceptor);
+                options.Internal.ChannelRecreateFailureThreshold = 1;
+                options.SetChannelRecreator(async (current, cancellation) =>
+                {
+                    if (ReferenceEquals(current, originalChannel))
+                    {
+                        await releaseReplacement.Task.WaitAsync(cancellation);
+                        return replacementChannel;
+                    }
+
+                    await Task.Delay(Timeout.Infinite, cancellation);
+                    return current;
+                });
+            });
+            builder.UseExternalizedPayloads(options => options.ConnectionString = "UseDevelopmentStorage=true");
+        });
+        services.AddDurableTaskWorker("stable", builder =>
+        {
+            builder.UseGrpc(options => options.CallInvoker = stable);
+            builder.UseExternalizedPayloads();
+        });
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IHostedService[] workers = provider.GetServices<IHostedService>().ToArray();
+        var movingActivities = GetRegisteredActivities(provider, "moving");
+        var stableActivities = GetRegisteredActivities(provider, "stable");
+
+        // Act
+        try
+        {
+            await workers[0].StartAsync(default);
+            await original.FirstHello.WaitAsync(TimeSpan.FromSeconds(15));
+            await AssertUnavailableAsync(() => movingActivities.Get.RunAsync(null!, 1));
+            await AssertUnavailableAsync(() => ReportAsync(movingActivities.Report));
+            await workers[1].StartAsync(default);
+            await stable.WorkItemsRequested.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            await stableActivities.Get.RunAsync(null!, 1);
+            await ReportAsync(stableActivities.Report);
+
+            releaseReplacement.SetResult(true);
+            await replacement.FirstHello.WaitAsync(TimeSpan.FromSeconds(15));
+            await AssertUnavailableAsync(() => movingActivities.Get.RunAsync(null!, 1));
+            await AssertUnavailableAsync(() => ReportAsync(movingActivities.Report));
+            Exception? getError = await Record.ExceptionAsync(() => stableActivities.Get.RunAsync(null!, 1));
+            Exception? reportError = await Record.ExceptionAsync(() => ReportAsync(stableActivities.Report));
+
+            // Assert
+            Assert.Null(getError);
+            Assert.Null(reportError);
+            Assert.Equal(1, original.PurgeFetchCount);
+            Assert.Equal(1, original.PurgeReportCount);
+            Assert.Equal(1, replacement.PurgeFetchCount);
+            Assert.Equal(1, replacement.PurgeReportCount);
+            Assert.Equal(2, stable.Calls.Count(name => name == "GetLargePayloadTombstones"));
+            Assert.Equal(2, stable.Calls.Count(name => name == "ReportLargePayloadPurgeResults"));
+            Assert.Equal(2, movingInterceptor.Calls.Count(name => name == "GetLargePayloadTombstones"));
+            Assert.Equal(2, movingInterceptor.Calls.Count(name => name == "ReportLargePayloadPurgeResults"));
+        }
+        finally
+        {
+            await Task.WhenAll(workers.Select(worker => worker.StopAsync(default))).WaitAsync(TimeSpan.FromSeconds(15));
         }
     }
 
@@ -247,6 +331,25 @@ public class PurgeTransportTests
 
     static GrpcChannel CreateChannel(string address, HttpMessageHandler handler)
         => GrpcChannel.ForAddress(address, new GrpcChannelOptions { HttpHandler = handler });
+
+    static (GetLargePayloadTombstonesActivity Get, ReportLargePayloadPurgeResultsActivity Report) GetRegisteredActivities(
+        IServiceProvider provider, string name)
+    {
+        DurableTaskRegistry registry = provider.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>().Get(name);
+        return (Create<GetLargePayloadTombstonesActivity>(), Create<ReportLargePayloadPurgeResultsActivity>());
+
+        T Create<T>() where T : class, ITaskActivity
+            => Assert.IsType<T>(Assert.Single(registry.GetActivities(), pair => pair.Key.Name == typeof(T).Name).Value(provider));
+    }
+
+    static Task ReportAsync(ReportLargePayloadPurgeResultsActivity activity)
+        => activity.RunAsync(null!, [new LargePayloadPurgeResult("opaque-tombstone", LargePayloadPurgeDisposition.Deleted)]);
+
+    static async Task AssertUnavailableAsync(Func<Task> call)
+    {
+        RpcException error = await Assert.ThrowsAsync<RpcException>(call);
+        Assert.Equal(StatusCode.Unavailable, error.StatusCode);
+    }
 
     static async Task FetchTombstonesIgnoringTransportFailureAsync(LargePayloadPurgeClient client)
     {
@@ -443,6 +546,9 @@ public class PurgeTransportTests
 
         public int PurgeFetchCount =>
             this.paths.Count(p => p.EndsWith("/GetLargePayloadTombstones", StringComparison.Ordinal));
+
+        public int PurgeReportCount =>
+            this.paths.Count(p => p.EndsWith("/ReportLargePayloadPurgeResults", StringComparison.Ordinal));
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)

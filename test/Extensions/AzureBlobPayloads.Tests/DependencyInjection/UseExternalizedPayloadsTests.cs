@@ -175,16 +175,7 @@ public class UseExternalizedPayloadsTests
     [Fact]
     public void UseExternalizedPayloads_WorkerOnly_PurgeActivitiesAreConstructible()
     {
-        // Arrange - a WORKER-ONLY host: AddDurableTaskWorker + UseExternalizedPayloads, with no AddDurableTaskClient
-        // anywhere. This is the split-deployment shape ("client triggers, worker executes"). The purge activities
-        // used to inject a concrete DurableTaskClient, which a worker-only host never registers, so they threw at
-        // dispatch time - and only at dispatch, because DurableTaskRegistry stores a lazy
-        // ActivatorUtilities.GetServiceOrCreateInstance factory - leaving auto-purge silently broken. They now
-        // inject the worker's own LargePayloadPurge client, which rides the transport the worker publishes at
-        // runtime, so they construct with no DurableTaskClient present. UseGrpc is here because a real worker
-        // configures a transport, not because resolving the purge client needs one - see
-        // PurgeTransportTests.AddressOnlyWorker_ResolvesThePurgeClient for the configuration that has neither
-        // Channel nor CallInvoker.
+        // Arrange - a worker-only host must construct its registered purge activities without a DurableTaskClient.
         ServiceCollection services = new();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddDurableTaskWorker(builder =>
@@ -195,13 +186,13 @@ public class UseExternalizedPayloadsTests
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
-        // Act - construct both activities through the exact reflection path DurableTaskRegistry uses at dispatch.
+        // Act - use the worker's registered factories, which select its named purge client at dispatch.
         Action constructGet = () =>
-            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(GetLargePayloadTombstonesActivity));
+            CreateRegisteredActivity<GetLargePayloadTombstonesActivity>(provider, string.Empty);
         Action constructReport = () =>
-            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(ReportLargePayloadPurgeResultsActivity));
+            CreateRegisteredActivity<ReportLargePayloadPurgeResultsActivity>(provider, string.Empty);
 
-        // Assert - both must resolve without a client in the container. This throws on the pre-fix code.
+        // Assert
         constructGet.Should().NotThrow();
         constructReport.Should().NotThrow();
     }
@@ -260,7 +251,7 @@ public class UseExternalizedPayloadsTests
         using ServiceProvider provider = services.BuildServiceProvider();
 
         // Assert - both option sets resolve under the name, the store is blob-backed, and both purge activities
-        // construct through the exact reflection path DurableTaskRegistry uses at dispatch.
+        // construct through that worker's registered activity factories.
         provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(name)
             .ConnectionString.Should().Be("UseDevelopmentStorage=true");
         provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>().Get(name)
@@ -268,9 +259,9 @@ public class UseExternalizedPayloadsTests
         provider.GetRequiredService<PayloadStore>().Should().BeOfType<BlobPayloadStore>();
 
         Action constructGet = () =>
-            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(GetLargePayloadTombstonesActivity));
+            CreateRegisteredActivity<GetLargePayloadTombstonesActivity>(provider, name);
         Action constructReport = () =>
-            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(ReportLargePayloadPurgeResultsActivity));
+            CreateRegisteredActivity<ReportLargePayloadPurgeResultsActivity>(provider, name);
         constructGet.Should().NotThrow();
         constructReport.Should().NotThrow();
     }
@@ -333,7 +324,15 @@ public class UseExternalizedPayloadsTests
             .Which.Should().BeOfType<GrpcDurableTaskWorker>();
 
         Action constructActivity = () =>
-            ActivatorUtilities.GetServiceOrCreateInstance(provider, typeof(GetLargePayloadTombstonesActivity));
+            CreateRegisteredActivity<GetLargePayloadTombstonesActivity>(provider, string.Empty);
         constructActivity.Should().NotThrow();
+    }
+
+    static TActivity CreateRegisteredActivity<TActivity>(IServiceProvider provider, string name)
+        where TActivity : class, ITaskActivity
+    {
+        DurableTaskRegistry registry = provider.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>().Get(name);
+        return Assert.IsType<TActivity>(
+            Assert.Single(registry.GetActivities(), pair => pair.Key.Name == typeof(TActivity).Name).Value(provider));
     }
 }

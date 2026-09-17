@@ -33,6 +33,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
     /// <param name="builder">The builder to configure.</param>
     /// <param name="configure">The callback to configure the storage options.</param>
     /// <returns>The original builder, for call chaining.</returns>
+    /// <remarks>
+    /// Nonempty work item filters include the internal auto-purge orchestrator and activity names, even when
+    /// the supplied filters contain only one task category. Null or all-empty filters remain unfiltered.
+    /// Existing version filters are preserved; newly added names follow the worker's versioning policy.
+    /// Including a name does not override version restrictions or guarantee that the worker is running.
+    /// </remarks>
     public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
         this IDurableTaskWorkerBuilder builder,
         Action<LargePayloadStorageOptions> configure)
@@ -51,6 +57,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
     /// <returns>The original builder, for call chaining.</returns>
+    /// <remarks>
+    /// Nonempty work item filters include the internal auto-purge orchestrator and activity names, even when
+    /// the supplied filters contain only one task category. Null or all-empty filters remain unfiltered.
+    /// Existing version filters are preserved; newly added names follow the worker's versioning policy.
+    /// Including a name does not override version restrictions or guarantee that the worker is running.
+    /// </remarks>
     public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
         this IDurableTaskWorkerBuilder builder)
     {
@@ -90,6 +102,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 opt.SetCallInvokerPublisher(purgeInvoker.Rebind);
             });
 
+        // The worker resolves gRPC options before reading its filters. Resolve the fully configured and
+        // validated named filters here, after every UseWorkItemFilters PostConfigure, including later calls.
+        builder.Services.AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
+            .PostConfigure<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>, IOptionsMonitor<DurableTaskWorkerOptions>>(
+                (_, filters, options) => AddAutoPurgeFilters(filters.Get(builder.Name), options.Get(builder.Name)));
+
         // The purge activities talk to the backend over the worker's OWN transport, so a worker-only host
         // (which never registers a DurableTaskClient) can still run the job. The worker's transport is not
         // fixed for the life of the process - it recreates its channel when the current one is wedged, and the
@@ -121,5 +139,42 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         });
 
         return builder;
+    }
+
+    static void AddAutoPurgeFilters(DurableTaskWorkerWorkItemFilters filters, DurableTaskWorkerOptions options)
+    {
+        if (filters.Orchestrations.Count == 0 && filters.Activities.Count == 0 && filters.Entities.Count == 0)
+        {
+            return;
+        }
+
+        // These tasks have unversioned registrations: match automatic filters' wildcard/Strict semantics.
+        string[] versions = options.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
+            ? [options.Versioning.Version ?? string.Empty]
+            : [];
+        List<DurableTaskWorkerWorkItemFilters.OrchestrationFilter> orchestrations = filters.Orchestrations.ToList();
+        if (!orchestrations.Any(filter => string.Equals(
+            filter.Name, nameof(BlobPurgeJobOrchestrator), StringComparison.OrdinalIgnoreCase)))
+        {
+            orchestrations.Add(new(nameof(BlobPurgeJobOrchestrator), versions));
+        }
+
+        List<DurableTaskWorkerWorkItemFilters.ActivityFilter> activities = filters.Activities.ToList();
+        foreach (string name in new[]
+        {
+            nameof(GetLargePayloadTombstonesActivity),
+            nameof(DeleteExternalBlobActivity),
+            nameof(ReportLargePayloadPurgeResultsActivity),
+        })
+        {
+            if (!activities.Any(filter => string.Equals(filter.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                activities.Add(new(name, versions));
+            }
+        }
+
+        // Explicit filters may point directly at caller-owned lists, including lists shared with another worker.
+        filters.Orchestrations = orchestrations;
+        filters.Activities = activities;
     }
 }

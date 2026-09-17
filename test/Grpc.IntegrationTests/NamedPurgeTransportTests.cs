@@ -295,14 +295,8 @@ public class NamedPurgeTransportTests(ITestOutputHelper output)
 
         public async ValueTask DisposeAsync()
         {
-            try
-            {
-                await this.host.StopAsync().WaitAsync(Timeout);
-            }
-            finally
-            {
-                this.host.Dispose();
-            }
+            using IHost host = this.host;
+            await host.StopAsync().WaitAsync(Timeout);
         }
 
         async Task HandleAsync(HttpContext context)
@@ -328,6 +322,7 @@ public class NamedPurgeTransportTests(ITestOutputHelper output)
                 }
                 catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
                 {
+                    // The client disconnected or aborted this parked work-item request.
                 }
                 finally
                 {

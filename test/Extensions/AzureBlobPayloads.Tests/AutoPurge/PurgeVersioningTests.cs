@@ -323,6 +323,7 @@ public class PurgeVersioningTests(ITestOutputHelper output)
                 });
                 if (rejectByCustomFilter)
                 {
+                    // Intentionally cover the experimental callback; work-item name filters are not equivalent.
 #pragma warning disable CS0618
                     Mock<IOrchestrationFilter> filter = new();
                     filter.Setup(value => value.IsOrchestrationValidAsync(It.IsAny<OrchestrationFilterParameters>(), It.IsAny<CancellationToken>()))

@@ -200,6 +200,11 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Only a 404 response identifying <c>BlobNotFound</c> or <c>ContainerNotFound</c> confirms absence.
+    /// A 404 with an unknown or missing error code propagates as <see cref="RequestFailedException"/>,
+    /// allowing auto-purge to retry instead of resolving a tombstone without confirmed absence.
+    /// </remarks>
     public override async Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken)
     {
         BlobClient blob = this.GetBlobClient(token);
@@ -215,10 +220,11 @@ public sealed class BlobPayloadStore : PayloadStore
                 conditions: null, cancellationToken: cancellationToken);
             properties = response.Value;
         }
-        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
+        catch (RequestFailedException ex) when (
+            ex.Status == (int)HttpStatusCode.NotFound
+            && (ex.ErrorCode == BlobErrorCode.BlobNotFound || ex.ErrorCode == BlobErrorCode.ContainerNotFound))
         {
-            // Already gone. Deletion is idempotent, so a re-delivered tombstone or a concurrent worker
-            // replica that won the race is a success, not an error.
+            // Match DeleteIfExistsAsync's confirmed-absence cases; an ambiguous 404 must remain retryable.
             return PayloadDeleteOutcome.AlreadyAbsent;
         }
 

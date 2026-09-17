@@ -128,6 +128,29 @@ public class BlobPayloadStoreDeleteTests
             Times.Never);
     }
 
+    [Theory]
+    [InlineData("UnknownNotFound")]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task DeleteAsync_UncertainNotFound_PropagatesOriginalExceptionAsync(string? errorCode)
+    {
+        // Arrange
+        RequestFailedException expected = new(404, "Uncertain absence.", errorCode, null);
+        Mock<BlobClient> blob = new();
+        blob.Setup(b => b.GetPropertiesAsync(It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(expected);
+        BlobPayloadStore store = new(new LargePayloadStorageOptions(), CreateContainer(blob, "blob").Object);
+
+        // Act
+        RequestFailedException actual = await Assert.ThrowsAsync<RequestFailedException>(
+            () => store.DeleteAsync($"blob:v2:{ConfiguredAccountUrl}/{ContainerName}/blob", CancellationToken.None));
+
+        // Assert
+        Assert.Same(expected, actual);
+        blob.Verify(b => b.DeleteIfExistsAsync(
+            It.IsAny<DeleteSnapshotsOption>(), It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task DeleteAsync_V1TokenContainerMismatch_ThrowsAndDoesNotDelete()
     {

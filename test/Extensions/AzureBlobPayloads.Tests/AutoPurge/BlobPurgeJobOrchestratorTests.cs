@@ -183,7 +183,12 @@ public class BlobPurgeJobOrchestratorTests
         Assert.Contains($"\"PurgedCount\":{(disposition == LargePayloadPurgeDisposition.Deleted ? 507 : 7)}", driver.Response.CustomStatus);
         if (disposition == LargePayloadPurgeDisposition.Retry)
         {
-            Assert.NotNull(Assert.Single(driver.Response.Actions).CreateTimer);
+            P.OrchestratorAction timer = Assert.Single(driver.Response.Actions);
+            Assert.NotNull(timer.CreateTimer);
+            Assert.Equal(driver.Now.AddMinutes(1), timer.CreateTimer.FireAt.ToDateTime());
+            driver.Turn(Driver.Configure(400));
+            Assert.Equal("[400]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+            Assert.DoesNotContain(driver.Response.Actions, action => action.CreateTimer is not null);
         }
         else
         {
@@ -191,11 +196,14 @@ public class BlobPurgeJobOrchestratorTests
         }
     }
 
-    [Fact]
-    public void UnsupportedBackend_WaitsForExplicitEnable_WithoutCompleting()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public void UnsupportedBackend_WaitsInCurrentExecution_UntilConfiguration(int previousCycles)
     {
         // Arrange
-        Driver driver = new(new BlobPurgeJobRunRequest(250));
+        Driver driver = new(new BlobPurgeJobRunRequest(250, PurgedCount: 9));
+        driver.CompleteEmptyCycles(previousCycles);
         P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
 
         // Act
@@ -203,32 +211,98 @@ public class BlobPurgeJobOrchestratorTests
 
         // Assert
         Assert.Empty(driver.Response.Actions);
-        Assert.Contains("BackendUnsupported", driver.Response.CustomStatus);
+        Assert.Equal("{\"Status\":\"BackendUnsupported\",\"BatchSize\":250,\"PurgedCount\":9}", driver.Response.CustomStatus);
         Assert.Equal(driver.Response.ToByteArray(), driver.ReplayLastTurn().ToByteArray());
+        driver.Turn();
+        Assert.Empty(driver.Response.Actions);
+        Assert.Equal("{\"Status\":\"BackendUnsupported\",\"BatchSize\":250,\"PurgedCount\":9}", driver.Response.CustomStatus);
         driver.Turn(Driver.Configure(400));
-        Assert.Equal("[400]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+        Assert.Equal(driver.Response.ToByteArray(), driver.ReplayLastTurn().ToByteArray());
+        if (previousCycles == 0)
+        {
+            Assert.Equal("[400]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+            Assert.Equal("{\"Status\":\"Running\",\"BatchSize\":400,\"PurgedCount\":9}", driver.Response.CustomStatus);
+        }
+        else
+        {
+            P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+            Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, can.OrchestrationStatus);
+            Assert.Equal("{\"PurgeBatchSize\":400,\"PurgedCount\":9}", can.Result);
+            BlobPurgeJobRunRequest next = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
+            Driver continued = new(next);
+            Assert.Equal("[400]", continued.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+            Assert.Equal("{\"Status\":\"Running\",\"BatchSize\":400,\"PurgedCount\":9}", continued.Response.CustomStatus);
+        }
     }
 
     [Fact]
-    public void UnsupportedAtCan_IsCarriedAndWaitsWithoutFetching()
+    public void UnsupportedAtFinalCycle_WakeThenCan_PreservesLateConfiguration()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250, PurgedCount: 7));
+        driver.CompleteEmptyCycles(4);
+        driver.Turn(Driver.ActivityFailed(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)),
+            new NotImplementedException("unsupported")));
+        Assert.Empty(driver.Response.Actions);
+
+        // Act - the first event releases the existing waiter; the second arrives after this execution calls CAN.
+        driver.Turn(Driver.Configure(333), Driver.Configure(444));
+        P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+
+        // Assert
+        Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, can.OrchestrationStatus);
+        Assert.Equal("{\"PurgeBatchSize\":333,\"PurgedCount\":7}", can.Result);
+        P.HistoryEvent forwarded = Assert.Single(can.CarryoverEvents);
+        Assert.Equal(BlobPurgeConstants.SetBatchSizeEvent, forwarded.EventRaised.Name);
+        Assert.Equal("444", forwarded.EventRaised.Input);
+        Assert.Equal(driver.Response.ToByteArray(), driver.ReplayLastTurn().ToByteArray());
+        BlobPurgeJobRunRequest next = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
+        Driver continued = new(next, forwarded.Clone());
+        P.OrchestratorAction fetch = continued.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        Assert.Equal("[333]", fetch.ScheduleTask.Input);
+        continued.Complete(fetch, Array.Empty<LargePayloadTombstone>());
+        Assert.Equal("[444]", continued.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+        Assert.Equal("{\"Status\":\"Running\",\"BatchSize\":444,\"PurgedCount\":7}", continued.Response.CustomStatus);
+    }
+
+    [Fact]
+    public void UnsupportedWithDeliveredAndBufferedConfiguration_DrainsBeforeCan()
+    {
+        // Arrange
+        Driver driver = new(new BlobPurgeJobRunRequest(250, PurgedCount: 7));
+        driver.CompleteEmptyCycles(4);
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        driver.Turn(Driver.Configure(400), Driver.Configure(500));
+
+        // Act - configuration is already delivered when the failed activity reaches the unsupported catch.
+        driver.Turn(Driver.ActivityFailed(fetch, new NotImplementedException("unsupported")));
+        P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
+
+        // Assert
+        Assert.Equal(P.OrchestrationStatus.ContinuedAsNew, can.OrchestrationStatus);
+        Assert.Equal("{\"PurgeBatchSize\":500,\"PurgedCount\":7}", can.Result);
+        Assert.Empty(can.CarryoverEvents);
+        Assert.Equal(driver.Response.ToByteArray(), driver.ReplayLastTurn().ToByteArray());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1001)]
+    public void UnsupportedWithInvalidBufferedConfiguration_FailsBeforeCan(int batch)
     {
         // Arrange
         Driver driver = new(new BlobPurgeJobRunRequest(250));
         driver.CompleteEmptyCycles(4);
+        P.OrchestratorAction fetch = driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity));
+        driver.Turn(Driver.Configure(400), Driver.Configure(batch));
 
         // Act
-        driver.Turn(Driver.ActivityFailed(driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)),
-            new NotImplementedException("unsupported")));
+        driver.Turn(Driver.ActivityFailed(fetch, new NotImplementedException("unsupported")));
         P.CompleteOrchestrationAction can = Assert.Single(driver.Response.Actions).CompleteOrchestration;
-        BlobPurgeJobRunRequest next = JsonDataConverter.Default.Deserialize<BlobPurgeJobRunRequest>(can.Result)!;
-        Driver continued = new(next);
 
         // Assert
-        Assert.True(next.BackendUnsupported);
-        Assert.Empty(continued.Response.Actions);
-        Assert.Contains("BackendUnsupported", continued.Response.CustomStatus);
-        continued.Turn(Driver.Configure(333));
-        Assert.Equal("[333]", continued.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).ScheduleTask.Input);
+        Assert.Equal(P.OrchestrationStatus.Failed, can.OrchestrationStatus);
+        Assert.Contains("ArgumentException", can.FailureDetails.ErrorType);
     }
 
     [Theory]

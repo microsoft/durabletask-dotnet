@@ -11,14 +11,16 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// </summary>
 /// <param name="PurgeBatchSize">The maximum tombstones requested per cycle.</param>
 /// <param name="PurgedCount">Diagnostic terminal-success count, including duplicates and already-absent payloads.</param>
-/// <param name="BackendUnsupported">Whether an explicit enable event is required before retrying the backend.</param>
-public sealed record BlobPurgeJobRunRequest(
-    int PurgeBatchSize, long PurgedCount = 0, bool BackendUnsupported = false);
+public sealed record BlobPurgeJobRunRequest(int PurgeBatchSize, long PurgedCount = 0);
 
 /// <summary>
 /// Eternal orchestration that fetches, deletes and reports payload tombstones. The backend setting controls
 /// fetch eligibility; an empty or disabled fetch idles on a durable timer rather than completing the runner.
 /// </summary>
+/// <remarks>
+/// An unsupported backend waits in the current execution for a configuration event, including on the fifth
+/// attempted cycle. Configuration is applied before any subsequent continue-as-new.
+/// </remarks>
 [DurableTask]
 public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest, object?>
 {
@@ -46,7 +48,6 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         int batchSize = input.PurgeBatchSize;
         int processedCycles = 0;
         long purgedCount = input.PurgedCount;
-        bool unsupported = input.BackendUnsupported;
         using CancellationTokenSource waiterCancellation = new();
         Task<int> configuration = context.WaitForExternalEvent<int>(
             BlobPurgeConstants.SetBatchSizeEvent, waiterCancellation.Token);
@@ -59,7 +60,6 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             {
                 batchSize = await configuration;
                 ValidateBatchSize(batchSize);
-                unsupported = false;
                 configuration = context.WaitForExternalEvent<int>(
                     BlobPurgeConstants.SetBatchSizeEvent, waiterCancellation.Token);
             }
@@ -68,18 +68,12 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             {
                 waiterCancellation.Cancel();
                 context.ContinueAsNew(
-                    new BlobPurgeJobRunRequest(batchSize, PurgedCount: purgedCount, BackendUnsupported: unsupported),
+                    new BlobPurgeJobRunRequest(batchSize, PurgedCount: purgedCount),
                     preserveUnprocessedEvents: true);
                 return null;
             }
 
-            context.SetCustomStatus(new { Status = unsupported ? "BackendUnsupported" : "Running", BatchSize = batchSize, PurgedCount = purgedCount });
-            if (unsupported)
-            {
-                await configuration;
-                continue;
-            }
-
+            context.SetCustomStatus(new { Status = "Running", BatchSize = batchSize, PurgedCount = purgedCount });
             processedCycles++;
             bool wait = false;
             try
@@ -103,7 +97,8 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
             catch (TaskFailedException ex) when (ex.FailureDetails.IsCausedBy<NotImplementedException>())
             {
                 logger.BlobPurgeBackendUnsupported(context.InstanceId, ex.FailureDetails.ErrorMessage);
-                unsupported = true;
+                context.SetCustomStatus(new { Status = "BackendUnsupported", BatchSize = batchSize, PurgedCount = purgedCount });
+                await configuration;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {

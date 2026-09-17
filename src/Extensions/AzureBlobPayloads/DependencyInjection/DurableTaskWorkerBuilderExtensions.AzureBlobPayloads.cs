@@ -165,12 +165,10 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
             nameof(GetLargePayloadTombstonesActivity),
             nameof(DeleteExternalBlobActivity),
             nameof(ReportLargePayloadPurgeResultsActivity),
-        })
+        }.Where(name => !activities.Any(filter =>
+            string.Equals(filter.Name, name, StringComparison.OrdinalIgnoreCase))))
         {
-            if (!activities.Any(filter => string.Equals(filter.Name, name, StringComparison.OrdinalIgnoreCase)))
-            {
-                activities.Add(new(name, versions));
-            }
+            activities.Add(new(name, versions));
         }
 
         // Explicit filters may point directly at caller-owned lists, including lists shared with another worker.

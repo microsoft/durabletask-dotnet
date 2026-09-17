@@ -837,7 +837,10 @@ sealed partial class GrpcDurableTaskWorker
                 }
 
                 // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
-                failureDetails = EvaluateOrchestrationVersioning(versioning, runtimeState.Version, out versionFailure);
+                if (!this.worker.versioningExemptOrchestrations.Contains(runtimeState.Name))
+                {
+                    failureDetails = EvaluateOrchestrationVersioning(versioning, runtimeState.Version, out versionFailure);
+                }
 
                 // Only continue with the work if the versioning check passed.
                 if (failureDetails == null)
@@ -1029,7 +1032,12 @@ sealed partial class GrpcDurableTaskWorker
 
             string? output = null;
 
-            failureDetails = EvaluateOrchestrationVersioning(this.worker.workerOptions.Versioning, request.Version, out bool versioningFailed);
+            bool versioningFailed = false;
+            if (!this.worker.versioningExemptActivities.Contains(request.Name))
+            {
+                failureDetails = EvaluateOrchestrationVersioning(this.worker.workerOptions.Versioning, request.Version, out versioningFailed);
+            }
+
             if (!versioningFailed)
             {
                 try

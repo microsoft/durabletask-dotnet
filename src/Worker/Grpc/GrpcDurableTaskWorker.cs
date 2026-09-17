@@ -19,6 +19,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
     readonly Interceptor[] interceptors;
+    readonly HashSet<string> versioningExemptOrchestrations;
+    readonly HashSet<string> versioningExemptActivities;
     readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
@@ -57,6 +59,10 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         // re-reading it when a channel is recreated would let a late mutation silently take effect at an
         // externally-triggered recreate, long after the change was made.
         this.interceptors = this.grpcOptions.Interceptors.ToArray();
+
+        // Infrastructure exemptions, like interceptors, are fixed for this worker's lifetime.
+        this.versioningExemptOrchestrations = new(this.grpcOptions.Internal.VersioningExemptOrchestrations, StringComparer.OrdinalIgnoreCase);
+        this.versioningExemptActivities = new(this.grpcOptions.Internal.VersioningExemptActivities, StringComparer.OrdinalIgnoreCase);
         this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);

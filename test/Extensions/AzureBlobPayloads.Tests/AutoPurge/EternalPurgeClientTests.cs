@@ -35,6 +35,24 @@ public class EternalPurgeClientTests
     }
 
     [Fact]
+    public async Task Enable_UsesUnversionedRunnerWithoutChangingBusinessDefaultAsync()
+    {
+        // Arrange
+        RecordingInvoker invoker = new();
+        GrpcDurableTaskClientOptions options = new() { CallInvoker = invoker, DefaultVersion = "3.0" };
+        await using GrpcDurableTaskClient client = new("test", options, NullLogger.Instance);
+
+        // Act
+        await client.SetLargePayloadAutoPurgeAsync(true);
+        await client.ScheduleNewOrchestrationInstanceAsync("BusinessOrchestrator");
+
+        // Assert
+        Assert.Equal(string.Empty, invoker.Starts[0].Version);
+        Assert.Equal("3.0", invoker.Starts[1].Version);
+        Assert.Equal("3.0", options.DefaultVersion);
+    }
+
+    [Fact]
     public async Task Enable_WaitsForActualStart_ThenConfiguresAsync()
     {
         // Arrange

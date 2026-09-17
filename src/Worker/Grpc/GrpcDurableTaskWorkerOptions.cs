@@ -113,6 +113,16 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     internal class InternalOptions
     {
         /// <summary>
+        /// Gets infrastructure orchestration names exempt from customer worker version checks.
+        /// </summary>
+        public HashSet<string> VersioningExemptOrchestrations { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Gets infrastructure activity names exempt from customer worker version checks.
+        /// </summary>
+        public HashSet<string> VersioningExemptActivities { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Gets or sets a value indicating whether entity-related events appearing in orchestration histories should be
         /// automatically converted back and forth between the old DT Core representation (JSON-encoded external events)
         /// and the new protobuf representation (explicit history events), which is used by the DTS scheduler backend.

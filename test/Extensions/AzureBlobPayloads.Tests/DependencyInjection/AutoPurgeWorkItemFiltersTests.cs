@@ -107,8 +107,8 @@ public class AutoPurgeWorkItemFiltersTests
         Assert.Equal(orchestrations.Order(), wire.Orchestrations.Select(filter => filter.Name).Order());
         Assert.Equal(activities.Order(), wire.Activities.Select(filter => filter.Name).Order());
         Assert.Equal(entities, wire.Entities.Select(filter => filter.Name));
-        Assert.All(wire.Orchestrations, filter => Assert.Equal(ExpectedVersions(filter.Name, mode, automatic), filter.Versions));
-        Assert.All(wire.Activities, filter => Assert.Equal(ExpectedVersions(filter.Name, mode, automatic), filter.Versions));
+        Assert.All(wire.Orchestrations, filter => Assert.Equal(ExpectedVersions(filter.Name), filter.Versions));
+        Assert.All(wire.Activities, filter => Assert.Equal(ExpectedVersions(filter.Name), filter.Versions));
         Assert.Equal(suppliedBefore, System.Text.Json.JsonSerializer.Serialize(supplied));
     }
 
@@ -155,7 +155,7 @@ public class AutoPurgeWorkItemFiltersTests
     [InlineData("", false)]
     [InlineData("2.0", false)]
     [InlineData("2.0", true)]
-    public async Task Worker_UsesStrictVersionsOnlyForNewInternalFiltersAsync(string version, bool alreadyIncluded)
+    public async Task Worker_UsesWildcardVersionsForInternalFiltersAsync(string version, bool alreadyIncluded)
     {
         // Arrange
         using FilterHandler handler = new();
@@ -184,7 +184,7 @@ public class AutoPurgeWorkItemFiltersTests
         {
             Assert.Equal(
                 filter.Name == "ApplicationOrchestrator" ? ["app-v1", "app-v2"]
-                    : alreadyIncluded ? ["reserved-v1"] : new[] { version ?? string.Empty },
+                    : Array.Empty<string>(),
                 filter.Versions);
         }
 
@@ -192,9 +192,50 @@ public class AutoPurgeWorkItemFiltersTests
         {
             Assert.Equal(
                 filter.Name == "ApplicationActivity" ? ["app-v2"]
-                    : alreadyIncluded ? ["reserved-v1"] : new[] { version ?? string.Empty },
+                    : Array.Empty<string>(),
                 filter.Versions);
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Worker_AutomaticStrictFilters_OnlyInternalNamesBecomeWildcardAsync(bool externalizedFirst)
+    {
+        // Arrange
+        using FilterHandler handler = new();
+        using GrpcChannel channel = GrpcChannel.ForAddress("http://filters.invalid", new() { HttpHandler = handler });
+        ServiceCollection services = CreateServices();
+        services.AddDurableTaskWorker("strict", builder =>
+        {
+            RegisterApplication(builder, channel);
+            builder.Configure(options => options.Versioning = new()
+            {
+                Version = "2.0",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+            });
+            if (externalizedFirst)
+            {
+                builder.UseExternalizedPayloads();
+            }
+
+            builder.UseWorkItemFilters();
+            if (!externalizedFirst)
+            {
+                builder.UseExternalizedPayloads();
+            }
+        });
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        P.WorkItemFilters wire = await CaptureAsync(Assert.Single(provider.GetServices<IHostedService>()), handler);
+
+        // Assert
+        Assert.All(wire.Orchestrations, filter => Assert.Equal(
+            filter.Name == "ApplicationOrchestrator" ? new[] { "2.0" } : [], filter.Versions));
+        Assert.All(wire.Activities, filter => Assert.Equal(
+            filter.Name == "ApplicationActivity" ? new[] { "2.0" } : [], filter.Versions));
+        Assert.Equal("applicationentity", Assert.Single(wire.Entities).Name);
     }
 
     [Theory]
@@ -234,6 +275,45 @@ public class AutoPurgeWorkItemFiltersTests
         Assert.Equal("ApplicationActivity", Assert.Single(other.Activities).Name);
         Assert.Single(shared.Orchestrations);
         Assert.Single(shared.Activities);
+    }
+
+    [Fact]
+    public async Task InternalFilterNormalization_DoesNotMatchAnotherTaskKindAsync()
+    {
+        // Arrange
+        using FilterHandler handler = new();
+        using GrpcChannel channel = GrpcChannel.ForAddress("http://filters.invalid", new() { HttpHandler = handler });
+        ServiceCollection services = CreateServices();
+        DurableTaskWorkerWorkItemFilters filters = new()
+        {
+            Orchestrations = [new(nameof(DeleteExternalBlobActivity), ["business-v1"])],
+            Activities = [new(nameof(BlobPurgeJobOrchestrator), ["business-v2"])],
+        };
+        services.AddDurableTaskWorker(builder =>
+        {
+            RegisterApplication(builder, channel);
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator(nameof(DeleteExternalBlobActivity), () => Mock.Of<ITaskOrchestrator>());
+                registry.AddActivity(nameof(BlobPurgeJobOrchestrator), _ => Mock.Of<ITaskActivity>());
+            });
+            builder.UseExternalizedPayloads();
+            builder.UseWorkItemFilters(filters);
+        });
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        P.WorkItemFilters wire = await CaptureAsync(Assert.Single(provider.GetServices<IHostedService>()), handler);
+
+        // Assert
+        Assert.Equal(new[] { "business-v1" },
+            Assert.Single(wire.Orchestrations, value => value.Name == nameof(DeleteExternalBlobActivity)).Versions);
+        Assert.Equal(new[] { "business-v2" },
+            Assert.Single(wire.Activities, value => value.Name == nameof(BlobPurgeJobOrchestrator)).Versions);
+        Assert.Empty(Assert.Single(wire.Orchestrations, value => value.Name == nameof(BlobPurgeJobOrchestrator)).Versions);
+        Assert.All(PurgeActivities, name => Assert.Empty(Assert.Single(wire.Activities, value => value.Name == name).Versions));
+        Assert.Single(filters.Orchestrations);
+        Assert.Single(filters.Activities);
     }
 
     [Fact]
@@ -325,10 +405,10 @@ public class AutoPurgeWorkItemFiltersTests
 
     static string InternalName(string name, string mode) => mode == "included" ? name.ToLowerInvariant() : name;
 
-    static string[] ExpectedVersions(string name, string mode, bool automatic)
+    static string[] ExpectedVersions(string name)
         => name == "ApplicationOrchestrator" ? ["app-v1", "app-v2"]
             : name == "ApplicationActivity" ? ["app-v2"]
-            : mode == "included" && !automatic ? ["reserved-v1"] : [];
+            : [];
 
     static async Task<P.WorkItemFilters> CaptureAsync(IHostedService worker, FilterHandler handler)
     {

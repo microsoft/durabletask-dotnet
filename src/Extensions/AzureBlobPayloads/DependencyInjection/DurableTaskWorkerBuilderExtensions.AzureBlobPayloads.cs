@@ -26,6 +26,13 @@ namespace Microsoft.DurableTask;
 /// </remarks>
 public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 {
+    static readonly string[] AutoPurgeActivityNames =
+    [
+        nameof(GetLargePayloadTombstonesActivity),
+        nameof(DeleteExternalBlobActivity),
+        nameof(ReportLargePayloadPurgeResultsActivity),
+    ];
+
     /// <summary>
     /// Enables externalized payload storage using Azure Blob Storage for the specified worker builder.
     /// </summary>
@@ -35,8 +42,9 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
     /// <remarks>
     /// Nonempty work item filters include the internal auto-purge orchestrator and activity names, even when
     /// the supplied filters contain only one task category. Null or all-empty filters remain unfiltered.
-    /// Existing version filters are preserved; newly added names follow the worker's versioning policy.
-    /// Including a name does not override version restrictions or guarantee that the worker is running.
+    /// Internal auto-purge tasks use wildcard version filters and bypass customer worker version checks.
+    /// Customer task filters and version policies are unchanged. This does not bypass other worker filters,
+    /// registration requirements, or lifecycle constraints, and does not guarantee cross-SDK replay compatibility.
     /// </remarks>
     public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
         this IDurableTaskWorkerBuilder builder,
@@ -59,8 +67,9 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
     /// <remarks>
     /// Nonempty work item filters include the internal auto-purge orchestrator and activity names, even when
     /// the supplied filters contain only one task category. Null or all-empty filters remain unfiltered.
-    /// Existing version filters are preserved; newly added names follow the worker's versioning policy.
-    /// Including a name does not override version restrictions or guarantee that the worker is running.
+    /// Internal auto-purge tasks use wildcard version filters and bypass customer worker version checks.
+    /// Customer task filters and version policies are unchanged. This does not bypass other worker filters,
+    /// registration requirements, or lifecycle constraints, and does not guarantee cross-SDK replay compatibility.
     /// </remarks>
     public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
         this IDurableTaskWorkerBuilder builder)
@@ -94,6 +103,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 opt.Interceptors.Add(new AzureBlobPayloadsSideCarInterceptor(store, opts));
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
+                opt.ConfigureVersioningExemptions([nameof(BlobPurgeJobOrchestrator)], AutoPurgeActivityNames);
 
                 // Follow the worker's transport instead of capturing one. The worker publishes its effective
                 // post-interceptor invoker here at startup and after every channel recreate, which is what
@@ -104,8 +114,8 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         // The worker resolves gRPC options before reading its filters. Resolve the fully configured and
         // validated named filters here, after every UseWorkItemFilters PostConfigure, including later calls.
         builder.Services.AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>, IOptionsMonitor<DurableTaskWorkerOptions>>(
-                (_, filters, options) => AddAutoPurgeFilters(filters.Get(builder.Name), options.Get(builder.Name)));
+            .PostConfigure<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>(
+                (_, filters) => AddAutoPurgeFilters(filters.Get(builder.Name)));
 
         // Each named worker publishes only to its own invoker. The registry factories below select that
         // worker's client at dispatch, sharing its intercepted transport without opening another connection.
@@ -132,34 +142,33 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         return builder;
     }
 
-    static void AddAutoPurgeFilters(DurableTaskWorkerWorkItemFilters filters, DurableTaskWorkerOptions options)
+    static void AddAutoPurgeFilters(DurableTaskWorkerWorkItemFilters filters)
     {
         if (filters.Orchestrations.Count == 0 && filters.Activities.Count == 0 && filters.Entities.Count == 0)
         {
             return;
         }
 
-        // These tasks have unversioned registrations: match automatic filters' wildcard/Strict semantics.
-        string[] versions = options.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
-            ? [options.Versioning.Version ?? string.Empty]
-            : [];
-        List<DurableTaskWorkerWorkItemFilters.OrchestrationFilter> orchestrations = filters.Orchestrations.ToList();
+        List<DurableTaskWorkerWorkItemFilters.OrchestrationFilter> orchestrations = filters.Orchestrations
+            .Select(filter => string.Equals(filter.Name, nameof(BlobPurgeJobOrchestrator), StringComparison.OrdinalIgnoreCase)
+                ? new DurableTaskWorkerWorkItemFilters.OrchestrationFilter(filter.Name, [])
+                : filter)
+            .ToList();
         if (!orchestrations.Any(filter => string.Equals(
             filter.Name, nameof(BlobPurgeJobOrchestrator), StringComparison.OrdinalIgnoreCase)))
         {
-            orchestrations.Add(new(nameof(BlobPurgeJobOrchestrator), versions));
+            orchestrations.Add(new(nameof(BlobPurgeJobOrchestrator), []));
         }
 
-        List<DurableTaskWorkerWorkItemFilters.ActivityFilter> activities = filters.Activities.ToList();
-        foreach (string name in new[]
-        {
-            nameof(GetLargePayloadTombstonesActivity),
-            nameof(DeleteExternalBlobActivity),
-            nameof(ReportLargePayloadPurgeResultsActivity),
-        }.Where(name => !activities.Any(filter =>
+        List<DurableTaskWorkerWorkItemFilters.ActivityFilter> activities = filters.Activities
+            .Select(filter => AutoPurgeActivityNames.Contains(filter.Name, StringComparer.OrdinalIgnoreCase)
+                ? new DurableTaskWorkerWorkItemFilters.ActivityFilter(filter.Name, [])
+                : filter)
+            .ToList();
+        foreach (string name in AutoPurgeActivityNames.Where(name => !activities.Any(filter =>
             string.Equals(filter.Name, name, StringComparison.OrdinalIgnoreCase))))
         {
-            activities.Add(new(name, versions));
+            activities.Add(new(name, []));
         }
 
         // Explicit filters may point directly at caller-owned lists, including lists shared with another worker.

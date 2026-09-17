@@ -37,6 +37,8 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
     /// collision is an error.
     /// Existing input is not overwritten; repeated enables update batch size through an idempotent SetBatchSize
     /// event. Completion acknowledges that event, not that the runner has already applied it.
+    /// New purge runners are explicitly unversioned and do not inherit the client's business default version.
+    /// Enabling does not change an existing runner's version.
     /// </para>
     /// <para>
     /// These steps are not a transaction. Failures and cancellation propagate without rolling back earlier
@@ -75,6 +77,8 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
 
         StartOrchestrationOptions options = new(BlobPurgeConstants.OrchestratorInstanceId)
         {
+            Version = string.Empty,
+
             // Dedupe is the inverse of the wire's replaceable statuses. Never replace nonterminal work.
             DedupeStatuses = ["Running", "Pending", "Suspended", "ContinuedAsNew"],
         };

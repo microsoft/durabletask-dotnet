@@ -373,6 +373,48 @@ public class BlobPayloadStoreTests
         createCalls.Should().Be(2);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UploadAsync_WritesOwnershipMarkerOnBothWritePaths(bool compressionEnabled)
+    {
+        // Arrange - the marker is what lets auto-purge prove the store wrote a blob before deleting it, so it
+        // must be written on the compressed and the uncompressed path alike. It rides the existing
+        // BlobOpenWriteOptions, so it costs no extra request.
+        BlobOpenWriteOptions? capturedOptions = null;
+        Mock<BlobContainerClient> containerClientMock = new();
+        containerClientMock.Setup(c => c.Name).Returns("test-container");
+        containerClientMock
+            .Setup(c => c.GetBlobClient(It.IsAny<string>()))
+            .Returns(() =>
+            {
+                Mock<BlobClient> blobClientMock = new();
+                blobClientMock.SetupGet(b => b.Uri).Returns(
+                    new Uri("https://testaccount.blob.core.windows.net/test-container/payload"));
+                blobClientMock
+                    .Setup(b => b.OpenWriteAsync(
+                        It.IsAny<bool>(), It.IsAny<BlobOpenWriteOptions>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync((bool _, BlobOpenWriteOptions options, CancellationToken _) =>
+                    {
+                        capturedOptions = options;
+                        return new MemoryStream();
+                    });
+                return blobClientMock.Object;
+            });
+
+        LargePayloadStorageOptions options = new() { CompressionEnabled = compressionEnabled };
+        BlobPayloadStore store = new(options, containerClientMock.Object);
+
+        // Act
+        await store.UploadAsync("payload", CancellationToken.None);
+
+        // Assert
+        capturedOptions.Should().NotBeNull();
+        capturedOptions!.Metadata.Should().NotBeNull();
+        capturedOptions.Metadata.Should().Contain(
+            BlobPayloadStore.OwnershipMarkerName, BlobPayloadStore.OwnershipMarkerValue);
+    }
+
     static Mock<BlobContainerClient> CreateContainerClientMock()
     {
         Mock<BlobContainerClient> containerClientMock = new();

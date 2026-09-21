@@ -1,3 +1,4 @@
-# The following files were downloaded from branch main at 2026-06-15 21:35:22 UTC
-https://raw.githubusercontent.com/microsoft/durabletask-protobuf/67a2f1d3b9ea8a210eb86addb636a5d8a6484dbc/protos/orchestrator_service.proto
-https://raw.githubusercontent.com/microsoft/durabletask-protobuf/67a2f1d3b9ea8a210eb86addb636a5d8a6484dbc/protos/durable-task-scheduler/sandbox_service.proto
+# The following files were downloaded from branch main at 2026-09-17 15:24:44 UTC
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/882583c1177706e148c3b146d4b2ba1c1d242e4c/protos/orchestrator_service.proto
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/882583c1177706e148c3b146d4b2ba1c1d242e4c/protos/durable-task-scheduler/sandbox_service.proto
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/882583c1177706e148c3b146d4b2ba1c1d242e4c/protos/durable-task-scheduler/large_payload_purge.proto

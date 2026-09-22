@@ -69,7 +69,53 @@ public static class DurableTaskClientExtensionsAzureBlobPayloads
             throw new NotSupportedException($"Large-payload auto-purge requires a gRPC Durable Task client, not '{client.GetType().FullName}'.");
         }
 
-        await autoPurgeClient.SetLargePayloadAutoPurgeAsync(enabled, cancellationToken);
+        await SetLargePayloadAutoPurgeCoreAsync(
+            client, autoPurgeClient.SetLargePayloadAutoPurgeAsync, enabled, batchSize, cancellationToken);
+    }
+
+    /// <summary>
+    /// Applies explicit auto-purge configuration using an alternate host's task-hub-bound clients.
+    /// </summary>
+    /// <param name="client">The orchestration client targeting the same authenticated task hub as <paramref name="purgeClient"/>.</param>
+    /// <param name="purgeClient">The host-owned transport for the task hub's auto-purge setting.</param>
+    /// <param name="enabled">True to enable cleanup; false to pause new fetches through the backend setting.</param>
+    /// <param name="batchSize">The requested batch size, from 1 through 1000. Ignored when disabling.</param>
+    /// <param name="cancellationToken">Cancels any setting, start, wait or configuration operation.</param>
+    /// <returns>A task that completes after the setting and, when enabling, start verification and event enqueue.</returns>
+    /// <remarks>
+    /// Infrastructure integration API, not an application orchestration API. The caller must bind both clients
+    /// to the same task hub; neither client is disposed by this method. This uses the same nontransactional
+    /// setting, fixed-ID deduplicated start, Running identity verification and batch-size event sequence as
+    /// the standalone overload. Disabling only writes the setting. Repeating desired state after host takeover
+    /// is supported; this does not implement owner election or guarantee once-ever setup.
+    /// The host must register the SDK purge tasks before enabling and retain their canonical names and inputs.
+    /// </remarks>
+    public static async Task SetLargePayloadAutoPurgeAsync(
+        this DurableTaskClient client,
+        ILargePayloadPurgeClient purgeClient,
+        bool enabled,
+        int batchSize = BlobPurgeConstants.DefaultBatchSize,
+        CancellationToken cancellationToken = default)
+    {
+        Check.NotNull(client);
+        Check.NotNull(purgeClient);
+        if (enabled && (batchSize < 1 || batchSize > BlobPurgeConstants.MaxBatchSize))
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Purge batch size is out of range.");
+        }
+
+        await SetLargePayloadAutoPurgeCoreAsync(
+            client, purgeClient.SetLargePayloadAutoPurgeAsync, enabled, batchSize, cancellationToken);
+    }
+
+    static async Task SetLargePayloadAutoPurgeCoreAsync(
+        DurableTaskClient client,
+        Func<bool, CancellationToken, Task> setEnabled,
+        bool enabled,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        await setEnabled(enabled, cancellationToken);
         if (!enabled)
         {
             return;

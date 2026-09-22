@@ -5,7 +5,6 @@ using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
@@ -17,14 +16,29 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// </summary>
 /// <param name="client">The large-payload purge service client used to report purge results to the backend.</param>
 /// <param name="logger">The logger instance.</param>
+/// <remarks>
+/// Infrastructure integration API for alternate .NET hosts. The supplied client must be bound to this
+/// worker's authenticated task hub. Its transport lifetime remains owned by the host.
+/// </remarks>
 [DurableTask]
-internal sealed class ReportLargePayloadPurgeResultsActivity(
-    LargePayloadPurgeClient client,
+public sealed class ReportLargePayloadPurgeResultsActivity(
+    ILargePayloadPurgeClient client,
     ILogger<ReportLargePayloadPurgeResultsActivity> logger)
     : TaskActivity<List<LargePayloadPurgeResult>, object?>
 {
-    readonly LargePayloadPurgeClient client = Check.NotNull(client);
+    readonly ILargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<ReportLargePayloadPurgeResultsActivity> logger = Check.NotNull(logger);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ReportLargePayloadPurgeResultsActivity"/> class using the worker's transport.
+    /// </summary>
+    /// <param name="client">The worker's purge client.</param>
+    /// <param name="logger">The activity logger.</param>
+    internal ReportLargePayloadPurgeResultsActivity(
+        LargePayloadPurgeClient client, ILogger<ReportLargePayloadPurgeResultsActivity> logger)
+        : this(new GrpcLargePayloadPurgeClient(client), logger)
+    {
+    }
 
     /// <summary>
     /// Gets or sets the timeout for one backend RPC attempt.
@@ -43,32 +57,9 @@ internal sealed class ReportLargePayloadPurgeResultsActivity(
             return null;
         }
 
-        LP.ReportLargePayloadPurgeResultsRequest request = new();
-        foreach (LargePayloadPurgeResult result in input)
-        {
-            request.Results.Add(new LP.LargePayloadPurgeResult
-            {
-                // Echoed back exactly as it was received. The SDK never parses or rebuilds this token, so a
-                // change to what the backend puts in it needs no change here.
-                TombstoneToken = result.TombstoneToken,
-
-                // The managed disposition enum declares the same numeric values as its protobuf counterpart,
-                // so it maps across by value. This is the only enum on the message and it only travels
-                // outbound, so the SDK can never receive a value it does not know.
-                Disposition = (LP.LargePayloadPurgeDisposition)result.Disposition,
-            });
-        }
-
-        if (request.Results.Count == 0)
-        {
-            return null;
-        }
-
         try
         {
-            using var call = this.client.ReportLargePayloadPurgeResultsAsync(
-                request, deadline: DateTime.UtcNow.Add(this.RpcTimeout));
-            await call;
+            await this.client.ReportLargePayloadPurgeResultsAsync(input, DateTime.UtcNow.Add(this.RpcTimeout));
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {

@@ -200,6 +200,40 @@ For runnable DTS emulator examples that demonstrate versioning, see the [WorkerV
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
+### Blob auto-purge integration for alternate .NET hosts
+
+`Microsoft.DurableTask.Extensions.AzureBlobPayloads` exposes infrastructure APIs for hosts that already
+dispatch Durable Task Framework (`DurableTask.Core`) tasks. These APIs do not add another worker or require
+application functions. Register `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`,
+`DeleteExternalBlobActivity`, and `ReportLargePayloadPurgeResultsActivity` under their exact class names
+with an empty version, using `Microsoft.DurableTask.Worker.Shims.DurableTaskShimFactory.CreateOrchestration`
+and `CreateActivity`. Keep these tasks registered even when auto-purge is disabled so existing work can finish.
+This does not promise compatibility with arbitrary historical versioned purge runners.
+
+Construct the fetch and report activities with a host-owned `ILargePayloadPurgeClient` and their typed
+loggers, and the delete activity with the task hub's `PayloadStore` and logger. The narrow purge client must
+use that hub's existing authenticated transport, follow reconnection and credential refresh, honor the
+activities' UTC deadlines, and preserve opaque tombstone tokens. Fetch/report gRPC failures are classified
+by the activities, not swallowed by the adapter. The host retains ownership of its clients and store.
+
+For explicit setup, call `orchestrationClient.SetLargePayloadAutoPurgeAsync(purgeClient, enabled, batchSize,
+cancellationToken)`. Both clients must target the **same authenticated task hub**. A host with an existing
+`IOrchestrationServiceClient` can obtain the orchestration client through
+`AddDurableTaskClient(name).UseOrchestrationService(options => { options.Client = serviceClient;
+options.EnableEntitySupport = false; })` from `Microsoft.DurableTask.Client.OrchestrationServiceClientShim`.
+Use the SDK's default data converter consistently for this client and the task shims. DTFx wraps activity
+arguments in an outer JSON array; the shims handle this envelope. Preserve structured activity failure details
+(`ErrorPropagationMode.UseFailureDetails`) and unprocessed external events across continue-as-new.
+Cancellation remains subject to the supplied client's capabilities; an in-flight service call without
+cancellation support cannot be canceled by this helper.
+
+Enabling writes the setting, starts the reserved per-task-hub instance with live-status deduplication,
+verifies the runner's identity and Running status, then sends `SetBatchSize`. Disabling **only** writes the
+setting and ignores batch size. The steps are not transactional; failures propagate without rollback.
+Repeated desired-state setup after host takeover is supported. Owner election and deciding whether an omitted
+setting requires any action belong to the host, not this SDK. `BlobPurgeConstants` provides the reserved
+instance ID, event name and batch bounds; never use the reserved instance ID for application work.
+
 ## Obtaining the Protobuf definitions
 
 This project utilizes protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf), which are copied (vendored) into this repository under the `src/Grpc` directory. See the corresponding [README.md](./src/Grpc/README.md) for more information about how to update the protobuf definitions.

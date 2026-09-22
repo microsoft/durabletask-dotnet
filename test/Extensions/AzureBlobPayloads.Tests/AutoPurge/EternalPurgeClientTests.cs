@@ -3,7 +3,6 @@
 
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,60 +18,6 @@ public class EternalPurgeClientTests
 {
     const string RunnerId = "BlobPurgeJob-__dt_blob_payload_autopurge__";
     const string RunnerName = "BlobPurgeJobOrchestrator";
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ExplicitPurgeTransport_UsesSameBootstrapAndDisposesCallsAsync(bool enabled)
-    {
-        // Arrange
-        RecordingInvoker invoker = new();
-        await using GrpcDurableTaskClient client = CreateClient(invoker);
-        GrpcLargePayloadPurgeClient purge = new(new LP.LargePayloadPurge.LargePayloadPurgeClient(invoker));
-
-        // Act
-        await client.SetLargePayloadAutoPurgeAsync(purge, enabled, enabled ? 42 : -1);
-
-        // Assert
-        Assert.Equal(enabled, Assert.Single(invoker.Sets).Enabled);
-        Assert.Contains("SetLargePayloadAutoPurge", invoker.DisposedCalls);
-        Assert.Equal(enabled
-            ? new[] { "SetLargePayloadAutoPurge", "StartInstance", "WaitForInstanceStart", "RaiseEvent" }
-            : new[] { "SetLargePayloadAutoPurge" }, invoker.Methods);
-    }
-
-    [Theory]
-    [InlineData(StatusCode.Cancelled)]
-    [InlineData(StatusCode.Unimplemented)]
-    [InlineData(StatusCode.Unavailable)]
-    public async Task ExplicitPurgeTransport_SettingFailurePreservesContractAsync(StatusCode status)
-    {
-        // Arrange
-        RecordingInvoker invoker = new() { ErrorAt = "SetLargePayloadAutoPurge", ErrorStatus = status };
-        await using GrpcDurableTaskClient client = CreateClient(invoker);
-        GrpcLargePayloadPurgeClient purge = new(new LP.LargePayloadPurge.LargePayloadPurgeClient(invoker));
-        using CancellationTokenSource cancellation = new();
-
-        // Act
-        Exception? failure = await Record.ExceptionAsync(() =>
-            client.SetLargePayloadAutoPurgeAsync(purge, true, cancellationToken: cancellation.Token));
-
-        // Assert
-        if (status == StatusCode.Cancelled)
-        {
-            Assert.Equal(cancellation.Token, Assert.IsType<OperationCanceledException>(failure).CancellationToken);
-        }
-        else if (status == StatusCode.Unimplemented)
-        {
-            Assert.IsType<NotImplementedException>(failure);
-        }
-        else
-        {
-            Assert.Equal(status, Assert.IsType<RpcException>(failure).StatusCode);
-        }
-        Assert.Equal(new[] { "SetLargePayloadAutoPurge" }, invoker.Methods);
-        Assert.Equal(new[] { "SetLargePayloadAutoPurge" }, invoker.DisposedCalls);
-    }
 
     [Fact]
     public async Task Disable_OnlyWritesBackendSettingAsync()
@@ -409,7 +354,6 @@ public class EternalPurgeClientTests
     sealed class RecordingInvoker : CallInvoker
     {
         public List<string> Methods { get; } = [];
-        public List<string> DisposedCalls { get; } = [];
         public List<LP.SetLargePayloadAutoPurgeRequest> Sets { get; } = [];
         public List<P.CreateInstanceRequest> Starts { get; } = [];
         public List<P.RaiseEventRequest> Events { get; } = [];
@@ -457,8 +401,7 @@ public class EternalPurgeClientTests
             {
                 result = Task.FromException<TResponse>(new RpcException(new Status(this.ErrorStatus, "synthetic failure")));
             }
-            return new(result, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => new Metadata(),
-                () => this.DisposedCalls.Add(method.Name));
+            return new(result, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => new Metadata(), () => { });
         }
 
         static async Task<T> ConvertAsync<T>(Task<P.GetInstanceResponse> task) => (T)(object)await task;

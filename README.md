@@ -216,16 +216,15 @@ use that hub's existing authenticated transport, follow reconnection and credent
 activities' UTC deadlines, and preserve opaque tombstone tokens. Fetch/report gRPC failures are classified
 by the activities, not swallowed by the adapter. The host retains ownership of its clients and store.
 
-For explicit setup, call `orchestrationClient.SetLargePayloadAutoPurgeAsync(purgeClient, enabled, batchSize,
-cancellationToken)`. Both clients must target the **same authenticated task hub**. A host with an existing
-`IOrchestrationServiceClient` can obtain the orchestration client through
-`AddDurableTaskClient(name).UseOrchestrationService(options => { options.Client = serviceClient;
-options.EnableEntitySupport = false; })` from `Microsoft.DurableTask.Client.OrchestrationServiceClientShim`.
-Use the SDK's default data converter consistently for this client and the task shims. DTFx wraps activity
-arguments in an outer JSON array; the shims handle this envelope. Preserve structured activity failure details
+For explicit setup, reuse `GrpcDurableTaskClient.SetLargePayloadAutoPurgeAsync(enabled, batchSize,
+cancellationToken)`. Construct the client with `GrpcDurableTaskClientOptions.CallInvoker` set to the host's
+existing authenticated remote task-hub invoker, and `EnableEntitySupport = false`. Supplying this invoker
+opens no additional channel and does not transfer its ownership to the SDK client. The host must keep the
+invoker bound to the **same authenticated task hub** as the activities and follow any channel replacement.
+Do not route these calls to a language worker's local RPC endpoint.
+Use the SDK's default data converter consistently for the client and task shims. DTFx wraps activity arguments
+in an outer JSON array; the shims handle this envelope. Preserve structured activity failure details
 (`ErrorPropagationMode.UseFailureDetails`) and unprocessed external events across continue-as-new.
-Cancellation remains subject to the supplied client's capabilities; an in-flight service call without
-cancellation support cannot be canceled by this helper.
 
 Enabling writes the setting, starts the reserved per-task-hub instance with live-status deduplication,
 verifies the runner's identity and Running status, then sends `SetBatchSize`. Disabling **only** writes the

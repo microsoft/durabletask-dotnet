@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
 using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
@@ -14,26 +13,6 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 sealed class GrpcLargePayloadPurgeClient(LargePayloadPurgeClient client) : ILargePayloadPurgeClient
 {
     readonly LargePayloadPurgeClient client = Check.NotNull(client);
-
-    /// <inheritdoc/>
-    public async Task SetLargePayloadAutoPurgeAsync(bool enabled, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            using var call = this.client.SetLargePayloadAutoPurgeAsync(
-                new LP.SetLargePayloadAutoPurgeRequest { Enabled = enabled }, cancellationToken: cancellationToken);
-            await call;
-        }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
-        {
-            throw new OperationCanceledException(
-                "The SetLargePayloadAutoPurge operation was canceled.", e, cancellationToken);
-        }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
-        {
-            throw new NotImplementedException(e.Status.Detail);
-        }
-    }
 
     /// <inheritdoc/>
     public async Task<List<LargePayloadTombstone>> GetLargePayloadTombstonesAsync(

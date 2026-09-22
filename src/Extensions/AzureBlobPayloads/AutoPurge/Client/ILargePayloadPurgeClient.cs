@@ -19,19 +19,6 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 public interface ILargePayloadPurgeClient
 {
     /// <summary>
-    /// Writes the auto-purge setting for this client's authenticated task hub.
-    /// </summary>
-    /// <param name="enabled">The setting to persist.</param>
-    /// <param name="cancellationToken">Cancels the setting operation.</param>
-    /// <returns>A task that completes when the backend acknowledges the setting.</returns>
-    /// <remarks>
-    /// Map backend cancellation to <see cref="OperationCanceledException"/> with the supplied token and an
-    /// unsupported operation to <see cref="NotImplementedException"/>. Other failures must propagate.
-    /// This operation alone must not start, terminate or wait for an orchestration.
-    /// </remarks>
-    Task SetLargePayloadAutoPurgeAsync(bool enabled, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Fetches a bounded batch of due tombstones for this client's authenticated task hub.
     /// </summary>
     /// <param name="limit">The requested maximum number of tombstones, from 1 through 1000.</param>

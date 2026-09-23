@@ -209,12 +209,20 @@ types, and retry/event/continue-as-new behavior. Keep the tasks registered even 
 so existing work can finish. `BlobPurgeConstants` provides the reserved per-task-hub instance ID,
 configuration event name, and batch bounds; never use that instance ID for application work.
 
-For **.NET isolated Durable Functions**, explicitly register the purge functions and configure worker-side
-payload storage through the Functions integration. Registration must provide ordinary orchestration/activity
-function metadata before indexing; applications that do not opt in must not acquire purge functions.
-Execution uses normal trigger and `DurableClient` bindings in the .NET isolated language worker, with
-function entry points delegating to the shared SDK tasks. No new Durable Task source generator is needed:
-the existing generator discovers source-defined `[DurableTask]` classes, not referenced library task classes.
+The companion **.NET isolated Durable Functions** integration uses the optional
+`Microsoft.Azure.Functions.Worker.Extensions.DurableTask.AzureBlobPayloads` package. It supplies four ordinary
+`[Function]` methods that delegate to the shared tasks, plus worker-side payload-store configuration.
+The base Functions worker extension does not carry these function definitions. Referencing only this shared
+SDK package does not register Functions or enable auto-purge.
+
+The Functions Worker SDK discovers the optional package's compiled `[Function]` methods during the normal
+build, produces their function metadata and generated invocation paths, and executes them with ordinary
+trigger and `DurableClient` bindings in the isolated language worker. Runtime metadata alone is insufficient
+when the application's generated executor has no corresponding method calls. No new Durable Task source
+generator, custom executor branch, or host-side task registration is needed. The Durable Task source
+generator's discovery of source-defined `[DurableTask]` classes is separate from this compiled-function path.
+
+Configure payload storage in the worker and explicitly enable or disable cleanup through the bound client.
 Delegate orchestration execution to the existing task with the bound `TaskOrchestrationContext` and its input.
 Activity execution must receive a real `TaskActivityContext` carrying the canonical activity name and the
 invoking orchestration's bound instance ID, not a null context or the Functions invocation ID. Use the normal

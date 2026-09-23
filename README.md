@@ -209,17 +209,12 @@ types, and retry/event/continue-as-new behavior. Keep the tasks registered even 
 so existing work can finish. `BlobPurgeConstants` provides the reserved per-task-hub instance ID,
 configuration event name, and batch bounds; never use that instance ID for application work.
 
-The **.NET isolated Durable Functions integration** belongs in the optional companion package
-`Microsoft.Azure.Functions.Worker.Extensions.DurableTask.AzureBlobPayloads`. That package carries four
-ordinary `[Function]` methods delegating to these tasks, together with worker-side payload-store configuration.
-The base Functions worker extension does not carry these functions, so existing applications do not acquire
-purge functions merely by updating the base extension.
-
-The Functions Worker SDK indexes the optional package's compiled `[Function]` methods through its normal
-library indexing path. No custom metadata add/remove transformer or generator is required. This is distinct
-from generating wrappers for library task classes: the Durable Task source generator discovers
-`[DurableTask]` classes in the current project's source, not referenced libraries. Invoke the packaged
-functions through ordinary trigger and `DurableClient` bindings in the .NET isolated language worker.
+For **.NET isolated Durable Functions**, explicitly register the purge functions and configure worker-side
+payload storage through the Functions integration. Registration must provide ordinary orchestration/activity
+function metadata before indexing; applications that do not opt in must not acquire purge functions.
+Execution uses normal trigger and `DurableClient` bindings in the .NET isolated language worker, with
+function entry points delegating to the shared SDK tasks. No new Durable Task source generator is needed:
+the existing generator discovers source-defined `[DurableTask]` classes, not referenced library task classes.
 Delegate orchestration execution to the existing task with the bound `TaskOrchestrationContext` and its input.
 Activity execution must receive a real `TaskActivityContext` carrying the canonical activity name and the
 invoking orchestration's bound instance ID, not a null context or the Functions invocation ID. Use the normal

@@ -209,10 +209,17 @@ types, and retry/event/continue-as-new behavior. Keep the tasks registered even 
 so existing work can finish. `BlobPurgeConstants` provides the reserved per-task-hub instance ID,
 configuration event name, and batch bounds; never use that instance ID for application work.
 
-For a **.NET isolated Durable Functions integration**, the Functions worker extension must expose these tasks
-as ordinary orchestration/activity functions before indexing and execute them through normal language-worker
-bindings and invocation. Merely referencing their assembly does not generate Functions wrappers: the SDK
-source generator discovers `[DurableTask]` classes in the current project's source, not referenced libraries.
+The **.NET isolated Durable Functions integration** belongs in the optional companion package
+`Microsoft.Azure.Functions.Worker.Extensions.DurableTask.AzureBlobPayloads`. That package carries four
+ordinary `[Function]` methods delegating to these tasks, together with worker-side payload-store configuration.
+The base Functions worker extension does not carry these functions, so existing applications do not acquire
+purge functions merely by updating the base extension.
+
+The Functions Worker SDK indexes the optional package's compiled `[Function]` methods through its normal
+library indexing path. No custom metadata add/remove transformer or generator is required. This is distinct
+from generating wrappers for library task classes: the Durable Task source generator discovers
+`[DurableTask]` classes in the current project's source, not referenced libraries. Invoke the packaged
+functions through ordinary trigger and `DurableClient` bindings in the .NET isolated language worker.
 Delegate orchestration execution to the existing task with the bound `TaskOrchestrationContext` and its input.
 Activity execution must receive a real `TaskActivityContext` carrying the canonical activity name and the
 invoking orchestration's bound instance ID, not a null context or the Functions invocation ID. Use the normal
@@ -222,8 +229,8 @@ events across continue-as-new. Do not substitute host-side `TaskHubWorker` regis
 Construct the fetch/report activities with an `ILargePayloadPurgeClient` and their typed loggers, and the
 delete activity with the worker's configured `PayloadStore` and logger. Reuse `BlobPayloadStore` with
 `LargePayloadStorageOptions` for storage access rather than copying its ownership checks or deletion policy.
-Deletion runs in the language worker; purge RPCs do not carry storage credentials. The narrow purge client must honor UTC deadlines and
-preserve opaque tombstone tokens; the activities classify fetch/report gRPC failures.
+Deletion runs in the language worker; purge RPCs do not carry storage credentials. The narrow purge client
+must honor UTC deadlines and preserve opaque tombstone tokens; the activities classify fetch/report gRPC failures.
 
 The Functions integration must route setting, fetch, and report operations through the bound client's local
 host endpoint to the provider's authenticated transport for the **same task hub**. The existing

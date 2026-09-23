@@ -200,38 +200,44 @@ For runnable DTS emulator examples that demonstrate versioning, see the [WorkerV
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
-### Blob auto-purge integration for alternate .NET hosts
+### Blob auto-purge infrastructure integration
 
-`Microsoft.DurableTask.Extensions.AzureBlobPayloads` exposes infrastructure APIs for hosts that already
-dispatch Durable Task Framework (`DurableTask.Core`) tasks. These APIs do not add another worker or require
-application functions. Register `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`,
-`DeleteExternalBlobActivity`, and `ReportLargePayloadPurgeResultsActivity` under their exact class names
-with an empty version, using `Microsoft.DurableTask.Worker.Shims.DurableTaskShimFactory.CreateOrchestration`
-and `CreateActivity`. Keep these tasks registered even when auto-purge is disabled so existing work can finish.
-This does not promise compatibility with arbitrary historical versioned purge runners.
+`Microsoft.DurableTask.Extensions.AzureBlobPayloads` exposes reusable orchestration and activity
+implementations: `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`, `DeleteExternalBlobActivity`,
+and `ReportLargePayloadPurgeResultsActivity`. Preserve their exact task names, empty version, input/output
+types, and retry/event/continue-as-new behavior. Keep the tasks registered even when auto-purge is disabled
+so existing work can finish. `BlobPurgeConstants` provides the reserved per-task-hub instance ID,
+configuration event name, and batch bounds; never use that instance ID for application work.
 
-Construct the fetch and report activities with a host-owned `ILargePayloadPurgeClient` and their typed
-loggers, and the delete activity with the task hub's `PayloadStore` and logger. The narrow purge client must
-use that hub's existing authenticated transport, follow reconnection and credential refresh, honor the
-activities' UTC deadlines, and preserve opaque tombstone tokens. Fetch/report gRPC failures are classified
-by the activities, not swallowed by the adapter. The host retains ownership of its clients and store.
+For a **.NET isolated Durable Functions integration**, the Functions worker extension must expose these tasks
+as ordinary orchestration/activity functions before indexing and execute them through normal language-worker
+bindings and invocation. Merely referencing their assembly does not generate Functions wrappers: the SDK
+source generator discovers `[DurableTask]` classes in the current project's source, not referenced libraries.
+Delegate orchestration execution to the existing task with the bound `TaskOrchestrationContext` and its input.
+Activity execution must receive a real `TaskActivityContext` carrying the canonical activity name and the
+invoking orchestration's bound instance ID, not a null context or the Functions invocation ID. Use the normal
+worker serialization and failure propagation paths, preserving structured failure details and unprocessed
+events across continue-as-new. Do not substitute host-side `TaskHubWorker` registration or start another worker.
 
-For explicit setup, reuse `GrpcDurableTaskClient.SetLargePayloadAutoPurgeAsync(enabled, batchSize,
-cancellationToken)`. Construct the client with `GrpcDurableTaskClientOptions.CallInvoker` set to the host's
-existing authenticated remote task-hub invoker, and `EnableEntitySupport = false`. Supplying this invoker
-opens no additional channel and does not transfer its ownership to the SDK client. The host must keep the
-invoker bound to the **same authenticated task hub** as the activities and follow any channel replacement.
-Do not route these calls to a language worker's local RPC endpoint.
-Use the SDK's default data converter consistently for the client and task shims. DTFx wraps activity arguments
-in an outer JSON array; the shims handle this envelope. Preserve structured activity failure details
-(`ErrorPropagationMode.UseFailureDetails`) and unprocessed external events across continue-as-new.
+Construct the fetch/report activities with an `ILargePayloadPurgeClient` and their typed loggers, and the
+delete activity with the worker's configured `PayloadStore` and logger. Reuse `BlobPayloadStore` with
+`LargePayloadStorageOptions` for storage access rather than copying its ownership checks or deletion policy.
+Deletion runs in the language worker; purge RPCs do not carry storage credentials. The narrow purge client must honor UTC deadlines and
+preserve opaque tombstone tokens; the activities classify fetch/report gRPC failures.
 
-Enabling writes the setting, starts the reserved per-task-hub instance with live-status deduplication,
-verifies the runner's identity and Running status, then sends `SetBatchSize`. Disabling **only** writes the
-setting and ignores batch size. The steps are not transactional; failures propagate without rollback.
-Repeated desired-state setup after host takeover is supported. Owner election and deciding whether an omitted
-setting requires any action belong to the host, not this SDK. `BlobPurgeConstants` provides the reserved
-instance ID, event name and batch bounds; never use the reserved instance ID for application work.
+The Functions integration must route setting, fetch, and report operations through the bound client's local
+host endpoint to the provider's authenticated transport for the **same task hub**. The existing
+`LargePayloadPurge` gRPC service is separate from `TaskHubSidecarService`. The Functions client wrapper can
+forward the setting through the existing infrastructure `ILargePayloadAutoPurgeClient` interface so the
+original `client.SetLargePayloadAutoPurgeAsync(enabled, batchSize, cancellationToken)` extension retains
+ownership of bootstrap behavior. The integration owns client/store lifetimes, hub binding, and reconnection;
+this SDK surface alone does not supply Functions metadata or the local-host bridge.
+
+Enabling explicitly writes the setting, starts the reserved instance with live-status deduplication and an
+empty version, verifies its identity and Running status, then sends `SetBatchSize`. Disabling **only** writes
+the setting and ignores batch size. Calling neither leaves the setting untouched. No automatic host
+configuration or primary-host monitor is required. These steps are not transactional; failures propagate
+without rollback. Existing standalone gRPC client and worker behavior is unchanged.
 
 ## Obtaining the Protobuf definitions
 

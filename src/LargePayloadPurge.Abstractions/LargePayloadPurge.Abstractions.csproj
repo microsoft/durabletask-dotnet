@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>DurableTask.LargePayloadPurge.Abstractions</AssemblyName>
+    <RootNamespace>DurableTask.LargePayloadPurge</RootNamespace>
+    <PackageId>Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions</PackageId>
+    <PackageDescription>Optional orchestration service capability for large payload purge using the Durable Task SDK client models.</PackageDescription>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix></VersionSuffix>
+    <EnableStyleCop>true</EnableStyleCop>
+    <!-- Preserve the imported Apache notice rather than replacing it with the repository's MIT header. -->
+    <NoWarn>$(NoWarn);SA1636</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Client\Core\Client.csproj" />
+    <None Include="LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

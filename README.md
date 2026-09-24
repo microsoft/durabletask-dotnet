@@ -202,6 +202,12 @@ The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) s
 
 ### Blob auto-purge infrastructure integration
 
+The optional service contract is maintained in
+[`Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions`](src/LargePayloadPurge.Abstractions/README.md).
+It defines `DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient` and references the
+canonical SDK Client models without duplicating them. This package is versioned independently and is not
+BCL-only: its Client dependency transitively depends on SDK Abstractions and Durable Task Core.
+
 `Microsoft.DurableTask.Extensions.AzureBlobPayloads` exposes reusable orchestration and activity
 implementations: `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`, `DeleteExternalBlobActivity`,
 and `ReportLargePayloadPurgeResultsActivity`. Preserve their exact task names, empty version, input/output

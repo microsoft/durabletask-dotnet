@@ -1,0 +1,1 @@
+- Initial optional service capability for explicit large payload auto-purge, using the canonical Durable Task SDK Client models.

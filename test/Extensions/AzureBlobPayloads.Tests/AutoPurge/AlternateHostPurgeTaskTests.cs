@@ -66,9 +66,9 @@ public class AlternateHostPurgeTaskTests
         Assert.Equal("[37]", driver.SingleActivity(nameof(GetLargePayloadTombstonesActivity)).Input);
         Assert.All(new[] { fetchDeadline, reportDeadline }, deadline =>
         {
-            Assert.NotNull(deadline);
-            Assert.Equal(DateTimeKind.Utc, deadline.Value.Kind);
-            Assert.InRange(deadline.Value, earliestDeadline, DateTime.UtcNow.AddSeconds(60));
+            DateTime actualDeadline = Assert.IsType<DateTime>(deadline);
+            Assert.Equal(DateTimeKind.Utc, actualDeadline.Kind);
+            Assert.InRange(actualDeadline, earliestDeadline, DateTime.UtcNow.AddSeconds(60));
         });
         Assert.Equal(driver.Snapshot(), driver.ReplaySnapshot());
         store.VerifyAll();

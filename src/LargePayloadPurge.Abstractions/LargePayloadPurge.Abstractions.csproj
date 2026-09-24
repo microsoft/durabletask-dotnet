@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Matches the Client model library; .NET 8/10 consumers use the same interface-only asset. -->
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>DurableTask.LargePayloadPurge.Abstractions</AssemblyName>
     <RootNamespace>DurableTask.LargePayloadPurge</RootNamespace>

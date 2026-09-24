@@ -8,11 +8,7 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// <summary>
 /// Constants used throughout the blob payload auto-purge functionality.
 /// </summary>
-/// <remarks>
-/// Infrastructure integration constants. The orchestration ID is reserved per task hub and must not be used
-/// for application orchestrations.
-/// </remarks>
-public static class BlobPurgeConstants
+static class BlobPurgeConstants
 {
     /// <summary>
     /// The fixed orchestration instance ID for the auto-purge job in each task hub.
@@ -40,5 +36,5 @@ public static class BlobPurgeConstants
     /// <summary>
     /// The maximum duration of an individual fetch or report RPC attempt.
     /// </summary>
-    internal const int RpcTimeoutSeconds = 60;
+    public const int RpcTimeoutSeconds = 60;
 }

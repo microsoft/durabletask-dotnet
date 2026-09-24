@@ -206,8 +206,8 @@ The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) s
 implementations: `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`, `DeleteExternalBlobActivity`,
 and `ReportLargePayloadPurgeResultsActivity`. Preserve their exact task names, empty version, input/output
 types, and retry/event/continue-as-new behavior. Keep the tasks registered even when auto-purge is disabled
-so existing work can finish. `BlobPurgeConstants` provides the reserved per-task-hub instance ID,
-configuration event name, and batch bounds; never use that instance ID for application work.
+so existing work can finish. The existing client API manages the reserved per-task-hub orchestration instance
+and its configuration.
 
 The companion **.NET isolated Durable Functions** integration uses the optional
 `Microsoft.Azure.Functions.Worker.Extensions.DurableTask.AzureBlobPayloads` package. It supplies four ordinary
@@ -215,19 +215,11 @@ The companion **.NET isolated Durable Functions** integration uses the optional
 The base Functions worker extension does not carry these function definitions. Referencing only this shared
 SDK package does not register Functions or enable auto-purge.
 
-The Functions Worker SDK discovers the optional package's compiled `[Function]` methods during the normal
-build, produces their function metadata and generated invocation paths, and executes them with ordinary
-trigger and `DurableClient` bindings in the isolated language worker. Runtime metadata alone is insufficient
-when the application's generated executor has no corresponding method calls. No new Durable Task source
-generator, custom executor branch, or host-side task registration is needed. The Durable Task source
-generator's discovery of source-defined `[DurableTask]` classes is separate from this compiled-function path.
-
-Configure payload storage in the worker and explicitly enable or disable cleanup through the bound client.
-Delegate orchestration execution to the existing task with the bound `TaskOrchestrationContext` and its input.
-Activity execution must receive a real `TaskActivityContext` carrying the canonical activity name and the
-invoking orchestration's bound instance ID, not a null context or the Functions invocation ID. Use the normal
-worker serialization and failure propagation paths, preserving structured failure details and unprocessed
-events across continue-as-new. Do not substitute host-side `TaskHubWorker` registration or start another worker.
+The Functions Worker SDK discovers the compiled methods during the normal build and generates their metadata
+and invocation paths. The functions use ordinary trigger and `DurableClient` bindings in the isolated worker,
+passing the bound `TaskOrchestrationContext` and a `TaskActivityContext` with the invoking orchestration's
+instance ID to the shared tasks. Normal serialization and failure propagation preserve structured failure
+details and unprocessed events across continue-as-new.
 
 Construct the fetch/report activities with an `ILargePayloadPurgeClient` and their typed loggers, and the
 delete activity with the worker's configured `PayloadStore` and logger. Reuse `BlobPayloadStore` with
@@ -235,7 +227,7 @@ delete activity with the worker's configured `PayloadStore` and logger. Reuse `B
 Deletion runs in the language worker; purge RPCs do not carry storage credentials. The narrow purge client
 must honor UTC deadlines and preserve opaque tombstone tokens; the activities classify fetch/report gRPC failures.
 
-The Functions integration must route setting, fetch, and report operations through the bound client's local
+The Functions integration routes setting, fetch, and report operations through the bound client's local
 host endpoint to the provider's authenticated transport for the **same task hub**. The existing
 `LargePayloadPurge` gRPC service is separate from `TaskHubSidecarService`. The Functions client wrapper can
 forward the setting through the existing infrastructure `ILargePayloadAutoPurgeClient` interface so the
@@ -245,9 +237,9 @@ this SDK surface alone does not supply Functions metadata or the local-host brid
 
 Enabling explicitly writes the setting, starts the reserved instance with live-status deduplication and an
 empty version, verifies its identity and Running status, then sends `SetBatchSize`. Disabling **only** writes
-the setting and ignores batch size. Calling neither leaves the setting untouched. No automatic host
-configuration or primary-host monitor is required. These steps are not transactional; failures propagate
-without rollback. Existing standalone gRPC client and worker behavior is unchanged.
+the setting and ignores batch size. Calling neither leaves the setting untouched. These steps are not
+transactional; failures propagate without rollback. Existing standalone gRPC client and worker behavior
+is unchanged.
 
 ## Obtaining the Protobuf definitions
 

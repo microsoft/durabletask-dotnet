@@ -14,7 +14,9 @@ We follow an approach of releasing everything together, even if a package has no
 `LargePayloadPurge.Abstractions` versions independently in its project file, starting at the planned
 `0.1.0` release. It uses source references to the SDK Client models. Publish the corresponding Client and
 Abstractions packages containing those models before publishing this package; released Client `1.26.0`
-does not contain them. The package retains its Apache-2.0 interface license and uses the SDK strong-name key.
+does not contain them. The package retains the service interface's Apache-2.0 notice and the activity
+transport interface's MIT notice, includes both license texts, and declares `Apache-2.0 AND MIT`.
+It uses the SDK strong-name key.
 Its assembly name is `DurableTask.LargePayloadPurge.Abstractions`, so both assembly-signing pipelines
 explicitly include it in addition to the `Microsoft.DurableTask.*` assemblies. The existing source traversal,
 SBOM inclusion and NuGet signing/packing steps apply unchanged.

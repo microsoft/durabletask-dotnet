@@ -6,8 +6,8 @@
     <AssemblyName>DurableTask.LargePayloadPurge.Abstractions</AssemblyName>
     <RootNamespace>DurableTask.LargePayloadPurge</RootNamespace>
     <PackageId>Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions</PackageId>
-    <PackageDescription>Optional orchestration service capability for large payload purge using the Durable Task SDK client models.</PackageDescription>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageDescription>Service and activity transport contracts for large payload purge using the Durable Task SDK client models.</PackageDescription>
+    <PackageLicenseExpression>Apache-2.0 AND MIT</PackageLicenseExpression>
     <VersionPrefix>0.1.0</VersionPrefix>
     <VersionSuffix></VersionSuffix>
     <EnableStyleCop>true</EnableStyleCop>
@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Client\Core\Client.csproj" />
     <None Include="LICENSE" Pack="true" PackagePath="/" />
+    <None Include="..\..\LICENSE" Link="LICENSE-MIT" Pack="true" PackagePath="/LICENSE-MIT" />
   </ItemGroup>
 
 </Project>

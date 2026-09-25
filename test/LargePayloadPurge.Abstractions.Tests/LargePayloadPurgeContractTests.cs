@@ -13,6 +13,7 @@
 //  Adapted from the original contract tests for SDK xUnit, signing and dependency checks.
 
 using System.Reflection;
+using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Xunit;
 
@@ -21,10 +22,12 @@ namespace DurableTask.LargePayloadPurge.Tests;
 public class LargePayloadPurgeContractTests
 {
     [Fact]
-    public void PackageExportsOnlyTheStandaloneInterface()
+    public void PackageOwnsBothInterfacesWithoutBlobDefinitionsOrForwarders()
     {
         // Arrange
         Type contract = typeof(IOrchestrationServiceLargePayloadPurgeClient);
+        Type transport = typeof(ILargePayloadPurgeClient);
+        Assembly blob = typeof(GetLargePayloadTombstonesActivity).Assembly;
 
         // Act
         Type[] exported = contract.Assembly.GetExportedTypes();
@@ -33,9 +36,16 @@ public class LargePayloadPurgeContractTests
         Assert.True(contract.IsInterface);
         Assert.Equal("DurableTask.LargePayloadPurge", contract.Namespace);
         Assert.Equal("DurableTask.LargePayloadPurge.Abstractions", contract.Assembly.GetName().Name);
-        Assert.Equal([contract], exported);
+        Assert.Equal(new[] { contract, transport }.OrderBy(type => type.FullName), exported.OrderBy(type => type.FullName));
+        Assert.Same(contract.Assembly, transport.Assembly);
+        Assert.True(transport.IsInterface);
+        Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads", transport.Namespace);
         Assert.Empty(contract.GetInterfaces());
+        Assert.Empty(transport.GetInterfaces());
         Assert.Equal(3, contract.GetMethods().Length);
+        Assert.Equal(2, transport.GetMethods().Length);
+        Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == transport.FullName);
+        Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == transport.FullName);
     }
 
     [Fact]
@@ -58,6 +68,11 @@ public class LargePayloadPurgeContractTests
             typeof(Task<IReadOnlyList<LargePayloadTombstone>>),
             [typeof(int), typeof(DateTime), typeof(CancellationToken)],
             ["limit", "deadlineUtc", "cancellationToken"]);
+        AssertTransportSignature(
+            nameof(ILargePayloadPurgeClient.GetLargePayloadTombstonesAsync),
+            typeof(Task<List<LargePayloadTombstone>>),
+            [typeof(int), typeof(DateTime), typeof(CancellationToken)],
+            ["limit", "deadline", "cancellationToken"]);
     }
 
     [Fact]
@@ -69,6 +84,11 @@ public class LargePayloadPurgeContractTests
             typeof(Task),
             [typeof(IReadOnlyList<LargePayloadPurgeResult>), typeof(DateTime), typeof(CancellationToken)],
             ["results", "deadlineUtc", "cancellationToken"]);
+        AssertTransportSignature(
+            nameof(ILargePayloadPurgeClient.ReportLargePayloadPurgeResultsAsync),
+            typeof(Task),
+            [typeof(IReadOnlyList<LargePayloadPurgeResult>), typeof(DateTime), typeof(CancellationToken)],
+            ["results", "deadline", "cancellationToken"]);
     }
 
     [Fact]
@@ -111,6 +131,7 @@ public class LargePayloadPurgeContractTests
         // Arrange
         Assembly contract = typeof(IOrchestrationServiceLargePayloadPurgeClient).Assembly;
         Assembly core = typeof(Core.TaskHubClient).Assembly;
+        Assembly blob = typeof(GetLargePayloadTombstonesActivity).Assembly;
 
         // Act
         string?[] contractReferences = contract.GetReferencedAssemblies().Select(name => name.Name).ToArray();
@@ -122,6 +143,10 @@ public class LargePayloadPurgeContractTests
         Assert.DoesNotContain("Microsoft.DurableTask.Worker", contractReferences);
         Assert.DoesNotContain("Microsoft.DurableTask.Grpc", contractReferences);
         Assert.DoesNotContain("Microsoft.DurableTask.Extensions.AzureBlobPayloads", contractReferences);
+        Assert.DoesNotContain(contractReferences, name => name!.StartsWith("Azure.", StringComparison.Ordinal));
+        Assert.DoesNotContain(contractReferences, name => name!.StartsWith("Grpc.", StringComparison.Ordinal));
+        Assert.DoesNotContain(contractReferences, name => name!.StartsWith("Microsoft.DurableTask.Worker", StringComparison.Ordinal));
+        Assert.Contains(blob.GetReferencedAssemblies(), name => name.Name == contract.GetName().Name);
         Assert.DoesNotContain(contract.GetName().Name, coreReferences);
         Assert.DoesNotContain("Microsoft.DurableTask.Client", coreReferences);
     }
@@ -135,5 +160,19 @@ public class LargePayloadPurgeContractTests
         Assert.Equal(parameterTypes, parameters.Select(parameter => parameter.ParameterType));
         Assert.Equal(parameterNames, parameters.Select(parameter => parameter.Name));
         Assert.All(parameters, parameter => Assert.False(parameter.IsOptional));
+    }
+
+    static void AssertTransportSignature(string methodName, Type returnType, Type[] parameterTypes, string[] parameterNames)
+    {
+        MethodInfo method = typeof(ILargePayloadPurgeClient).GetMethod(methodName)!;
+        Assert.NotNull(method);
+        Assert.Equal(returnType, method.ReturnType);
+        ParameterInfo[] parameters = method.GetParameters();
+        Assert.Equal(parameterTypes, parameters.Select(parameter => parameter.ParameterType));
+        Assert.Equal(parameterNames, parameters.Select(parameter => parameter.Name));
+        Assert.All(parameters.Take(2), parameter => Assert.False(parameter.IsOptional));
+        Assert.True(parameters[2].IsOptional);
+        Assert.True(parameters[2].HasDefaultValue);
+        Assert.Null(parameters[2].DefaultValue);
     }
 }

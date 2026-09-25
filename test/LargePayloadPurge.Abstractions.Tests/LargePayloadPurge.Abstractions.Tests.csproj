@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)LargePayloadPurge.Abstractions/LargePayloadPurge.Abstractions.csproj" />
+    <ProjectReference Include="$(SrcRoot)Extensions/AzureBlobPayloads/AzureBlobPayloads.csproj" />
   </ItemGroup>
 
 </Project>

@@ -47,5 +47,5 @@ Rebuild consumers against this assembly; no type forwarder is provided.
 The service interface originated in [Azure/durabletask](https://github.com/Azure/durabletask) and retains
 its Apache-2.0 notice; see [LICENSE](LICENSE). The activity transport interface retains its MIT notice;
 see the [SDK MIT license](https://github.com/microsoft/durabletask-dotnet/blob/main/LICENSE). Both license texts
-are included in the package as `LICENSE` and `LICENSE-MIT.txt`; the package license expression
+are included in the package as `LICENSE` and `licenses/MIT/LICENSE`; the package license expression
 is `Apache-2.0 AND MIT`. The referenced SDK model assemblies retain their own licenses.

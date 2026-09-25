@@ -18,7 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Client\Core\Client.csproj" />
     <None Include="LICENSE" Pack="true" PackagePath="/" />
-    <None Include="..\..\LICENSE" Link="LICENSE-MIT" Pack="true" PackagePath="/LICENSE-MIT" />
+    <None Include="..\..\LICENSE" Link="LICENSE-MIT.txt" Pack="true" PackagePath="/LICENSE-MIT.txt" />
   </ItemGroup>
 
 </Project>

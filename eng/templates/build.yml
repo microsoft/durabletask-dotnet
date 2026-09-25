@@ -76,6 +76,13 @@ jobs:
             pattern: Microsoft.DurableTask.*.dll
             signType: dll
 
+        - template: ci/sign-files.yml@eng
+          parameters:
+            displayName: Sign large payload purge abstraction
+            folderPath: $(bin_dir)
+            pattern: DurableTask.LargePayloadPurge.Abstractions.dll
+            signType: dll
+
         # Packaging needs to be a separate step from build.
         # This will automatically pick up the signed DLLs.
         - task: DotNetCoreCLI@2

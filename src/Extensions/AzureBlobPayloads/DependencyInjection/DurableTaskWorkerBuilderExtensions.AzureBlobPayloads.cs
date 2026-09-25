@@ -8,6 +8,7 @@ using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
 using P = Microsoft.DurableTask.Protobuf;
@@ -131,12 +132,14 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         {
             r.AddOrchestrator<BlobPurgeJobOrchestrator>();
             r.AddActivity(nameof(GetLargePayloadTombstonesActivity), sp =>
-                ActivatorUtilities.CreateInstance<GetLargePayloadTombstonesActivity>(
-                    sp, sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name)));
+                new GetLargePayloadTombstonesActivity(
+                    sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name),
+                    sp.GetRequiredService<ILogger<GetLargePayloadTombstonesActivity>>()));
             r.AddActivity<DeleteExternalBlobActivity>();
             r.AddActivity(nameof(ReportLargePayloadPurgeResultsActivity), sp =>
-                ActivatorUtilities.CreateInstance<ReportLargePayloadPurgeResultsActivity>(
-                    sp, sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name)));
+                new ReportLargePayloadPurgeResultsActivity(
+                    sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name),
+                    sp.GetRequiredService<ILogger<ReportLargePayloadPurgeResultsActivity>>()));
         });
 
         return builder;

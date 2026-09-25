@@ -200,6 +200,55 @@ For runnable DTS emulator examples that demonstrate versioning, see the [WorkerV
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
+### Blob auto-purge infrastructure integration
+
+The optional service contract is maintained in
+[`Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions`](src/LargePayloadPurge.Abstractions/README.md).
+It defines `DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient` and
+`Microsoft.DurableTask.AzureBlobPayloads.ILargePayloadPurgeClient`, using the canonical SDK Client models
+without duplicating them. This package is versioned independently and is not BCL-only: its Client dependency
+transitively depends on SDK Abstractions and Durable Task Core. The Azure Blob implementation depends on these
+contracts; the contracts do not depend on Blob storage, gRPC or worker implementations.
+
+`Microsoft.DurableTask.Extensions.AzureBlobPayloads` exposes reusable orchestration and activity
+implementations: `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`, `DeleteExternalBlobActivity`,
+and `ReportLargePayloadPurgeResultsActivity`. Preserve their exact task names, empty version, input/output
+types, and retry/event/continue-as-new behavior. Keep the tasks registered even when auto-purge is disabled
+so existing work can finish. The existing client API manages the reserved per-task-hub orchestration instance
+and its configuration.
+
+The companion **.NET isolated Durable Functions** integration uses the optional
+`Microsoft.Azure.Functions.Worker.Extensions.DurableTask.AzureBlobPayloads` package. It supplies four ordinary
+`[Function]` methods that delegate to the shared tasks, plus worker-side payload-store configuration.
+The base Functions worker extension does not carry these function definitions. Referencing only this shared
+SDK package does not register Functions or enable auto-purge.
+
+The Functions Worker SDK discovers the compiled methods during the normal build and generates their metadata
+and invocation paths. The functions use ordinary trigger and `DurableClient` bindings in the isolated worker,
+passing the bound `TaskOrchestrationContext` and a `TaskActivityContext` with the invoking orchestration's
+instance ID to the shared tasks. Normal serialization and failure propagation preserve structured failure
+details and unprocessed events across continue-as-new.
+
+Construct the fetch/report activities with an `ILargePayloadPurgeClient` and their typed loggers, and the
+delete activity with the worker's configured `PayloadStore` and logger. Reuse `BlobPayloadStore` with
+`LargePayloadStorageOptions` for storage access rather than copying its ownership checks or deletion policy.
+Deletion runs in the language worker; purge RPCs do not carry storage credentials. The narrow purge client
+must honor UTC deadlines and preserve opaque tombstone tokens; the activities classify fetch/report gRPC failures.
+
+The Functions integration routes setting, fetch, and report operations through the bound client's local
+host endpoint to the provider's authenticated transport for the **same task hub**. The existing
+`LargePayloadPurge` gRPC service is separate from `TaskHubSidecarService`. The Functions client wrapper can
+forward the setting through the existing infrastructure `ILargePayloadAutoPurgeClient` interface so the
+original `client.SetLargePayloadAutoPurgeAsync(enabled, batchSize, cancellationToken)` extension retains
+ownership of bootstrap behavior. The integration owns client/store lifetimes, hub binding, and reconnection;
+this SDK surface alone does not supply Functions metadata or the local-host bridge.
+
+Enabling explicitly writes the setting, starts the reserved instance with live-status deduplication and an
+empty version, verifies its identity and Running status, then sends `SetBatchSize`. Disabling **only** writes
+the setting and ignores batch size. Calling neither leaves the setting untouched. These steps are not
+transactional; failures propagate without rollback. Existing standalone gRPC client and worker behavior
+is unchanged.
+
 ## Obtaining the Protobuf definitions
 
 This project utilizes protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf), which are copied (vendored) into this repository under the `src/Grpc` directory. See the corresponding [README.md](./src/Grpc/README.md) for more information about how to update the protobuf definitions.

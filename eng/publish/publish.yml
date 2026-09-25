@@ -464,3 +464,26 @@ extends:
             publishFeedCredentials: 'DurableTask org NuGet API Key'
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Extensions.AzureBlobPayloads.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions)
+      - job: nugetRelease_Microsoft_Azure_DurableTask_LargePayloadPurge_Abstractions
+        displayName: NuGet Release (Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval')
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg'
+            packageParentPath: $(System.DefaultWorkingDirectory)

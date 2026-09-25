@@ -95,6 +95,38 @@ steps:
           }
       ]
 
+# The service contract preserves its assembly name outside the Microsoft.DurableTask prefix.
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@2
+  displayName: 'ESRP CodeSigning: Large payload purge abstraction'
+  inputs:
+    ConnectedServiceName: 'ESRP Service'
+    FolderPath: $(bin_dir)
+    Pattern: 'DurableTask.LargePayloadPurge.Abstractions.dll'
+    signConfigType: inlineSignParams
+    inlineOperation: |
+      [
+        {
+          "KeyCode": "CP-230012",
+          "OperationCode": "SigntoolSign",
+          "Parameters": {
+            "OpusName": "Microsoft",
+            "OpusInfo": "http://www.microsoft.com",
+            "FileDigest": "/fd \"SHA256\"",
+            "PageHash": "/NPH",
+            "TimeStamp": "/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256"
+          },
+          "ToolName": "sign",
+          "ToolVersion": "1.0"
+        },
+        {
+          "KeyCode": "CP-230012",
+          "OperationCode": "SigntoolVerify",
+          "Parameters": {},
+          "ToolName": "sign",
+          "ToolVersion": "1.0"
+        }
+      ]
+
 # SBOM generator task for additional supply chain protection
 - task: AzureArtifacts.manifest-generator-task.manifest-generator-task.ManifestGeneratorTask@0
   displayName: 'SBOM Manifest Generator'

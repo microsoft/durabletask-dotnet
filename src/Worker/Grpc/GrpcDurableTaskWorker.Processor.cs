@@ -659,13 +659,19 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             IReadOnlyList<P.HistoryEvent> pastEvents = materializedPastEvents ?? request.PastEvents;
-            var executionStartedEvent =
-                request
-                    .NewEvents
-                    .Concat(pastEvents)
-                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
-                    .Select(e => e.ExecutionStarted)
-                    .FirstOrDefault();
+            bool hasTraceListeners = TraceHelper.HasListeners();
+
+            P.ExecutionStartedEvent? executionStartedEvent = null;
+            if (hasTraceListeners || isInitialRewind)
+            {
+                executionStartedEvent =
+                    request
+                        .NewEvents
+                        .Concat(pastEvents)
+                        .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                        .Select(e => e.ExecutionStarted)
+                        .FirstOrDefault();
+            }
 
             if (isInitialRewind)
             {
@@ -684,9 +690,11 @@ sealed partial class GrpcDurableTaskWorker
             // A rewind starts a new orchestration span instead of continuing the failed execution's stored span.
             P.OrchestrationTraceContext? orchestrationTraceContext =
                 isInitialRewind ? null : request.OrchestrationTraceContext;
-            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
-                executionStartedEvent,
-                orchestrationTraceContext);
+            Activity? traceActivity = hasTraceListeners
+                ? TraceHelper.StartTraceActivityForOrchestrationExecution(
+                    executionStartedEvent,
+                    orchestrationTraceContext)
+                : null;
 
             if (isInitialRewind)
             {
@@ -701,27 +709,9 @@ sealed partial class GrpcDurableTaskWorker
                 return;
             }
 
-            if (executionStartedEvent is not null)
+            if (hasTraceListeners && executionStartedEvent is not null)
             {
-                P.HistoryEvent? GetSuborchestrationInstanceCreatedEvent(int eventId)
-                {
-                    var subOrchestrationEvent =
-                        pastEvents
-                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)
-                            .FirstOrDefault(x => x.EventId == eventId);
-
-                    return subOrchestrationEvent;
-                }
-
-                P.HistoryEvent? GetTaskScheduledEvent(int eventId)
-                {
-                    var taskScheduledEvent =
-                        pastEvents
-                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled)
-                            .LastOrDefault(x => x.EventId == eventId);
-
-                    return taskScheduledEvent;
-                }
+                TracingHistoryEventIndex historyEventIndex = new(pastEvents);
 
                 foreach (var newEvent in request.NewEvents)
                 {
@@ -730,7 +720,7 @@ sealed partial class GrpcDurableTaskWorker
                         case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
                             {
                                 P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                    GetSuborchestrationInstanceCreatedEvent(
+                                    historyEventIndex.GetSubOrchestrationInstanceCreatedEvent(
                                         newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
 
                                 TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
@@ -743,7 +733,7 @@ sealed partial class GrpcDurableTaskWorker
                         case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
                             {
                                 P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                    GetSuborchestrationInstanceCreatedEvent(
+                                    historyEventIndex.GetSubOrchestrationInstanceCreatedEvent(
                                         newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
 
                                 TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
@@ -757,7 +747,7 @@ sealed partial class GrpcDurableTaskWorker
                         case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                             {
                                 P.HistoryEvent? taskScheduledEvent =
-                                    GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
+                                    historyEventIndex.GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
 
                                 TraceHelper.EmitTraceActivityForTaskCompleted(
                                     request.InstanceId,
@@ -769,7 +759,7 @@ sealed partial class GrpcDurableTaskWorker
                         case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
                             {
                                 P.HistoryEvent? taskScheduledEvent =
-                                    GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
+                                    historyEventIndex.GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
 
                                 TraceHelper.EmitTraceActivityForTaskFailed(
                                     request.InstanceId,

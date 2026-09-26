@@ -21,7 +21,10 @@ sealed class TracingHistoryEventIndex
             {
                 case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                     // Preserve the previous FirstOrDefault semantics for duplicate IDs.
-                    this.subOrchestrationCreatedEvents.TryAdd(historyEvent.EventId, historyEvent);
+                    if (!this.subOrchestrationCreatedEvents.ContainsKey(historyEvent.EventId))
+                    {
+                        this.subOrchestrationCreatedEvents.Add(historyEvent.EventId, historyEvent);
+                    }
                     break;
 
                 case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:

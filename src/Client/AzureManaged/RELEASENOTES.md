@@ -1,1 +1,3 @@
+- Support normalized ResourceId token audiences in options and connection strings, with per-instance government/DoD region defaults. Set ResourceId=https://durabletask.io explicitly to retain the previous public audience in government regions.
+- Support independent AuthorityHost connection-string configuration for SDK-created credentials that accept an authority, preserving Azure Identity defaults when omitted.
 - Released first version Microsoft.DurableTask.Client.AzureManaged - 1.5.0-preview.1

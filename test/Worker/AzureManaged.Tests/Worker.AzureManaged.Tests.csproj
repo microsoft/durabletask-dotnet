@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <DefineConstants>$(DefineConstants);SCHEDULER_WORKER</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\Shared\AzureManaged\*.cs" Link="Shared\%(Filename)%(Extension)" />
     <ProjectReference Include="../../../src/Worker/AzureManaged/Worker.AzureManaged.csproj" />
     <ProjectReference Include="../../../src/Worker/AzureManaged.Sandboxes/Worker.AzureManaged.Sandboxes.csproj" />
     <ProjectReference Include="../../TestHelpers/TestHelpers.csproj" />

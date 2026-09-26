@@ -195,7 +195,6 @@ public class DurableTaskSchedulerWorkerOptionsTests
         DurableTaskSchedulerWorkerOptions options = new DurableTaskSchedulerWorkerOptions();
 
         // Assert
-        options.ResourceId.Should().Be("https://durabletask.io");
         options.WorkerId.Should().NotBeNullOrEmpty();
         options.WorkerId.Should().Contain(Environment.MachineName);
         options.WorkerId.Should().Contain(Environment.ProcessId.ToString());

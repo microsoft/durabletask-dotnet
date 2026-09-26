@@ -41,7 +41,6 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
-        workerOptions.ResourceId.Should().Be("https://durabletask.io");
         workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
@@ -67,7 +66,6 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
-        workerOptions.ResourceId.Should().Be("https://durabletask.io");
         workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
@@ -93,7 +91,6 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be("http://localhost");
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeNull();
-        workerOptions.ResourceId.Should().Be("https://durabletask.io");
         workerOptions.AllowInsecureCredentials.Should().BeTrue();
     }
 
@@ -139,7 +136,6 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeNull();
-        workerOptions.ResourceId.Should().Be("https://durabletask.io");
         workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
@@ -197,7 +193,6 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         options.EndpointAddress.Should().Be(ValidEndpoint); // The https:// prefix is added by CreateChannel, not in the extension method
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<DefaultAzureCredential>();
-        options.ResourceId.Should().Be("https://durabletask.io");
         options.AllowInsecureCredentials.Should().BeFalse();
     }
 
@@ -492,4 +487,3 @@ public class DurableTaskSchedulerWorkerExtensionsTests
             .GetValue(internalOptions);
     }
 }
-

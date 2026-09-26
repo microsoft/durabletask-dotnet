@@ -19,6 +19,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
     /// <summary>
     /// Adds a DTS on-demand sandbox activity management client using the default Durable Task client configuration.
     /// </summary>
+    /// <remarks>Reuses the client channel, including its credential and configured token audience.</remarks>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>The original service collection, for call chaining.</returns>
     public static IServiceCollection AddDurableTaskSchedulerSandboxActivitiesClient(this IServiceCollection services)
@@ -27,6 +28,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
     /// <summary>
     /// Adds a DTS on-demand sandbox activity management client using a named Durable Task client configuration.
     /// </summary>
+    /// <remarks>Reuses the named client channel, including its credential and configured token audience.</remarks>
     /// <param name="services">The service collection to configure.</param>
     /// <param name="clientName">The Durable Task client name whose scheduler channel should be reused.</param>
     /// <returns>The original service collection, for call chaining.</returns>

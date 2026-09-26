@@ -200,6 +200,100 @@ For runnable DTS emulator examples that demonstrate versioning, see the [WorkerV
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
+### Token audiences and Azure Government
+
+`DurableTaskSchedulerClientOptions.ResourceId` and `DurableTaskSchedulerWorkerOptions.ResourceId`
+configure the **token audience URI**, not an Azure Resource Manager resource path.
+The same setting is available as `ResourceId` in a scheduler connection string, for every
+authentication type. A `UseDurableTaskScheduler` configuration callback can override the
+connection-string value.
+
+| Configuration | Selected audience |
+| --- | --- |
+| Explicit nonempty `ResourceId` | The normalized explicit value |
+| Missing, null, or empty `ResourceId`, with `REGION_NAME` starting with `usgov` or `usdod` (case-insensitive) | `https://durabletask.azure.us` |
+| Otherwise | `https://durabletask.io` |
+
+The default is resolved per options instance and retained across token refreshes and channel
+recreation. Region matching uses prefixes only: `chinaeast2`, `notusgov`, and `notusdod` use
+the public default. The audience is **not inferred from the service endpoint**.
+
+Explicit values are normalized by trimming surrounding whitespace and trailing `/` characters,
+removing one case-insensitive `/.default` suffix, and trimming trailing `/` characters again.
+The SDK requests `<normalized-resource-id>/.default`. For example,
+`https://durabletask.azure.us//.DEFAULT//` requests `https://durabletask.azure.us/.default`,
+and `api://CustomAudience/resource/.DEFAULT/` requests
+`api://CustomAudience/resource/.default`. Custom URI casing is preserved.
+Whitespace-only values, `///`, `/.default`, and `/.DEFAULT///` throw an `ArgumentException`
+instead of silently selecting a default.
+
+**Behavior change:** applications running in government/DoD regions previously defaulted to
+`https://durabletask.io`. Set `ResourceId = "https://durabletask.io"` explicitly on both client
+and worker (or in their connection strings) if they must retain the public audience.
+
+#### Configure the credential authority separately
+
+Neither `ResourceId` nor `REGION_NAME` changes the endpoint or the credential's authority.
+When supplying a `TokenCredential`, configure the authority on that credential. For example,
+the following standalone client and worker configuration explicitly selects Azure Government:
+
+```csharp
+using Azure.Identity;
+using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.AzureManaged;
+using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.AzureManaged;
+using Microsoft.Extensions.DependencyInjection;
+
+string endpoint = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_ENDPOINT")
+    ?? throw new InvalidOperationException("DURABLE_TASK_SCHEDULER_ENDPOINT is not set.");
+string taskHub = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_TASK_HUB")
+    ?? throw new InvalidOperationException("DURABLE_TASK_SCHEDULER_TASK_HUB is not set.");
+
+DefaultAzureCredential credential = new(new DefaultAzureCredentialOptions
+{
+    AuthorityHost = AzureAuthorityHosts.AzureGovernment,
+});
+
+ServiceCollection services = new();
+services.AddDurableTaskClient(builder =>
+    builder.UseDurableTaskScheduler(endpoint, taskHub, credential,
+        options => options.ResourceId = "https://durabletask.azure.us"));
+services.AddDurableTaskWorker(builder =>
+    builder.UseDurableTaskScheduler(endpoint, taskHub, credential,
+        options => options.ResourceId = "https://durabletask.azure.us"));
+// Register your orchestrations and activities on the worker before starting the host.
+```
+
+For SDK-created credentials, the connection string accepts an independent `AuthorityHost`:
+
+```text
+Endpoint=https://<government-scheduler-endpoint>;TaskHub=<task-hub>;Authentication=DefaultAzure;ResourceId=https://durabletask.azure.us;AuthorityHost=https://login.microsoftonline.us/
+```
+
+`AuthorityHost` must be an absolute HTTPS URI. It is forwarded for `DefaultAzure`,
+`WorkloadIdentity`, `Environment`, `VisualStudio`, `VisualStudioCode`, and `InteractiveBrowser`.
+Omitting it (or leaving it empty) preserves Azure Identity defaults, including
+`AZURE_AUTHORITY_HOST` where applicable. It is not applied to `ManagedIdentity`, `AzureCLI`,
+`AzurePowerShell`, or `None`. Managed identity uses the hosting environment's identity
+endpoint. Developer-tool credentials, including those in `DefaultAzureCredential`, may
+require separate tool cloud configuration (for example, `az cloud set --name AzureUSGovernment`
+before signing in with Azure CLI).
+
+On-demand sandbox management reuses the configured client channel and audience. Sandbox
+workers and their registration/reconnect streams share the worker channel and audience;
+`UseSandboxWorker()` resolves the same region default. To override it, configure the
+corresponding `DurableTaskSchedulerWorkerOptions` using the options system:
+
+```csharp
+services.Configure<Microsoft.DurableTask.DurableTaskSchedulerWorkerOptions>(
+    options => options.ResourceId = "https://durabletask.azure.us");
+```
+
+For a named worker, pass its name to `Configure`. Sandbox workers create a managed identity
+credential, so an Entra authority override does not apply. Caller-supplied gRPC channels or
+call invokers remain responsible for their own authentication.
+
 ## Obtaining the Protobuf definitions
 
 This project utilizes protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf), which are copied (vendored) into this repository under the `src/Grpc` directory. See the corresponding [README.md](./src/Grpc/README.md) for more information about how to update the protobuf definitions.

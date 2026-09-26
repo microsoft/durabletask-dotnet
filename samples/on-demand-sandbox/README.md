@@ -40,6 +40,16 @@ $env:DTS_SANDBOX_SCHEDULER_UMI_CLIENT_ID = "<scheduler UMI client ID>"
 
 For `Authentication=DefaultAzure`, sign in with Azure CLI or configure another supported Azure identity before running the main app.
 
+For government-cloud deployments, configure the token audience independently of the endpoint
+and credential authority. The main app connection string accepts
+`ResourceId=https://durabletask.azure.us;AuthorityHost=https://login.microsoftonline.us/`.
+The remote worker uses managed identity (its hosting environment's identity endpoint, not an
+Entra authority override). Its audience defaults to `https://durabletask.azure.us` when
+`REGION_NAME` starts with `usgov` or `usdod`, case-insensitively. An explicit
+`DurableTaskSchedulerWorkerOptions.ResourceId` overrides that default and is shared by work-item
+and registration transports. See [token audiences and Azure Government](../../README.md#token-audiences-and-azure-government)
+for configuration examples and the government-region default migration.
+
 The worker profile class declares the image, CPU, memory, max concurrency, and on-demand sandbox activity identities with `options.AddActivity(name, version)`. The main app and remote worker both use the `shared/SandboxActivities.cs` constants so the workerProfile and worker registration stay in sync.
 
 You can also set the scheduler connection string in `main-app/appsettings.json`:

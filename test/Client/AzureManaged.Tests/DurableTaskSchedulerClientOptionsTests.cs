@@ -196,7 +196,6 @@ public class DurableTaskSchedulerClientOptionsTests
         DurableTaskSchedulerClientOptions options = new DurableTaskSchedulerClientOptions();
 
         // Assert
-        options.ResourceId.Should().Be("https://durabletask.io");
         options.AllowInsecureCredentials.Should().BeFalse();
     }
 

@@ -6,6 +6,7 @@ using Microsoft.DurableTask.Tracing;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
+[Collection("ActivitySource listener tests")]
 public class TraceHelperTests
 {
     [Fact]

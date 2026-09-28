@@ -83,6 +83,7 @@ public class SandboxAuthenticationTests(SchedulerAuthenticationServer server) : 
             secondRegistration.TrySetResult();
             while (await requests.MoveNext(context.CancellationToken))
             {
+                // Drain heartbeats until the worker completes the registration stream.
             }
 
             return [];

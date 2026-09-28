@@ -183,6 +183,36 @@ public class SchedulerAuthenticationTests(SchedulerAuthenticationServer server) 
 
     [Theory]
     [CombinatorialData]
+    public async Task RecordingCredential_FirstTokenIsUniqueUnderConcurrencyAsync(bool expireFirstToken, bool refreshFirstToken)
+    {
+        // Arrange
+        RecordingSchedulerCredential credential = new(expireFirstToken, refreshFirstToken);
+        TokenRequestContext context = new(["https://durabletask.azure.us/.default"]);
+        TaskCompletionSource start = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<AccessToken>[] requests = Enumerable.Range(0, 64).Select(async _ =>
+        {
+            await start.Task;
+            return await credential.GetTokenAsync(context, CancellationToken.None);
+        }).ToArray();
+
+        // Act
+        start.SetResult();
+        AccessToken[] tokens = await Task.WhenAll(requests).WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Assert
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.Equal(expireFirstToken ? 1 : 0, tokens.Count(token => token.ExpiresOn < now));
+        Assert.Equal(refreshFirstToken ? 1 : 0, tokens.Count(token => token.RefreshOn < now));
+        if (expireFirstToken && refreshFirstToken)
+        {
+            Assert.Single(tokens, token => token.ExpiresOn < now && token.RefreshOn < now);
+        }
+
+        Assert.Equal(Enumerable.Repeat("https://durabletask.azure.us/.default", requests.Length), credential.Scopes);
+    }
+
+    [Theory]
+    [CombinatorialData]
     public async Task Builders_PreserveAudienceAcrossOptionsCopyAndChannelRecreationAsync(
         [CombinatorialValues("options", "endpoint", "connectionString")] string path,
         [CombinatorialValues(null, "", "https://durabletask.io", "api://Custom/.default/.DEFAULT/")] string? resourceId,
@@ -317,6 +347,7 @@ public class SchedulerAuthenticationTests(SchedulerAuthenticationServer server) 
 public sealed class RecordingSchedulerCredential(bool expireFirstToken = false, bool refreshFirstToken = false) : TokenCredential
 {
     readonly ConcurrentQueue<string> scopes = new();
+    int tokenCalls;
 
     public string[] Scopes => this.scopes.ToArray();
 
@@ -326,10 +357,11 @@ public sealed class RecordingSchedulerCredential(bool expireFirstToken = false, 
     public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken)
     {
         this.scopes.Enqueue(Assert.Single(requestContext.Scopes));
+        int call = Interlocked.Increment(ref this.tokenCalls);
         return ValueTask.FromResult(new AccessToken(
             "recorded-token",
-            expireFirstToken && this.scopes.Count == 1 ? DateTimeOffset.UtcNow.AddMinutes(-1) : DateTimeOffset.UtcNow.AddHours(1),
-            refreshFirstToken && this.scopes.Count == 1 ? DateTimeOffset.UtcNow.AddMinutes(-1) : null));
+            expireFirstToken && call == 1 ? DateTimeOffset.UtcNow.AddMinutes(-1) : DateTimeOffset.UtcNow.AddHours(1),
+            refreshFirstToken && call == 1 ? DateTimeOffset.UtcNow.AddMinutes(-1) : null));
     }
 }
 

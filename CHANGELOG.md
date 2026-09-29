@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Support configurable scheduler token audiences and government defaults ([#806](https://github.com/microsoft/durabletask-dotnet/pull/806))
+
 ## v1.26.0
 - Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))
 - Prevent external-event loss after canceled waits in isolated worker by wangbill ([#801](https://github.com/microsoft/durabletask-dotnet/pull/801))

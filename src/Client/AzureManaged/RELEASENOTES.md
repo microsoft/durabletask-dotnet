@@ -1,1 +1,3 @@
+- Support normalized ResourceId token audiences in options and connection strings, with per-instance government/DoD defaults that select the audience registered in that cloud. Public-cloud defaults are unchanged; cross-cloud scheduler access is unsupported.
+- Support independent AuthorityHost connection-string configuration for SDK-created credentials that accept an authority, preserving Azure Identity defaults when omitted.
 - Released first version Microsoft.DurableTask.Client.AzureManaged - 1.5.0-preview.1

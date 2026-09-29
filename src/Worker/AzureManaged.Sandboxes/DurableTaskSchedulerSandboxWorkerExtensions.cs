@@ -34,6 +34,11 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
     /// on-demand sandbox activities. Use this on a dedicated worker binary that runs inside sandbox infrastructure.
     /// Runtime configuration is read from environment variables injected by DTS.
     /// </summary>
+    /// <remarks>
+    /// The worker and sandbox registration share <see cref="DurableTaskSchedulerWorkerOptions.ResourceId"/>.
+    /// Configure the named scheduler options to override the region-based token audience default.
+    /// Managed identity uses the hosting environment's identity endpoint, not an Entra authority override.
+    /// </remarks>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskWorkerBuilder UseSandboxWorker(this IDurableTaskWorkerBuilder builder)

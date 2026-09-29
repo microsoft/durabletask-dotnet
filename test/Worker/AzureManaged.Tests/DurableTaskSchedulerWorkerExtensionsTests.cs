@@ -6,6 +6,7 @@ using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
 using Grpc.Net.Client;
+using Microsoft.DurableTask.AzureManaged.Tests;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -14,15 +15,21 @@ using Xunit;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged.Tests;
 
+[Collection("Scheduler authentication environment")]
 public class DurableTaskSchedulerWorkerExtensionsTests
 {
     const string ValidEndpoint = "myaccount.westus3.durabletask.io";
     const string ValidTaskHub = "testhub";
 
-    [Fact]
-    public async Task UseDurableTaskScheduler_WithEndpointAndCredential_ShouldConfigureCorrectly()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public async Task UseDurableTaskScheduler_WithEndpointAndCredential_ShouldConfigureCorrectly(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new ServiceCollection();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -41,13 +48,19 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
+        workerOptions.ResourceId.Should().Be(expectedResourceId);
         workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task UseDurableTaskScheduler_WithConnectionString_ShouldConfigureCorrectly()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public async Task UseDurableTaskScheduler_WithConnectionString_ShouldConfigureCorrectly(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new ServiceCollection();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -66,13 +79,19 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
+        workerOptions.ResourceId.Should().Be(expectedResourceId);
         workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public async Task UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -91,6 +110,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be("http://localhost");
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeNull();
+        workerOptions.ResourceId.Should().Be(expectedResourceId);
         workerOptions.AllowInsecureCredentials.Should().BeTrue();
     }
 
@@ -117,10 +137,15 @@ public class DurableTaskSchedulerWorkerExtensionsTests
                 : "DataAnnotation validation failed for 'DurableTaskSchedulerWorkerOptions' members: 'TaskHubName' with the error: 'Task hub name is required'.");
     }
 
-    [Fact]
-    public async Task UseDurableTaskScheduler_WithNullCredential_ShouldSucceed()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public async Task UseDurableTaskScheduler_WithNullCredential_ShouldSucceed(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new ServiceCollection();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -136,6 +161,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeNull();
+        workerOptions.ResourceId.Should().Be(expectedResourceId);
         workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
@@ -171,10 +197,15 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         action.Should().Throw<ArgumentNullException>();
     }
 
-    [Fact]
-    public async Task UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public async Task UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new ServiceCollection();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -193,6 +224,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         options.EndpointAddress.Should().Be(ValidEndpoint); // The https:// prefix is added by CreateChannel, not in the extension method
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<DefaultAzureCredential>();
+        options.ResourceId.Should().Be(expectedResourceId);
         options.AllowInsecureCredentials.Should().BeFalse();
     }
 

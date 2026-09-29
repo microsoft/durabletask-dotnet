@@ -8,6 +8,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 static class DurableTaskSchedulerResourceId
 {
+    const string ScopeSuffix = "/.default";
+
     /// <summary>
     /// Gets the default audience for a new options instance.
     /// </summary>
@@ -35,7 +37,6 @@ static class DurableTaskSchedulerResourceId
         }
 
         string normalized = resourceId.Trim().TrimEnd('/');
-        const string ScopeSuffix = "/.default";
         if (normalized.EndsWith(ScopeSuffix, StringComparison.OrdinalIgnoreCase))
         {
             normalized = normalized[..^ScopeSuffix.Length].TrimEnd('/');

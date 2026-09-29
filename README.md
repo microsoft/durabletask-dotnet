@@ -227,9 +227,13 @@ and `api://CustomAudience/resource/.DEFAULT/` requests
 Whitespace-only values, `///`, `/.default`, and `/.DEFAULT///` throw an `ArgumentException`
 instead of silently selecting a default.
 
-**Behavior change:** applications running in government/DoD regions previously defaulted to
-`https://durabletask.io`. Set `ResourceId = "https://durabletask.io"` explicitly on both client
-and worker (or in their connection strings) if they must retain the public audience.
+**Government-cloud configuration:** the government/DoD default now matches the audience
+registered in that cloud, rather than the previous public-cloud `https://durabletask.io`
+audience. Supported deployments use a scheduler and credentials in the same cloud;
+this setting does not enable cross-cloud scheduler access. Public-cloud deployments retain
+their existing default. An explicit `ResourceId = "https://durabletask.io"` on the client
+and worker (or in their connection strings) still selects the public audience regardless
+of `REGION_NAME`.
 
 #### Configure the credential authority separately
 

@@ -2,9 +2,7 @@
 
 ## Unreleased
 
-- Normalize the existing Azure Managed client and worker `ResourceId` token audience option and support it in connection strings. Explicit values override the region default; whitespace-only or otherwise empty-after-normalization values are rejected.
-- **Behavior change:** missing/null/empty `ResourceId` now defaults to `https://durabletask.azure.us` when `REGION_NAME` starts with `usgov` or `usdod` (case-insensitive), and to `https://durabletask.io` otherwise. Defaults are resolved per options instance and retained across refreshes, reconnects, and sandbox registration. Set `ResourceId=https://durabletask.io` explicitly to retain the previous audience in government regions.
-- Add optional `AuthorityHost` connection-string configuration for SDK-created Azure Identity credentials that support it. Omission preserves Azure Identity defaults, including environment configuration. Audience, endpoint, and credential authority remain independent; managed identity and developer-tool cloud configuration are unchanged. See the [Azure Government usage example](README.md#token-audiences-and-azure-government).
+- Support configurable scheduler token audiences and government defaults ([#806](https://github.com/microsoft/durabletask-dotnet/pull/806))
 
 ## v1.26.0
 - Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))

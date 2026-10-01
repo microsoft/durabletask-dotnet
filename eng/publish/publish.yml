@@ -468,8 +468,11 @@ extends:
       # NuGet release (Microsoft.DurableTask.LargePayloadPurge.Abstractions)
       - job: nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
         displayName: NuGet Release (Microsoft.DurableTask.LargePayloadPurge.Abstractions)
-        dependsOn: nugetApproval
-        condition: succeeded('nugetApproval')
+        dependsOn:
+        - nugetApproval
+        - nugetRelease_Microsoft_DurableTask_Abstractions
+        - nugetRelease_Microsoft_DurableTask_Client
+        condition: succeeded()
         templateContext:
           type: releaseJob
           isProduction: true

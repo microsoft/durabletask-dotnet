@@ -18,6 +18,10 @@ Its package and assembly name is `Microsoft.DurableTask.LargePayloadPurge.Abstra
 standard `Microsoft.DurableTask.*.dll` signing pattern. The existing source traversal, SBOM inclusion,
 NuGet signing and per-package approval-gated publication steps apply.
 
+Contract publication also waits for successful Client and Abstractions publication. If either prerequisite
+fails, including a duplicate-version upload failure, or is skipped or canceled, contract publication is
+skipped rather than treating that result as success. Other packages retain their independent publication jobs.
+
 Keep its `RELEASENOTES.md`: `eng/targets/Release.targets` reads it into NuGet package metadata, whereas the
 root `CHANGELOG.md` retains repository release history. The shared target also appends a link using the
 package's own version (`releases/tag/v0.1.0` for its initial release). Verify or create the corresponding

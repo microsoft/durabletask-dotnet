@@ -1,16 +1,17 @@
 # Large payload purge contracts
 
-`Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions` provides two interfaces in the
-`DurableTask.LargePayloadPurge.Abstractions` assembly:
+`Microsoft.DurableTask.LargePayloadPurge.Abstractions` provides two interfaces in the
+`Microsoft.DurableTask.LargePayloadPurge.Abstractions` assembly:
 
-- `DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient` is the optional service
-  capability for explicit auto-purge state, tombstone fetches, and outcome reports. Each operation requires
-  a UTC deadline and cancellation token. `DateTime.MaxValue` represents an unspecified deadline.
-  Setting the flag alone does not start or stop a purge runner.
 - `Microsoft.DurableTask.AzureBlobPayloads.ILargePayloadPurgeClient` is the activity transport contract for
-  fetching tombstones and reporting outcomes. It accepts a UTC deadline and optional cancellation token.
+  fetching tombstones with `GetLargePayloadTombstonesAsync` and reporting outcomes. It accepts a UTC deadline
+  and optional cancellation token.
   Transport implementations bind it to the same authenticated task hub as the associated orchestration
   client and preserve the documented gRPC status behavior without requiring this package to reference gRPC.
+- `DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient` inherits that shared transport
+  contract and adds only `SetLargePayloadAutoPurgeAsync`. The setting operation requires a deadline and
+  cancellation token; `DateTime.MaxValue` represents an unspecified deadline. Setting the flag alone does
+  not start, stop or wait for a purge runner.
 
 The contract uses the canonical `LargePayloadTombstone`, `LargePayloadPurgeResult`, and
 `LargePayloadPurgeDisposition` types from `Microsoft.DurableTask.Client`. It does not copy, move, wrap or
@@ -21,7 +22,7 @@ forward those types. Backend-issued tombstone tokens must be echoed unchanged.
 This project references the SDK Client project directly. Its packaged dependency graph is:
 
 ```text
-Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions
+Microsoft.DurableTask.LargePayloadPurge.Abstractions
   -> Microsoft.DurableTask.Client
     -> Microsoft.DurableTask.Abstractions
       -> Microsoft.Azure.DurableTask.Core
@@ -36,16 +37,9 @@ matching SDK Client and Abstractions dependencies containing the purge models be
 Published Client `1.26.0` predates those models and is not sufficient. Repository builds use source project
 references; no external Client-version bootstrap property is required.
 
-The assembly uses this repository's strong-name key. Consumers of an earlier local prototype signed with
-a different key must rebuild against the SDK-owned package; there is no compatibility promise for those
-unreleased prototype binaries. The activity transport interface also moved here from the unreleased
-Azure Blob implementation while retaining its full namespace, methods and optional-parameter defaults.
-Rebuild consumers against this assembly; no type forwarder is provided.
-
-## License
-
-The service interface originated in [Azure/durabletask](https://github.com/Azure/durabletask) and retains
-its Apache-2.0 notice; see [LICENSE](LICENSE). The activity transport interface retains its MIT notice;
-see the [SDK MIT license](https://github.com/microsoft/durabletask-dotnet/blob/main/LICENSE). Both license texts
-are included in the package as `LICENSE` and `licenses/MIT/LICENSE`; the package license expression
-is `Apache-2.0 AND MIT`. The referenced SDK model assemblies retain their own licenses.
+The assembly uses this repository's strong-name key. Consumers of the unreleased prototype package
+`Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions` must update the package reference and rebuild;
+the assembly name is now `Microsoft.DurableTask.LargePayloadPurge.Abstractions`. Source namespaces stay the same.
+Service implementations should rename `GetLargePayloadsToPurgeAsync` to the inherited
+`GetLargePayloadTombstonesAsync`, returning `Task<List<LargePayloadTombstone>>`; Report uses the existing
+shared transport signature. No type forwarder or duplicate DTO is provided.

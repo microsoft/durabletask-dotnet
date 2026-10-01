@@ -1,16 +1,5 @@
-//  ----------------------------------------------------------------------------------
-//  Copyright Microsoft Corporation
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//  http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
-//  ----------------------------------------------------------------------------------
-//  Adapted from the original contract tests for SDK xUnit, signing and dependency checks.
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System.Reflection;
 using Microsoft.DurableTask.AzureBlobPayloads;
@@ -35,14 +24,15 @@ public class LargePayloadPurgeContractTests
         // Assert
         Assert.True(contract.IsInterface);
         Assert.Equal("DurableTask.LargePayloadPurge", contract.Namespace);
-        Assert.Equal("DurableTask.LargePayloadPurge.Abstractions", contract.Assembly.GetName().Name);
+        Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions", contract.Assembly.GetName().Name);
         Assert.Equal(new[] { contract, transport }.OrderBy(type => type.FullName), exported.OrderBy(type => type.FullName));
         Assert.Same(contract.Assembly, transport.Assembly);
         Assert.True(transport.IsInterface);
         Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads", transport.Namespace);
-        Assert.Empty(contract.GetInterfaces());
+        Assert.Equal([transport], contract.GetInterfaces());
         Assert.Empty(transport.GetInterfaces());
-        Assert.Equal(3, contract.GetMethods().Length);
+        Assert.Equal(nameof(IOrchestrationServiceLargePayloadPurgeClient.SetLargePayloadAutoPurgeAsync),
+            Assert.Single(contract.GetMethods()).Name);
         Assert.Equal(2, transport.GetMethods().Length);
         Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == transport.FullName);
         Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == transport.FullName);
@@ -63,11 +53,6 @@ public class LargePayloadPurgeContractTests
     public void GetReturnsCanonicalSdkTombstones()
     {
         // Arrange / Act / Assert
-        AssertSignature(
-            nameof(IOrchestrationServiceLargePayloadPurgeClient.GetLargePayloadsToPurgeAsync),
-            typeof(Task<IReadOnlyList<LargePayloadTombstone>>),
-            [typeof(int), typeof(DateTime), typeof(CancellationToken)],
-            ["limit", "deadlineUtc", "cancellationToken"]);
         AssertTransportSignature(
             nameof(ILargePayloadPurgeClient.GetLargePayloadTombstonesAsync),
             typeof(Task<List<LargePayloadTombstone>>),
@@ -79,11 +64,6 @@ public class LargePayloadPurgeContractTests
     public void ReportAcceptsCanonicalSdkResults()
     {
         // Arrange / Act / Assert
-        AssertSignature(
-            nameof(IOrchestrationServiceLargePayloadPurgeClient.ReportLargePayloadPurgeResultsAsync),
-            typeof(Task),
-            [typeof(IReadOnlyList<LargePayloadPurgeResult>), typeof(DateTime), typeof(CancellationToken)],
-            ["results", "deadlineUtc", "cancellationToken"]);
         AssertTransportSignature(
             nameof(ILargePayloadPurgeClient.ReportLargePayloadPurgeResultsAsync),
             typeof(Task),
@@ -166,6 +146,8 @@ public class LargePayloadPurgeContractTests
     {
         MethodInfo method = typeof(ILargePayloadPurgeClient).GetMethod(methodName)!;
         Assert.NotNull(method);
+        Type inheritedContract = Assert.Single(typeof(IOrchestrationServiceLargePayloadPurgeClient).GetInterfaces());
+        Assert.Equal(method, inheritedContract.GetMethod(methodName));
         Assert.Equal(returnType, method.ReturnType);
         ParameterInfo[] parameters = method.GetParameters();
         Assert.Equal(parameterTypes, parameters.Select(parameter => parameter.ParameterType));

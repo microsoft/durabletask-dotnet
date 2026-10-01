@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `Microsoft.DurableTask.LargePayloadPurge.Abstractions` with shared fetch/report and service-setting interfaces, and expose the existing blob purge tasks for host integration ([#805](https://github.com/microsoft/durabletask-dotnet/pull/805)).
+
 ## v1.26.0
 - Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))
 - Prevent external-event loss after canceled waits in isolated worker by wangbill ([#801](https://github.com/microsoft/durabletask-dotnet/pull/801))

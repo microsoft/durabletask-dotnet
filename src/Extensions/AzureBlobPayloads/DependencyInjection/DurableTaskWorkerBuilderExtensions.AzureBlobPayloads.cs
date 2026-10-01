@@ -133,12 +133,12 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
             r.AddOrchestrator<BlobPurgeJobOrchestrator>();
             r.AddActivity(nameof(GetLargePayloadTombstonesActivity), sp =>
                 new GetLargePayloadTombstonesActivity(
-                    sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name),
+                    new GrpcLargePayloadPurgeClient(sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name)),
                     sp.GetRequiredService<ILogger<GetLargePayloadTombstonesActivity>>()));
             r.AddActivity<DeleteExternalBlobActivity>();
             r.AddActivity(nameof(ReportLargePayloadPurgeResultsActivity), sp =>
                 new ReportLargePayloadPurgeResultsActivity(
-                    sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name),
+                    new GrpcLargePayloadPurgeClient(sp.GetRequiredKeyedService<LargePayloadPurgeClient>(builder.Name)),
                     sp.GetRequiredService<ILogger<ReportLargePayloadPurgeResultsActivity>>()));
         });
 

@@ -4,7 +4,6 @@
 using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
-using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
@@ -26,17 +25,6 @@ public sealed class GetLargePayloadTombstonesActivity(
 {
     readonly ILargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<GetLargePayloadTombstonesActivity> logger = Check.NotNull(logger);
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GetLargePayloadTombstonesActivity"/> class using the worker's transport.
-    /// </summary>
-    /// <param name="client">The worker's purge client.</param>
-    /// <param name="logger">The activity logger.</param>
-    internal GetLargePayloadTombstonesActivity(
-        LargePayloadPurgeClient client, ILogger<GetLargePayloadTombstonesActivity> logger)
-        : this(new GrpcLargePayloadPurgeClient(client), logger)
-    {
-    }
 
     /// <summary>
     /// Gets or sets the timeout for one backend RPC attempt.

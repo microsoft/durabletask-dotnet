@@ -6,7 +6,7 @@ using Microsoft.DurableTask.Client;
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
-/// Provides task-hub-bound transport operations for integrating blob auto-purge with an alternate .NET host.
+/// Provides transport operations bound to a task hub for integrating blob auto-purge with an alternate .NET host.
 /// </summary>
 /// <remarks>
 /// This is an infrastructure integration API, not an application orchestration API. Implementations must

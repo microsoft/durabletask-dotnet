@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
@@ -16,6 +17,9 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public class DurableTaskSchedulerWorkerOptions
 {
+    readonly string defaultResourceId = DurableTaskSchedulerResourceId.GetDefault();
+    string? resourceId;
+
     /// <summary>
     /// Gets or sets the endpoint address of the Durable Task Scheduler resource.
     /// Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".
@@ -32,13 +36,27 @@ public class DurableTaskSchedulerWorkerOptions
     /// <summary>
     /// Gets or sets the credential used to authenticate with the Durable Task Scheduler task hub resource.
     /// </summary>
+    /// <remarks>Configure the authority host on this credential, separately from <see cref="ResourceId"/>.</remarks>
     public TokenCredential? Credential { get; set; }
 
     /// <summary>
-    /// Gets or sets the resource ID of the Durable Task Scheduler resource.
-    /// The default value is https://durabletask.io.
+    /// Gets or sets the token audience URI, not an Azure Resource Manager resource path.
     /// </summary>
-    public string ResourceId { get; set; } = "https://durabletask.io";
+    /// <remarks>
+    /// Null or empty values use the default resolved when these options are created:
+    /// <c>https://durabletask.azure.us</c> when <c>REGION_NAME</c> starts with <c>usgov</c> or
+    /// <c>usdod</c> (case-insensitive), or <c>https://durabletask.io</c> otherwise.
+    /// Explicit values have surrounding whitespace, trailing slashes, and one existing
+    /// <c>/.default</c> suffix removed. Token requests append <c>/.default</c> to the result.
+    /// This does not change <see cref="EndpointAddress"/> or the credential's authority host.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The explicit value is empty after normalization.</exception>
+    [AllowNull]
+    public string ResourceId
+    {
+        get => this.resourceId ?? this.defaultResourceId;
+        set => this.resourceId = DurableTaskSchedulerResourceId.Normalize(value);
+    }
 
     /// <summary>
     /// Gets or sets the worker ID used to identify the worker instance.
@@ -56,6 +74,12 @@ public class DurableTaskSchedulerWorkerOptions
     /// Creates a new instance of <see cref="DurableTaskSchedulerWorkerOptions"/> from a connection string.
     /// </summary>
     /// <param name="connectionString">The connection string to parse.</param>
+    /// <remarks>
+    /// Supports an optional <c>ResourceId</c> token audience and an independent <c>AuthorityHost</c>
+    /// HTTPS URI for Azure Identity credentials that support authority configuration. Omitting
+    /// <c>AuthorityHost</c> preserves Azure Identity defaults, including <c>AZURE_AUTHORITY_HOST</c>.
+    /// Managed identity uses its hosting environment; developer tools may need separate cloud configuration.
+    /// </remarks>
     /// <returns>A new instance of <see cref="DurableTaskSchedulerWorkerOptions"/>.</returns>
     public static DurableTaskSchedulerWorkerOptions FromConnectionString(string connectionString)
     {
@@ -76,9 +100,16 @@ public class DurableTaskSchedulerWorkerOptions
             EndpointAddress = connectionString.Endpoint,
             TaskHubName = connectionString.TaskHubName,
             Credential = credential,
+            ResourceId = connectionString.ResourceId,
             AllowInsecureCredentials = credential is null,
         };
     }
+
+    /// <summary>
+    /// Copies an already normalized audience without stripping a second meaningful <c>/.default</c> segment.
+    /// </summary>
+    /// <param name="source">The options with the resolved audience.</param>
+    internal void CopyResourceIdFrom(DurableTaskSchedulerWorkerOptions source) => this.resourceId = source.ResourceId;
 
     /// <summary>
     /// Creates a gRPC channel for communicating with the Durable Task Scheduler service.
@@ -135,11 +166,11 @@ public class DurableTaskSchedulerWorkerOptions
         switch (authType.ToLowerInvariant())
         {
             case "defaultazure":
-                return new DefaultAzureCredential(); // CodeQL [SM05137] Use DefaultAzureCredential explicitly for local development and is decided by the user
+                return new DefaultAzureCredential(connectionString.CreateCredentialOptions<DefaultAzureCredentialOptions>()); // CodeQL [SM05137] Use DefaultAzureCredential explicitly for local development and is decided by the user
             case "managedidentity":
                 return new ManagedIdentityCredential(connectionString.ClientId);
             case "workloadidentity":
-                WorkloadIdentityCredentialOptions opts = new WorkloadIdentityCredentialOptions();
+                WorkloadIdentityCredentialOptions opts = connectionString.CreateCredentialOptions<WorkloadIdentityCredentialOptions>();
                 if (!string.IsNullOrEmpty(connectionString.ClientId))
                 {
                     opts.ClientId = connectionString.ClientId;
@@ -160,17 +191,17 @@ public class DurableTaskSchedulerWorkerOptions
 
                 return new WorkloadIdentityCredential(opts);
             case "environment":
-                return new EnvironmentCredential();
+                return new EnvironmentCredential(connectionString.CreateCredentialOptions<EnvironmentCredentialOptions>());
             case "azurecli":
                 return new AzureCliCredential();
             case "azurepowershell":
                 return new AzurePowerShellCredential();
             case "visualstudio":
-                return new VisualStudioCredential();
+                return new VisualStudioCredential(connectionString.CreateCredentialOptions<VisualStudioCredentialOptions>());
             case "visualstudiocode":
-                return new VisualStudioCodeCredential();
+                return new VisualStudioCodeCredential(connectionString.CreateCredentialOptions<VisualStudioCodeCredentialOptions>());
             case "interactivebrowser":
-                return new InteractiveBrowserCredential();
+                return new InteractiveBrowserCredential(connectionString.CreateCredentialOptions<InteractiveBrowserCredentialOptions>());
             case "none":
                 return null;
             default:

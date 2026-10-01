@@ -3,10 +3,12 @@
 
 using Azure.Identity;
 using FluentAssertions;
+using Microsoft.DurableTask.AzureManaged.Tests;
 using Xunit;
 
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
+[Collection("Scheduler authentication environment")]
 public class DurableTaskSchedulerWorkerOptionsTests
 {
     const string ValidEndpoint = "myaccount.westus3.durabletask.io";
@@ -188,14 +190,21 @@ public class DurableTaskSchedulerWorkerOptionsTests
         options.Credential.Should().BeNull();
     }
 
-    [Fact]
-    public void DefaultProperties_ShouldHaveExpectedValues()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public void DefaultProperties_ShouldHaveExpectedValues(string? region, string expectedResourceId)
     {
-        // Arrange & Act
+        // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
+
+        // Act
         DurableTaskSchedulerWorkerOptions options = new DurableTaskSchedulerWorkerOptions();
 
         // Assert
-        options.ResourceId.Should().Be("https://durabletask.io");
+        options.ResourceId.Should().Be(expectedResourceId);
         options.WorkerId.Should().NotBeNullOrEmpty();
         options.WorkerId.Should().Contain(Environment.MachineName);
         options.WorkerId.Should().Contain(Environment.ProcessId.ToString());

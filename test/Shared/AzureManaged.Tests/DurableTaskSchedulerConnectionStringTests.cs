@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Azure.Identity;
 using FluentAssertions;
 using Xunit;
 
@@ -12,6 +13,61 @@ public class DurableTaskSchedulerConnectionStringTests
     const string ValidTaskHub = "testhub";
     const string ValidClientId = "00000000-0000-0000-0000-000000000000";
     const string ValidTenantId = "11111111-1111-1111-1111-111111111111";
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("https://login.microsoftonline.us/")]
+    public void CreateCredentialOptions_PreservesEnvironmentDefaultUnlessExplicit(string? authorityHost)
+    {
+        // Arrange
+        string? originalAuthority = Environment.GetEnvironmentVariable("AZURE_AUTHORITY_HOST");
+        Environment.SetEnvironmentVariable("AZURE_AUTHORITY_HOST", "https://login.partner.microsoftonline.cn/");
+        try
+        {
+            DurableTaskSchedulerConnectionString connectionString = new($"AuthorityHost=\"{authorityHost}\"");
+            Uri expected = string.IsNullOrEmpty(authorityHost)
+                ? new DefaultAzureCredentialOptions().AuthorityHost
+                : new Uri(authorityHost);
+
+            // Act
+            TokenCredentialOptions[] options =
+            [
+                connectionString.CreateCredentialOptions<DefaultAzureCredentialOptions>(),
+                connectionString.CreateCredentialOptions<WorkloadIdentityCredentialOptions>(),
+                connectionString.CreateCredentialOptions<EnvironmentCredentialOptions>(),
+                connectionString.CreateCredentialOptions<VisualStudioCredentialOptions>(),
+                connectionString.CreateCredentialOptions<VisualStudioCodeCredentialOptions>(),
+                connectionString.CreateCredentialOptions<InteractiveBrowserCredentialOptions>(),
+            ];
+
+            // Assert
+            Assert.All(options, option => Assert.Equal(expected, option.AuthorityHost));
+            Assert.Equal("https://login.partner.microsoftonline.cn/", new DefaultAzureCredentialOptions().AuthorityHost.AbsoluteUri);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AZURE_AUTHORITY_HOST", originalAuthority);
+        }
+    }
+
+    [Theory]
+    [InlineData("not-a-uri")]
+    [InlineData("http://login.example.com")]
+    [InlineData(" \t ")]
+    public void CreateCredentialOptions_RejectsInvalidAuthority(string authorityHost)
+    {
+        // Arrange
+        DurableTaskSchedulerConnectionString connectionString = new($"AuthorityHost=\"{authorityHost}\"");
+
+        // Act
+        ArgumentException exception = Assert.Throws<ArgumentException>(
+            () => connectionString.CreateCredentialOptions<DefaultAzureCredentialOptions>());
+
+        // Assert
+        Assert.Equal("connectionString", exception.ParamName);
+        Assert.Contains("AuthorityHost", exception.Message);
+    }
 
     [Fact]
     public void Constructor_WithValidConnectionString_ShouldParseCorrectly()

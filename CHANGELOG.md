@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Add `Microsoft.DurableTask.LargePayloadPurge.Abstractions` with shared fetch/report and service-setting interfaces, and expose the existing blob purge tasks for host integration ([#805](https://github.com/microsoft/durabletask-dotnet/pull/805)).
+- Preserve the original orchestration version when restarting through the orchestration-service client shim ([#463](https://github.com/microsoft/durabletask-dotnet/issues/463)).
+- Support configurable scheduler token audiences and government defaults ([#806](https://github.com/microsoft/durabletask-dotnet/pull/806))
 
 ## v1.26.0
 - Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))

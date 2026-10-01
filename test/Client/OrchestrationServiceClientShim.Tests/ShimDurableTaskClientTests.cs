@@ -803,144 +803,184 @@ public class ShimDurableTaskClientTests
         this.orchestrationClient.VerifyAll();
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task RestartAsync_EndToEnd(bool restartWithNewInstanceId)
+    public static IEnumerable<object?[]> RestartVersionCases()
     {
-        string originalInstanceId = "test-instance-id";
-        string orchestratorName = "TestOrchestrator";
-        object input = "test-input";
-        string serializedInput = "\"test-input\"";
+        foreach (string? version in new string?[] { "1.2.3", string.Empty, null, " 1.2.3 " })
+        {
+            foreach (bool newInstanceId in new[] { false, true })
+            {
+                foreach (OrchestrationStatus status in new[]
+                {
+                    OrchestrationStatus.Completed,
+                    OrchestrationStatus.Running,
+                    OrchestrationStatus.Pending,
+                    OrchestrationStatus.Suspended,
+                })
+                {
+                    yield return new object?[] { version, newInstanceId, status };
+                }
+            }
+        }
+    }
 
-        // Create a completed orchestration state
-        Core.OrchestrationState originalState = CreateState(input, "test-output");
-        originalState.OrchestrationInstance.InstanceId = originalInstanceId;
-        originalState.Name = orchestratorName;
-        originalState.OrchestrationStatus = Core.OrchestrationStatus.Completed;
+    [Theory]
+    [MemberData(nameof(RestartVersionCases))]
+    public async Task RestartAsync_PreservesOriginalVersion(
+        string? version, bool newInstanceId, OrchestrationStatus status)
+    {
+        // Arrange
+        string serializedInput = "{ \"message\": \"test-input\", \"value\": 42 }";
+        Core.OrchestrationState originalState = CreateState("test-input", "test-output");
+        originalState.Input = serializedInput;
+        originalState.Version = version;
+        originalState.OrchestrationStatus = status;
+        string originalInstanceId = originalState.OrchestrationInstance.InstanceId;
+        string originalExecutionId = originalState.OrchestrationInstance.ExecutionId;
+        Core.OrchestrationState olderState = CreateState("older-input", "older-output");
+        olderState.Version = "older-version";
+        olderState.OrchestrationInstance.InstanceId = originalInstanceId;
 
-        // Setup the mock to return the original orchestration state
-        this.orchestrationClient
+        ShimDurableTaskClient client = new(
+            "test",
+            new ShimDurableTaskClientOptions
+            {
+                Client = this.orchestrationClient.Object,
+                DefaultVersion = "configured-default",
+            });
+        MockSequence sequence = new();
+        this.orchestrationClient.InSequence(sequence)
             .Setup(x => x.GetOrchestrationStateAsync(originalInstanceId, false))
-            .ReturnsAsync(new List<Core.OrchestrationState> { originalState });
+            .ReturnsAsync(new List<Core.OrchestrationState> { originalState, olderState });
 
-        // Capture the TaskMessage for verification because we will create this message at RestartAsync.
-        TaskMessage? capturedMessage = null;
-        this.orchestrationClient
-            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()))
-            .Callback<TaskMessage, Core.OrchestrationStatus[]?>((msg, _) => capturedMessage = msg)
+        bool requiresTermination = !newInstanceId && status != OrchestrationStatus.Completed;
+        if (requiresTermination)
+        {
+            Core.OrchestrationState terminalState = CreateState("after-wait-input", "output");
+            terminalState.Version = "wait-result-version";
+            terminalState.OrchestrationStatus = OrchestrationStatus.Terminated;
+            terminalState.OrchestrationInstance = originalState.OrchestrationInstance;
+            this.orchestrationClient.InSequence(sequence)
+                .Setup(x => x.ForceTerminateTaskOrchestrationAsync(originalInstanceId, It.IsAny<string>()))
+                .Returns(Task.CompletedTask);
+            this.orchestrationClient.InSequence(sequence)
+                .Setup(x => x.WaitForOrchestrationAsync(
+                    originalInstanceId, null, TimeSpan.MaxValue, CancellationToken.None))
+                .ReturnsAsync(terminalState);
+        }
+
+        TaskMessage? captured = null;
+        this.orchestrationClient.InSequence(sequence)
+            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), null))
+            .Callback<TaskMessage, OrchestrationStatus[]?>((message, _) => captured = message)
             .Returns(Task.CompletedTask);
 
-        string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
+        // Act
+        string result = await client.RestartAsync(originalInstanceId, newInstanceId);
 
-        if (restartWithNewInstanceId)
+        // Assert
+        this.orchestrationClient.Verify(
+            x => x.GetOrchestrationStateAsync(originalInstanceId, false), Times.Once);
+        this.orchestrationClient.Verify(
+            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), null), Times.Once);
+        if (requiresTermination)
         {
-            restartedInstanceId.Should().NotBe(originalInstanceId);
+            this.orchestrationClient.Verify(
+                x => x.ForceTerminateTaskOrchestrationAsync(originalInstanceId, It.IsAny<string>()), Times.Once);
+            this.orchestrationClient.Verify(x => x.WaitForOrchestrationAsync(
+                originalInstanceId, null, TimeSpan.MaxValue, CancellationToken.None), Times.Once);
+        }
+
+        this.orchestrationClient.VerifyNoOtherCalls();
+        captured.Should().NotBeNull();
+        ExecutionStartedEvent started = captured!.Event.Should().BeOfType<ExecutionStartedEvent>().Subject;
+        started.Name.Should().Be(originalState.Name);
+        started.Input.Should().Be(serializedInput);
+        captured.OrchestrationInstance.InstanceId.Should().Be(result);
+        started.OrchestrationInstance.Should().BeSameAs(captured.OrchestrationInstance);
+        started.OrchestrationInstance.ExecutionId.Should().NotBeNullOrEmpty().And.NotBe(originalExecutionId);
+        if (newInstanceId)
+        {
+            result.Should().NotBe(originalInstanceId);
+            Guid.TryParseExact(result, "N", out _).Should().BeTrue();
         }
         else
         {
-            restartedInstanceId.Should().Be(originalInstanceId);
+            result.Should().Be(originalInstanceId);
         }
 
-        // Verify that CreateTaskOrchestrationAsync was called
-        this.orchestrationClient.Verify(
-            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()),
-            Times.Once);
+        started.Version.Should().Be(version);
+    }
 
-        // Verify the captured message details
-        capturedMessage.Should().NotBeNull();
-        capturedMessage!.Event.Should().BeOfType<ExecutionStartedEvent>();
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException(bool nullList, bool newInstanceId)
+    {
+        // Arrange
+        IList<Core.OrchestrationState>? states = nullList ? null : new List<Core.OrchestrationState>();
+        this.orchestrationClient.Setup(x => x.GetOrchestrationStateAsync("source-id", false))
+            .ReturnsAsync(states!);
 
-        var startedEvent = (ExecutionStartedEvent)capturedMessage.Event;
-        startedEvent.Name.Should().Be(orchestratorName);
-        startedEvent.Input.Should().Be(serializedInput);
-        // TODO: once we support version at ShimDurableTaskClient, we should check version here. 
-        startedEvent.OrchestrationInstance.InstanceId.Should().Be(restartedInstanceId);
-        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBeNullOrEmpty();
-        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBe(originalState.OrchestrationInstance.ExecutionId);
+        // Act
+        Func<Task> act = () => this.client.RestartAsync("source-id", newInstanceId);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<ArgumentException>()
+            .WithMessage("An orchestration with the instanceId source-id was not found.");
+        this.orchestrationClient.Verify(x => x.GetOrchestrationStateAsync("source-id", false), Times.Once);
+        this.orchestrationClient.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestartAsync_PreCancelled_DoesNotRead(bool newInstanceId)
+    {
+        // Arrange
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        // Act
+        Func<Task> act = () => this.client.RestartAsync("source-id", newInstanceId, cancellation.Token);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        this.orchestrationClient.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException()
+    public async Task RestartAsync_CancelledWhileWaiting_DoesNotCreate()
     {
-        string nonExistentInstanceId = "non-existent-instance-id";
-
-        // Setup the mock to client return empty orchestration state (instance not found)
-        this.orchestrationClient
-            .Setup(x => x.GetOrchestrationStateAsync(nonExistentInstanceId, false))
-            .ReturnsAsync(new List<Core.OrchestrationState>());
-
-        // RestartAsync should throw an ArgumentException since the instance is not found
-        Func<Task> restartAction = () => this.client.RestartAsync(nonExistentInstanceId);
-
-        await restartAction.Should().ThrowAsync<ArgumentException>()
-            .WithMessage($"*An orchestration with the instanceId {nonExistentInstanceId} was not found*");
-    }
-
-    [Fact]
-    public async Task RestartAsync_TerminatesExistingRunningInstance()
-    {
-        string originalInstanceId = "test-instance-id";
-        string orchestratorName = "TestOrchestrator";
-        object input = "test-input";
-        string serializedInput = "\"test-input\"";
-        string originalExecutionId = "execution-id";
-
-        // Create a running orchestration state
-        Core.OrchestrationState originalState = CreateState(input, "test-output");
-        originalState.OrchestrationInstance.InstanceId = originalInstanceId;
-        originalState.OrchestrationInstance.ExecutionId = originalExecutionId;
-        originalState.Name = orchestratorName;
-        originalState.OrchestrationStatus = OrchestrationStatus.Running;
-
-        // Set up GetOrchestrationStateAsync to return Running first
-        this.orchestrationClient
-            .Setup(m => m.GetOrchestrationStateAsync(originalInstanceId, false))
-            .ReturnsAsync([originalState]);
-
-        // Set up termination call
-        this.orchestrationClient
-            .Setup(m => m.ForceTerminateTaskOrchestrationAsync(originalInstanceId, It.IsAny<string>()))
+        // Arrange
+        using CancellationTokenSource cancellation = new();
+        Core.OrchestrationState state = CreateState("input");
+        state.OrchestrationInstance.InstanceId = "source-id";
+        state.Version = "1.2.3";
+        this.orchestrationClient.Setup(x => x.GetOrchestrationStateAsync("source-id", false))
+            .ReturnsAsync(new List<Core.OrchestrationState> { state });
+        this.orchestrationClient.Setup(x => x.ForceTerminateTaskOrchestrationAsync("source-id", It.IsAny<string>()))
             .Returns(Task.CompletedTask);
-
-        // Set up waiting for the orchestration to terminate
-        this.orchestrationClient
-            .Setup(m => m.WaitForOrchestrationAsync(originalInstanceId, It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationState()
+        this.orchestrationClient.Setup(x => x.WaitForOrchestrationAsync(
+                "source-id", null, TimeSpan.MaxValue, cancellation.Token))
+            .Returns(() =>
             {
-                Name = orchestratorName,
-                OrchestrationInstance = new OrchestrationInstance
-                {
-                    InstanceId = originalInstanceId,
-                    ExecutionId = originalExecutionId,
-                },
-                OrchestrationStatus = OrchestrationStatus.Terminated
+                cancellation.Cancel();
+                return Task.FromCanceled<Core.OrchestrationState>(cancellation.Token);
             });
 
-        // Capture the TaskMessage for verification because we will create this message at RestartAsync.
-        TaskMessage? capturedMessage = null;
-        this.orchestrationClient
-            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()))
-            .Callback<TaskMessage, Core.OrchestrationStatus[]?>((msg, _) => capturedMessage = msg)
-            .Returns(Task.CompletedTask);
+        // Act
+        Func<Task> act = () => this.client.RestartAsync("source-id", false, cancellation.Token);
 
-        string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId: false);
-
-        restartedInstanceId.Should().Be(originalInstanceId);
-
-        // Verify the captured message details
-        capturedMessage.Should().NotBeNull();
-        capturedMessage!.Event.Should().BeOfType<ExecutionStartedEvent>();
-
-        var startedEvent = (ExecutionStartedEvent)capturedMessage.Event;
-        startedEvent.Name.Should().Be(orchestratorName);
-        startedEvent.Input.Should().Be(serializedInput);
-        // TODO: once we support version at ShimDurableTaskClient, we should check version here. 
-        startedEvent.OrchestrationInstance.InstanceId.Should().Be(restartedInstanceId);
-        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBeNullOrEmpty();
-        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBe(originalExecutionId);
-
-        this.orchestrationClient.VerifyAll();
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        this.orchestrationClient.Verify(x => x.GetOrchestrationStateAsync("source-id", false), Times.Once);
+        this.orchestrationClient.Verify(
+            x => x.ForceTerminateTaskOrchestrationAsync("source-id", It.IsAny<string>()), Times.Once);
+        this.orchestrationClient.Verify(x => x.WaitForOrchestrationAsync(
+            "source-id", null, TimeSpan.MaxValue, cancellation.Token), Times.Once);
+        this.orchestrationClient.VerifyNoOtherCalls();
     }
 
     static Core.OrchestrationState CreateState(

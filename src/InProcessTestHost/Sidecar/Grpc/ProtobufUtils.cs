@@ -67,7 +67,7 @@ public static class ProtobufUtils
                 var completedEvent = (ExecutionCompletedEvent)e;
                 payload.ExecutionCompleted = new Proto.ExecutionCompletedEvent
                 {
-                    OrchestrationStatus = Proto.OrchestrationStatus.Completed,
+                    OrchestrationStatus = (Proto.OrchestrationStatus)completedEvent.OrchestrationStatus,
                     Result = completedEvent.Result,
                 };
                 break;

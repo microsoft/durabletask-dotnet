@@ -10,6 +10,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using DurableTask.Core.Serializing;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask.Client.Grpc;
@@ -748,30 +749,53 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>A task that completes when streaming finishes.</returns>
     public override async Task StreamInstanceHistory(P.StreamInstanceHistoryRequest request, IServerStreamWriter<P.HistoryChunk> responseStream, ServerCallContext context)
     {
-        if (this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))
+        context.CancellationToken.ThrowIfCancellationRequested();
+        IEnumerable<P.HistoryEvent> history;
+        if (request.ForWorkItemProcessing)
         {
-            const int MaxChunkBytes = 256 * 1024; // 256KB per chunk to simulate chunked streaming
-            int currentSize = 0;
-            P.HistoryChunk chunk = new();
-
-            foreach (P.HistoryEvent e in pastEvents)
+            // Workers must replay the dispatched episode's past events, not a newer committed snapshot.
+            if (!this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))
             {
-                int eventSize = e.CalculateSize();
-                if (currentSize > 0 && currentSize + eventSize > MaxChunkBytes)
-                {
-                    await responseStream.WriteAsync(chunk);
-                    chunk = new P.HistoryChunk();
-                    currentSize = 0;
-                }
-
-                chunk.Events.Add(e);
-                currentSize += eventSize;
+                return;
             }
 
-            if (chunk.Events.Count > 0)
+            history = pastEvents;
+        }
+        else
+        {
+            string? serializedHistory = await this.client.GetOrchestrationHistoryAsync(request.InstanceId, request.ExecutionId);
+            if (serializedHistory == null)
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, $"The requested execution of instance '{request.InstanceId}' was not found."));
+            }
+
+            history = JsonDataConverter.Default.Deserialize<List<HistoryEvent>>(serializedHistory)
+                .Select(ProtobufUtils.ToHistoryEventProto);
+        }
+
+        const int MaxChunkBytes = 256 * 1024; // 256KB per chunk to simulate chunked streaming
+        int currentSize = 0;
+        P.HistoryChunk chunk = new();
+
+        foreach (P.HistoryEvent e in history)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            int eventSize = e.CalculateSize();
+            if (currentSize > 0 && currentSize + eventSize > MaxChunkBytes)
             {
                 await responseStream.WriteAsync(chunk);
+                chunk = new P.HistoryChunk();
+                currentSize = 0;
             }
+
+            chunk.Events.Add(e);
+            currentSize += eventSize;
+        }
+
+        context.CancellationToken.ThrowIfCancellationRequested();
+        if (chunk.Events.Count > 0)
+        {
+            await responseStream.WriteAsync(chunk);
         }
     }
 

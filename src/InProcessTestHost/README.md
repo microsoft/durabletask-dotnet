@@ -38,6 +38,24 @@ string instanceId = await testHost.Client.ScheduleNewOrchestrationInstanceAsync(
 var result = await testHost.Client.WaitForInstanceCompletionAsync(instanceId);
 ```
 
+### 4. Inspect orchestration history
+
+```csharp
+var history = await testHost.Client.GetOrchestrationHistoryAsync(instanceId);
+```
+
+History reads return an ordered snapshot of the current execution's **committed events**,
+including the terminal event after completion, regardless of history size. Events from an
+in-flight orchestration episode are not included until that episode commits. A pending
+instance with no committed events returns an empty list; an unknown or purged instance
+throws `ArgumentException`.
+
+Only the current execution is retained. `ContinueAsNew` replaces the previous generation's
+history when the new generation commits. The underlying in-memory service also accepts an
+execution ID: null or empty selects the current execution, and a different execution ID
+returns no history (gRPC `NotFound`). Worker history streaming continues to use the dispatched
+episode's replay snapshot rather than this management snapshot.
+
 ## Dependency Injection
 
 When your activities depend on services, there are two approaches:

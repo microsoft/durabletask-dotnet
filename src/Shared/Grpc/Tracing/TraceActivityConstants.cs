@@ -25,6 +25,11 @@ static class TraceActivityConstants
     public const string Event = "event";
 
     /// <summary>
+    /// The name of the activity that represents entity operation execution.
+    /// </summary>
+    public const string EntityOperation = "entity_operation";
+
+    /// <summary>
     /// The name of the activity that represents timer operations.
     /// </summary>
     public const string Timer = "timer";

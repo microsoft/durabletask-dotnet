@@ -10,6 +10,7 @@ using DurableTask.Core;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using DurableTask.Core.Serializing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -248,16 +249,17 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
     }
 
     /// <summary>
-    /// Gets the orchestration history.
+    /// Gets a snapshot of the committed history for the current orchestration execution.
     /// </summary>
     /// <param name="instanceId">The instance ID.</param>
-    /// <param name="executionId">The execution ID.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="NotImplementedException">This method is not implemented in the in-memory service.</exception>
-    public Task<string> GetOrchestrationHistoryAsync(string instanceId, string executionId)
+    /// <param name="executionId">The execution ID, or null or empty to select the current execution.</param>
+    /// <returns>
+    /// The serialized history, or null if the instance or requested execution does not exist.
+    /// A pending instance with no committed events has an empty JSON array as its history.
+    /// </returns>
+    public Task<string> GetOrchestrationHistoryAsync(string instanceId, string? executionId)
     {
-        // Also not supported in the emulator
-        throw new NotImplementedException();
+        return Task.FromResult(this.instanceStore.GetHistory(instanceId, executionId)!);
     }
 
     /// <summary>
@@ -585,6 +587,27 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             statusRecord = state.StatusRecordJson?.GetValue<OrchestrationState>();
             return statusRecord != null;
+        }
+
+        public string? GetHistory(string instanceId, string? executionId)
+        {
+            if (!this.store.TryGetValue(instanceId, out SerializedInstanceState? state))
+            {
+                return null;
+            }
+
+            lock (state)
+            {
+                if (state.StatusRecordJson == null ||
+                    (!string.IsNullOrEmpty(executionId) && executionId != state.ExecutionId))
+                {
+                    return null;
+                }
+
+                // Serialize under the same lock used to append events and replace generations.
+                return JsonDataConverter.Default.Serialize(
+                    state.HistoryEventsJson.Select(e => e!.GetValue<HistoryEvent>()).ToArray());
+            }
         }
 
         public void SaveState(
@@ -941,4 +964,3 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         }
     }
 }
-

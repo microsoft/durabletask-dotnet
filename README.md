@@ -204,7 +204,7 @@ The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) s
 
 The optional service contract is maintained in
 [`Microsoft.DurableTask.LargePayloadPurge.Abstractions`](src/LargePayloadPurge.Abstractions/README.md).
-It defines `DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient` and
+It defines `Microsoft.DurableTask.AzureBlobPayloads.IOrchestrationServiceLargePayloadPurgeClient` and
 `Microsoft.DurableTask.AzureBlobPayloads.ILargePayloadPurgeClient`, using the canonical SDK Client models
 without duplicating them. This package is versioned independently and is not BCL-only: its Client dependency
 transitively depends on SDK Abstractions and Durable Task Core. The Azure Blob implementation depends on these

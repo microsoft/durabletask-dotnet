@@ -37,6 +37,36 @@ root `CHANGELOG.md` retains repository release history. The shared target also a
 package's own version (`releases/tag/v0.1.0` for its initial release). Verify or create the corresponding
 release tag before publication; independent package versioning does not create that tag automatically.
 
+### Cross-repository release order for the blob auto-purge integration
+
+This feature spans independently released repositories. Each downstream repository's merge and release
+depends on the previous one having an actual **published** (not local or session-only) compatible package,
+in this order:
+
+1. **Core** publishes a compatible `Microsoft.Azure.DurableTask.Core` release first.
+2. **This repo** (`durabletask-dotnet`) then releases actual new SDK `Client`/`Abstractions` packages (and
+   `Grpc`/`Worker` as needed) against that published Core, before the `LargePayloadPurge.Abstractions`
+   contract and `Extensions.AzureBlobPayloads` packages. The existing publication-pipeline `dependsOn`
+   gates above enforce only `nugetApproval` → `Client`/`Abstractions` → the contract → Blob; they do not
+   gate Core publication, and they do not gate every package in the SDK's actual nuspec dependency closure
+   (for example `Grpc` or `Worker`, which `Extensions.AzureBlobPayloads` also depends on but whose release
+   jobs are not inputs to the contract or Blob gate). Before treating this step as complete, or merging a
+   downstream repository against it, a release operator must separately confirm that the SDK's entire
+   actual nuspec dependency closure is published and restorable, not only the three packages the pipeline
+   gates on.
+3. **Durable Functions** must pin the actual published compatible Core/SDK/contract versions, not local or
+   session-only ones, before merging and releasing its host and optional packages.
+4. The private AzureManaged provider releases last, after the Durable Functions host and this repo's SDK
+   are published, with its own committed dependency-version upgrade and a clean restore and test pass
+   against the published packages.
+
+This order reduces, but does not eliminate, the risk of a downstream repository depending on an unpublished
+or incompatible upstream version. It does not substitute for verifying that every repository's committed
+package references are already pinned to real published versions; do not invent release versions or bump a
+committed dependency pin to a local or session-only one to make this order appear satisfied. In particular,
+do not assume a previously published SDK version already contains these new types merely because its number
+precedes an unreleased one — confirm against the actual release notes or package contents.
+
 ### Versioning Scheme
 
 We follow [semver](https://semver.org/) with optional pre-release tags:

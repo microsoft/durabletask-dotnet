@@ -6,7 +6,7 @@ using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Xunit;
 
-namespace DurableTask.LargePayloadPurge.Tests;
+namespace Microsoft.DurableTask.LargePayloadPurge.Abstractions.Tests;
 
 public class LargePayloadPurgeContractTests
 {
@@ -23,12 +23,13 @@ public class LargePayloadPurgeContractTests
 
         // Assert
         Assert.True(contract.IsInterface);
-        Assert.Equal("DurableTask.LargePayloadPurge", contract.Namespace);
+        Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads", contract.Namespace);
+        Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads.IOrchestrationServiceLargePayloadPurgeClient", contract.FullName);
         Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions", contract.Assembly.GetName().Name);
         Assert.Equal(new[] { contract, transport }.OrderBy(type => type.FullName), exported.OrderBy(type => type.FullName));
         Assert.Same(contract.Assembly, transport.Assembly);
         Assert.True(transport.IsInterface);
-        Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads", transport.Namespace);
+        Assert.Equal(contract.Namespace, transport.Namespace);
         Assert.Equal([transport], contract.GetInterfaces());
         Assert.Empty(transport.GetInterfaces());
         Assert.Equal(nameof(IOrchestrationServiceLargePayloadPurgeClient.SetLargePayloadAutoPurgeAsync),
@@ -36,6 +37,9 @@ public class LargePayloadPurgeContractTests
         Assert.Equal(2, transport.GetMethods().Length);
         Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == transport.FullName);
         Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == transport.FullName);
+        Assert.DoesNotContain(exported, type => type.FullName == "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient");
+        Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient");
+        Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient");
     }
 
     [Fact]
@@ -110,7 +114,7 @@ public class LargePayloadPurgeContractTests
     {
         // Arrange
         Assembly contract = typeof(IOrchestrationServiceLargePayloadPurgeClient).Assembly;
-        Assembly core = typeof(Core.TaskHubClient).Assembly;
+        Assembly core = typeof(global::DurableTask.Core.TaskHubClient).Assembly;
         Assembly blob = typeof(GetLargePayloadTombstonesActivity).Assembly;
 
         // Act

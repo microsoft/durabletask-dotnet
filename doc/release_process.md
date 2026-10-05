@@ -20,7 +20,17 @@ NuGet signing and per-package approval-gated publication steps apply.
 
 Contract publication also waits for successful Client and Abstractions publication. If either prerequisite
 fails, including a duplicate-version upload failure, or is skipped or canceled, contract publication is
-skipped rather than treating that result as success. Other packages retain their independent publication jobs.
+skipped rather than treating that result as success.
+
+`Microsoft.DurableTask.Extensions.AzureBlobPayloads` depends on the contract package at every target
+framework, so its publication job also waits for successful contract publication (in addition to approval).
+If contract publication fails for any reason above, including a duplicate-version upload failure, or is
+skipped or canceled, Blob publication is skipped rather than treating that result as success. This extends
+the same fail-closed chain: approval, then Client and Abstractions, then the contract, then Blob. A
+prerequisite that deliberately skips — for example because its exact version is already published — still
+skips the dependent job; this is not a general-purpose publication-idempotency mechanism, just the minimum
+ordering these two packages require. Other packages retain their own independent publication jobs gated
+only on approval.
 
 Keep its `RELEASENOTES.md`: `eng/targets/Release.targets` reads it into NuGet package metadata, whereas the
 root `CHANGELOG.md` retains repository release history. The shared target also appends a link using the

@@ -445,8 +445,10 @@ extends:
       # add it for Microsoft.DurableTask.Extensions.AzureBlobPayloads
       - job: nugetRelease_Microsoft_DurableTask_Extensions_AzureBlobPayloads
         displayName: NuGet Release (Microsoft.DurableTask.Extensions.AzureBlobPayloads)
-        dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        dependsOn:
+        - nugetApproval
+        - nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
+        condition: succeeded() # the Blob package depends on the new contract package, which must publish first
         templateContext:
           type: releaseJob
           isProduction: true

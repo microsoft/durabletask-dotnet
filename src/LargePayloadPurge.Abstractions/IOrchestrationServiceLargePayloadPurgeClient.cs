@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.AzureBlobPayloads;
+namespace Microsoft.DurableTask.LargePayloadPurge.Abstractions;
 
 /// <summary>
 /// Optional orchestration service client capability for purging tombstoned large payloads.

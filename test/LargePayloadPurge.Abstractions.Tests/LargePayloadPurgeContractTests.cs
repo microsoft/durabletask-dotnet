@@ -23,8 +23,8 @@ public class LargePayloadPurgeContractTests
 
         // Assert
         Assert.True(contract.IsInterface);
-        Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads", contract.Namespace);
-        Assert.Equal("Microsoft.DurableTask.AzureBlobPayloads.IOrchestrationServiceLargePayloadPurgeClient", contract.FullName);
+        Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions", contract.Namespace);
+        Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions.IOrchestrationServiceLargePayloadPurgeClient", contract.FullName);
         Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions", contract.Assembly.GetName().Name);
         Assert.Equal(new[] { contract, transport }.OrderBy(type => type.FullName), exported.OrderBy(type => type.FullName));
         Assert.Same(contract.Assembly, transport.Assembly);
@@ -37,9 +37,22 @@ public class LargePayloadPurgeContractTests
         Assert.Equal(2, transport.GetMethods().Length);
         Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == transport.FullName);
         Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == transport.FullName);
-        Assert.DoesNotContain(exported, type => type.FullName == "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient");
-        Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient");
-        Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient");
+
+        // The contracts package has moved namespace twice: once out of its Core-prototype namespace for the
+        // service interface, and once more for both interfaces out of the Blob extension's own implementation
+        // namespace. Neither prior location should resurface anywhere in this assembly.
+        string[] priorFullNames =
+        [
+            "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient",
+            "Microsoft.DurableTask.AzureBlobPayloads.IOrchestrationServiceLargePayloadPurgeClient",
+            "Microsoft.DurableTask.AzureBlobPayloads.ILargePayloadPurgeClient",
+        ];
+        foreach (string priorFullName in priorFullNames)
+        {
+            Assert.DoesNotContain(exported, type => type.FullName == priorFullName);
+            Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == priorFullName);
+            Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == priorFullName);
+        }
     }
 
     [Fact]

@@ -3,7 +3,7 @@
 
 using Microsoft.DurableTask.Client;
 
-namespace Microsoft.DurableTask.AzureBlobPayloads;
+namespace Microsoft.DurableTask.LargePayloadPurge.Abstractions;
 
 /// <summary>
 /// Provides transport operations bound to a task hub for integrating blob auto-purge with an alternate .NET host.

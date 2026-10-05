@@ -8,6 +8,7 @@ using Grpc.Core;
 using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.LargePayloadPurge.Abstractions;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.Logging.Abstractions;
 

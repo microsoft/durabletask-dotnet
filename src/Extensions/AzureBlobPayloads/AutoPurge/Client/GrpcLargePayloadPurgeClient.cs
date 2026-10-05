@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.LargePayloadPurge.Abstractions;
 using Proto = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;

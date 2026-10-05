@@ -3,6 +3,7 @@
 
 using Grpc.Core;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.LargePayloadPurge.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;

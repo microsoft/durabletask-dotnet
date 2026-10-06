@@ -206,10 +206,12 @@ The optional service contract is maintained in
 [`Microsoft.DurableTask.LargePayloadPurge.Abstractions`](src/LargePayloadPurge.Abstractions/README.md).
 It defines `Microsoft.DurableTask.LargePayloadPurge.Abstractions.IOrchestrationServiceLargePayloadPurgeClient` and
 `Microsoft.DurableTask.LargePayloadPurge.Abstractions.ILargePayloadPurgeClient`, using the canonical SDK Client models
-without duplicating them. This package is versioned independently and is not BCL-only: its Client dependency
-transitively depends on SDK Abstractions and Durable Task Core. The Azure Blob implementation depends on these
-contracts; the contracts do not depend on Blob storage, gRPC or worker implementations. The service capability
-inherits the shared fetch/report interface and adds only the setting operation.
+without duplicating them. This package follows the repository's shared release version, the same as Client
+and most other `Microsoft.DurableTask.*` packages, rather than versioning independently, and is not BCL-only:
+its Client dependency transitively depends on SDK Abstractions and Durable Task Core. The Azure Blob
+implementation depends on these contracts; the contracts do not depend on Blob storage, gRPC or worker
+implementations. The service capability inherits the shared fetch/report interface and adds only the setting
+operation.
 
 `Microsoft.DurableTask.Extensions.AzureBlobPayloads` exposes reusable orchestration and activity
 implementations: `BlobPurgeJobOrchestrator`, `GetLargePayloadTombstonesActivity`, `DeleteExternalBlobActivity`,

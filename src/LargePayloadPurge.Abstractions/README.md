@@ -32,10 +32,14 @@ It is not a BCL-only package. Core does not depend on this package or the SDK Cl
 contains no blob storage, gRPC transport, worker, or orchestration implementation.
 The Azure Blob implementation references this package, not the other way around.
 
-The initial version is planned as `0.1.0`, independently of the repository-wide SDK version. Release the
-matching SDK Client and Abstractions dependencies containing the purge models before this package.
-Published Client `1.26.0` predates those models and is not sufficient. Repository builds use source project
-references; no external Client-version bootstrap property is required.
+This package follows the repository's shared release version, defined once in `eng/targets/Release.props`,
+the same as Client, Abstractions, and most other `Microsoft.DurableTask.*` packages (a few packages, such as
+`Generators`, deliberately keep their own independent version) — it has no package-local version override of
+its own. Release the matching SDK Client and Abstractions packages containing the purge models alongside this
+one; published Client `1.26.0` predates those models and is not sufficient. The **Prepare Release** workflow
+(see `doc/release_process.md`) already bumps the shared version for every package that follows it, including
+this one, with no separate step required. Repository builds use source project references; no external
+Client-version bootstrap property is required.
 
 The assembly uses this repository's strong-name key. Consumers of the unreleased prototype package
 `Microsoft.Azure.DurableTask.LargePayloadPurge.Abstractions` must update the package reference and rebuild;

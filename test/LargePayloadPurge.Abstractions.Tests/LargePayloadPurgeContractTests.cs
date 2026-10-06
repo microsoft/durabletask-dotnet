@@ -108,7 +108,7 @@ public class LargePayloadPurgeContractTests
     }
 
     [Fact]
-    public void ContractUsesSdkSigningAndIndependentAssemblyVersion()
+    public void ContractUsesSdkSigningAndSharedAssemblyVersion()
     {
         // Arrange
         AssemblyName sdk = typeof(DurableTaskClient).Assembly.GetName();
@@ -116,8 +116,10 @@ public class LargePayloadPurgeContractTests
         // Act
         AssemblyName contract = typeof(IOrchestrationServiceLargePayloadPurgeClient).Assembly.GetName();
 
-        // Assert
-        Assert.Equal(new Version(0, 1, 0, 0), contract.Version);
+        // Assert - matches Client's shared SDK release assembly version; no package-local version override.
+        // It is not pinned to a specific value here: that value is expected to change every time the shared
+        // release version changes, exactly like Client's own assembly version does.
+        Assert.Equal(sdk.Version, contract.Version);
         Assert.Equal("6A4C0315C2D1D937", Convert.ToHexString(contract.GetPublicKeyToken()!));
         Assert.Equal(sdk.GetPublicKeyToken(), contract.GetPublicKeyToken());
     }

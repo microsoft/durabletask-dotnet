@@ -10,10 +10,13 @@ This repo publishes multiple NuGet packages. Most share a single version defined
 
 We follow an approach of releasing everything together, even if a package has no changes — unless we intentionally hold a package back.
 
-`LargePayloadPurge.Abstractions` versions independently in its project file, starting at the planned
-`0.1.0` release. It uses source references to the SDK Client models. Publish the corresponding Client and
-Abstractions packages containing those models before publishing this package; released Client `1.26.0`
-does not contain them. The package uses the repository's MIT license and SDK strong-name key.
+`LargePayloadPurge.Abstractions` versions with the shared repository-wide `VersionPrefix`/`VersionSuffix` in
+`eng/targets/Release.props`, the same as Client, Abstractions, and most other `Microsoft.DurableTask.*`
+packages (a few, such as `Generators`, deliberately keep their own independent version); it has no
+package-local version override. It uses source references to the SDK Client models, so publish it in the
+same release as the Client and Abstractions packages that contain those models; released Client `1.26.0`
+predates them and is not sufficient on its own until a release that includes them is published. The package
+uses the repository's MIT license and SDK strong-name key.
 Its package and assembly name is `Microsoft.DurableTask.LargePayloadPurge.Abstractions`, covered by the
 standard `Microsoft.DurableTask.*.dll` signing pattern. The existing source traversal, SBOM inclusion,
 NuGet signing and per-package approval-gated publication steps apply.
@@ -34,8 +37,9 @@ only on approval.
 
 Keep its `RELEASENOTES.md`: `eng/targets/Release.targets` reads it into NuGet package metadata, whereas the
 root `CHANGELOG.md` retains repository release history. The shared target also appends a link using the
-package's own version (`releases/tag/v0.1.0` for its initial release). Verify or create the corresponding
-release tag before publication; independent package versioning does not create that tag automatically.
+package's own version, which is now the shared repository-wide version, so the **Prepare Release**
+workflow's existing `release/vX.Y.Z` branch and `vX.Y.Z` tag cover this package automatically — no separate
+version or tag step is needed for it.
 
 ### Cross-repository release order for the blob auto-purge integration
 
@@ -46,14 +50,18 @@ in this order:
 1. **Core** publishes a compatible `Microsoft.Azure.DurableTask.Core` release first.
 2. **This repo** (`durabletask-dotnet`) then releases actual new SDK `Client`/`Abstractions` packages (and
    `Grpc`/`Worker` as needed) against that published Core, before the `LargePayloadPurge.Abstractions`
-   contract and `Extensions.AzureBlobPayloads` packages. The existing publication-pipeline `dependsOn`
-   gates above enforce only `nugetApproval` → `Client`/`Abstractions` → the contract → Blob; they do not
-   gate Core publication, and they do not gate every package in the SDK's actual nuspec dependency closure
-   (for example `Grpc` or `Worker`, which `Extensions.AzureBlobPayloads` also depends on but whose release
-   jobs are not inputs to the contract or Blob gate). Before treating this step as complete, or merging a
-   downstream repository against it, a release operator must separately confirm that the SDK's entire
-   actual nuspec dependency closure is published and restorable, not only the three packages the pipeline
-   gates on.
+   contract and `Extensions.AzureBlobPayloads` packages. Since the contract now shares the same repository-wide
+   version as `Client`/`Abstractions` (it has no independent version of its own), all of these publish from
+   the same release run; "before" here means publish job order within that run, not a separate version or a
+   later release. The existing publication-pipeline `dependsOn` gates above enforce only `nugetApproval` →
+   `Client`/`Abstractions` → the contract → Blob; they do not gate Core publication, and they do not gate
+   every package in the SDK's actual nuspec dependency closure (for example `Grpc` or `Worker`, which
+   `Extensions.AzureBlobPayloads` also depends on but whose release jobs are not inputs to the contract or
+   Blob gate). Before treating this step as complete, or merging a downstream repository against it, a
+   release operator must separately confirm that the SDK's entire actual nuspec dependency closure is
+   published and restorable, not only the three packages the pipeline gates on. The contract's actual first
+   release uses whichever shared SDK version is approved and published next; do not assume or pin to a
+   specific future version, and do not treat the existing published `1.26.0` line as already containing it.
 3. **Durable Functions** must pin the actual published compatible Core/SDK/contract versions, not local or
    session-only ones, before merging and releasing its host and optional packages.
 4. The private AzureManaged provider releases last, after the Durable Functions host and this repo's SDK

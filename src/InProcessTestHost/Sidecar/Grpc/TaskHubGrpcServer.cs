@@ -822,6 +822,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         // This must be done before we start the orchestrator execution.
         TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs =
             this.CreateTaskCompletionSourceForOrchestrator(instance.InstanceId);
+        List<P.HistoryEvent>? streamedPastEvents = null;
 
         try
         {
@@ -845,7 +846,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             if (this.supportsHistoryStreaming && totalBytes > HistoryStreamingThresholdBytes)
             {
                 orkRequest.RequiresHistoryStreaming = true;
-                // Store past events to serve via StreamInstanceHistory
+                // Keep this episode's replay snapshot available until execution finishes.
+                streamedPastEvents = protoPastEvents;
                 this.streamingPastEvents[instance.InstanceId] = protoPastEvents;
             }
             else
@@ -858,6 +860,11 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             {
                 OrchestratorRequest = orkRequest,
             });
+
+            // The TCS will be completed on the message stream handler when it gets a response back from the remote process
+            // TODO: How should we handle timeouts if the remote process never sends a response?
+            //       Probably need to have a static timeout (e.g. 5 minutes).
+            return await tcs.Task;
         }
         catch
         {
@@ -865,11 +872,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             this.RemoveOrchestratorTaskCompletionSource(instance.InstanceId);
             throw;
         }
-
-        // The TCS will be completed on the message stream handler when it gets a response back from the remote process
-        // TODO: How should we handle timeouts if the remote process never sends a response?
-        //       Probably need to have a static timeout (e.g. 5 minutes).
-        return await tcs.Task;
+        finally
+        {
+            if (streamedPastEvents is not null)
+            {
+                this.streamingPastEvents.TryRemove(
+                    new KeyValuePair<string, List<P.HistoryEvent>>(instance.InstanceId, streamedPastEvents));
+            }
+        }
     }
 
     async Task<ActivityExecutionResult> ITaskExecutor.ExecuteActivity(OrchestrationInstance instance, TaskScheduledEvent activityEvent)

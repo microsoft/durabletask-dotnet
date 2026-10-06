@@ -510,7 +510,7 @@ public static class ProtobufUtils
     internal static PurgeInstanceFilter ToPurgeInstanceFilter(Proto.PurgeInstancesRequest request)
     {
         var purgeInstanceFilter = new PurgeInstanceFilter(
-            request.PurgeInstanceFilter.CreatedTimeFrom.ToDateTime(),
+            request.PurgeInstanceFilter.CreatedTimeFrom?.ToDateTime() ?? DateTime.MinValue,
             request.PurgeInstanceFilter.CreatedTimeTo?.ToDateTime(),
             request.PurgeInstanceFilter.RuntimeStatus?.Select(status => (OrchestrationStatus)status).ToList());
         return purgeInstanceFilter;

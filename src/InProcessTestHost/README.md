@@ -56,6 +56,17 @@ execution ID: null or empty selects the current execution, and a different execu
 returns no history (gRPC `NotFound`). Worker history streaming continues to use the dispatched
 episode's replay snapshot rather than this management snapshot.
 
+### 5. Purge completed instances
+
+```csharp
+PurgeResult purgeResult = await testHost.Client.PurgeAllInstancesAsync(
+    new PurgeInstancesFilter(Statuses: new[] { OrchestrationRuntimeStatus.Completed }));
+```
+
+`CreatedFrom` and `CreatedTo` are optional: omit either for an unbounded end of the
+creation-time range. You can provide `CreatedTo` without `CreatedFrom`. Explicit
+bounds are inclusive and are evaluated in UTC.
+
 ## Dependency Injection
 
 When your activities depend on services, there are two approaches:

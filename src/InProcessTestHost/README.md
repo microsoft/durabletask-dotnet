@@ -54,7 +54,10 @@ Only the current execution is retained. `ContinueAsNew` replaces the previous ge
 history when the new generation commits. The underlying in-memory service also accepts an
 execution ID: null or empty selects the current execution, and a different execution ID
 returns no history (gRPC `NotFound`). Worker history streaming continues to use the dispatched
-episode's replay snapshot rather than this management snapshot.
+episode's replay snapshot rather than this management snapshot. These temporary worker snapshots
+remain available until the episode's final response and are released before the dispatcher commits
+that episode or starts its next generation. A failed dispatch also releases its snapshot; committed
+history is retained independently until purge or generation replacement.
 
 ### 5. Purge completed instances
 

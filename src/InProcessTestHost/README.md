@@ -70,6 +70,40 @@ PurgeResult purgeResult = await testHost.Client.PurgeAllInstancesAsync(
 creation-time range. You can provide `CreatedTo` without `CreatedFrom`. Explicit
 bounds are inclusive and are evaluated in UTC.
 
+## Work-Item Completion Ownership
+
+The in-process sidecar assigns a fresh token to every activity and orchestration delivery
+using the existing gRPC `WorkItem.completionToken` field. Completion is matched to that
+delivery, not just its logical instance or activity task ID. Duplicate and stale completion
+requests cannot settle a replacement delivery.
+
+**Migration for direct gRPC callers:** copy the received `WorkItem.completionToken` into
+`ActivityResponse.completionToken` or `OrchestratorResponse.completionToken` on every
+whole completion request. Keep the original instance ID and, for activities, the task ID
+from that delivery. Missing tokens or mismatched identities return `InvalidArgument`; unknown, wrong-kind, or already
+settled tokens return `NotFound`. A rejected request does not consume a valid delivery.
+The SDK worker already echoes these tokens. SDK and protobuf implementations are unchanged.
+
+The test host accepts a single full orchestration completion response only. Deprecated partial
+or chunked completion is not supported: `isPartial = true` or any present `chunkIndex`
+(including zero on a final fragment) returns `InvalidArgument` without consuming the delivery
+or retaining actions. Direct callers must send all actions in one response, with `isPartial`
+false and `chunkIndex` omitted. The SDK's existing oversized-response chunking path is unchanged
+and is not supported by this test host.
+
+Replay history streaming is separate and remains supported. A full response releases the
+delivery's temporary replay snapshot, while an already captured history reader can still finish
+independently.
+
+An accepted completion takes precedence over a later failure of that delivery's pending
+stream write. A send failure without an accepted completion still propagates. Closing the
+`GetWorkItems` stream does not implicitly settle already delivered work; completion can
+arrive through an independent RPC. No timeout, heartbeat, or lease behavior is added.
+
+Explicit abandonment is unchanged: both Abandon RPCs only acknowledge requests and do not
+validate tokens, cancel execution, or requeue work. Honoring abandonment is left to the
+dependent follow-up [#814](https://github.com/microsoft/durabletask-dotnet/pull/814).
+
 ## Dependency Injection
 
 When your activities depend on services, there are two approaches:

@@ -10,27 +10,26 @@ using Xunit.Abstractions;
 namespace Microsoft.DurableTask.Grpc.Tests;
 
 /// <summary>
-/// Integration tests for validating autochunk functionality when orchestration completion responses
-/// exceed the maximum chunk size and are automatically split into multiple chunks.
+/// Integration tests for whole orchestration completion responses and single-action size validation.
 /// </summary>
 public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
 {
     /// <summary>
-    /// Validates that orchestrations complete successfully when the completion response
-    /// exceeds the chunk size and must be split into multiple chunks.
+    /// Validates that multiple activity actions complete in one response below the configured size limit.
     /// </summary>
     [Fact]
-    public async Task Autochunk_MultipleChunks_CompletesSuccessfully()
+    public async Task FullResponse_MultipleActions_CompletesSuccessfully()
     {
-        const int ActivityCount = 36;
+        // Arrange
+        const int ActivityCount = 16;
         const int PayloadSizePerActivity = 30 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(Autochunk_MultipleChunks_CompletesSuccessfully);
+        TaskName orchestratorName = nameof(FullResponse_MultipleActions_CompletesSuccessfully);
         TaskName activityName = "Echo";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
-            // Set a small chunk size to force chunking
+            // Keep the response below the minimum configured chunk size.
             b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
@@ -48,11 +47,13 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
                 .AddActivityFunc<string, string>(activityName, (ctx, input) => Task.FromResult(input)));
         });
 
+        // Act
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
+        // Assert
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
@@ -60,24 +61,24 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     }
 
     /// <summary>
-    /// Validates autochunking with mixed action types (activities, timers, sub-orchestrations).
+    /// Validates a full response with mixed action types (activities, timers, sub-orchestrations).
     /// </summary>
     [Fact]
-    public async Task Autochunk_MixedActions_CompletesSuccessfully()
+    public async Task FullResponse_MixedActions_CompletesSuccessfully()
     {
-        // Use minimum allowed chunk size (1 MB) and ensure total payload exceeds it to trigger chunking
+        // Arrange
         const int ActivityCount = 30;
         const int TimerCount = 100;
         const int SubOrchCount = 50;
         const int PayloadSizePerActivity = 20 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(Autochunk_MixedActions_CompletesSuccessfully);
+        TaskName orchestratorName = nameof(FullResponse_MixedActions_CompletesSuccessfully);
         TaskName activityName = "Echo";
         TaskName subOrchName = "SubOrch";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
-            // Set a small chunk size to force chunking
+            // The mixed actions fit in a single response below the minimum configured chunk size.
             b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
@@ -111,11 +112,13 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
                 .AddActivityFunc<string, string>(activityName, (ctx, input) => Task.FromResult(input)));
         });
 
+        // Act
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
+        // Assert
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
@@ -160,4 +163,3 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         Assert.Equal("System.InvalidOperationException: A single orchestrator action of type ScheduleTask with id 0 exceeds the 1.00MB limit: 1.10MB. Enable large-payload externalization to Azure Blob Storage to support oversized actions.", metadata.FailureDetails.ToString());
     }
 }
-

@@ -111,9 +111,27 @@ stream write. A send failure without an accepted completion still propagates. Cl
 `GetWorkItems` stream does not implicitly settle already delivered work; completion can
 arrive through an independent RPC. No timeout, heartbeat, or lease behavior is added.
 
-Explicit abandonment is unchanged: both Abandon RPCs only acknowledge requests and do not
-validate tokens, cancel execution, or requeue work. Honoring abandonment is left to the
-dependent follow-up [#814](https://github.com/microsoft/durabletask-dotnet/pull/814).
+## Explicit Work-Item Abandonment
+
+Previously, the test host acknowledged both Abandon RPCs but left the delivery's result
+wait pending. It now cancels the matching activity or orchestration delivery's host-side
+wait, allowing the existing dispatcher to release and requeue the work item for another
+attempt. The SDK worker already sends explicit abandonment requests; SDK and protobuf
+implementations are unchanged.
+
+**Migration for direct gRPC callers:** echo the received `WorkItem.completionToken` in
+each abandonment request. Missing tokens return `InvalidArgument`; unknown, wrong-kind,
+or already settled tokens return `NotFound`. Completion and abandonment compete atomically
+for the same delivery. Duplicate abandonment and late completion cannot affect a
+replacement delivery, which has a new token.
+
+Abandoning an orchestration also releases its temporary replay snapshot without deleting
+committed history. An already captured history reader can still finish, and cleanup of
+the old delivery cannot remove a replacement's snapshot.
+
+This cancels the test host's wait, not remote business code, and is not orchestration
+termination. Closing `GetWorkItems` does not implicitly abandon already delivered work.
+No timeout, heartbeat, lease, or worker-policy change is added.
 
 ## Dependency Injection
 

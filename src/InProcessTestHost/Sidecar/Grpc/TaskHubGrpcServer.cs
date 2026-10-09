@@ -193,10 +193,10 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <param name="request">The create task hub request.</param>
     /// <param name="context">The server call context.</param>
     /// <returns>A create task hub response.</returns>
-    public override Task<P.CreateTaskHubResponse> CreateTaskHub(P.CreateTaskHubRequest request, ServerCallContext context)
+    public override async Task<P.CreateTaskHubResponse> CreateTaskHub(P.CreateTaskHubRequest request, ServerCallContext context)
     {
-        this.service.CreateAsync(request.RecreateIfExists);
-        return Task.FromResult(new P.CreateTaskHubResponse());
+        await this.service.CreateAsync(request.RecreateIfExists);
+        return new P.CreateTaskHubResponse();
     }
 
     /// <summary>
@@ -205,10 +205,10 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <param name="request">The delete task hub request.</param>
     /// <param name="context">The server call context.</param>
     /// <returns>A delete task hub response.</returns>
-    public override Task<P.DeleteTaskHubResponse> DeleteTaskHub(P.DeleteTaskHubRequest request, ServerCallContext context)
+    public override async Task<P.DeleteTaskHubResponse> DeleteTaskHub(P.DeleteTaskHubRequest request, ServerCallContext context)
     {
-        this.service.DeleteAsync();
-        return Task.FromResult(new P.DeleteTaskHubResponse());
+        await this.service.DeleteAsync();
+        return new P.DeleteTaskHubResponse();
     }
 
     /// <summary>

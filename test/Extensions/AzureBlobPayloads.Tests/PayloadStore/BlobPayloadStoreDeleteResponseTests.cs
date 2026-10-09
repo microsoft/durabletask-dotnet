@@ -51,7 +51,7 @@ public class BlobPayloadStoreDeleteResponseTests
         TestLogger<DeleteExternalBlobActivity> logger = new();
         using GrpcChannel reportChannel = GrpcChannel.ForAddress("http://report.invalid", new() { HttpHandler = handler });
         ReportLargePayloadPurgeResultsActivity report = new(
-            new LP.LargePayloadPurge.LargePayloadPurgeClient(reportChannel),
+            new GrpcLargePayloadPurgeClient(new LP.LargePayloadPurge.LargePayloadPurgeClient(reportChannel)),
             NullLogger<ReportLargePayloadPurgeResultsActivity>.Instance);
 
         // Act

@@ -445,8 +445,10 @@ extends:
       # add it for Microsoft.DurableTask.Extensions.AzureBlobPayloads
       - job: nugetRelease_Microsoft_DurableTask_Extensions_AzureBlobPayloads
         displayName: NuGet Release (Microsoft.DurableTask.Extensions.AzureBlobPayloads)
-        dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        dependsOn:
+        - nugetApproval
+        - nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
+        condition: succeeded() # the Blob package depends on the new contract package, which must publish first
         templateContext:
           type: releaseJob
           isProduction: true
@@ -464,3 +466,29 @@ extends:
             publishFeedCredentials: 'DurableTask org NuGet API Key'
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Extensions.AzureBlobPayloads.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.LargePayloadPurge.Abstractions)
+      - job: nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
+        displayName: NuGet Release (Microsoft.DurableTask.LargePayloadPurge.Abstractions)
+        dependsOn:
+        - nugetApproval
+        - nugetRelease_Microsoft_DurableTask_Abstractions
+        - nugetRelease_Microsoft_DurableTask_Client
+        condition: succeeded()
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.LargePayloadPurge.Abstractions)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.LargePayloadPurge.Abstractions.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg'
+            packageParentPath: $(System.DefaultWorkingDirectory)

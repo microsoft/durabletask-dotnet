@@ -3,9 +3,8 @@
 
 using Grpc.Core;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.LargePayloadPurge.Abstractions;
 using Microsoft.Extensions.Logging;
-using static Microsoft.DurableTask.Protobuf.LargePayloads.LargePayloadPurge;
-using LP = Microsoft.DurableTask.Protobuf.LargePayloads;
 
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
@@ -15,13 +14,17 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 /// </summary>
 /// <param name="client">The large-payload purge service client used to query the backend for tombstones.</param>
 /// <param name="logger">The logger instance.</param>
+/// <remarks>
+/// Infrastructure integration API for alternate .NET hosts. The supplied client must be bound to this
+/// worker's authenticated task hub. Its transport lifetime remains owned by the host.
+/// </remarks>
 [DurableTask]
-internal sealed class GetLargePayloadTombstonesActivity(
-    LargePayloadPurgeClient client,
+public sealed class GetLargePayloadTombstonesActivity(
+    ILargePayloadPurgeClient client,
     ILogger<GetLargePayloadTombstonesActivity> logger)
     : TaskActivity<int, List<LargePayloadTombstone>>
 {
-    readonly LargePayloadPurgeClient client = Check.NotNull(client);
+    readonly ILargePayloadPurgeClient client = Check.NotNull(client);
     readonly ILogger<GetLargePayloadTombstonesActivity> logger = Check.NotNull(logger);
 
     /// <summary>
@@ -41,13 +44,10 @@ internal sealed class GetLargePayloadTombstonesActivity(
                 nameof(input), input, $"Limit must be greater than 0 and less than or equal to {LargePayloadTombstone.MaxRequestLimit}.");
         }
 
-        LP.GetLargePayloadTombstonesResponse response;
+        List<LargePayloadTombstone> tombstones;
         try
         {
-            using var call = this.client.GetLargePayloadTombstonesAsync(
-                new LP.GetLargePayloadTombstonesRequest { Limit = input },
-                deadline: DateTime.UtcNow.Add(this.RpcTimeout));
-            response = await call;
+            tombstones = await this.client.GetLargePayloadTombstonesAsync(input, DateTime.UtcNow.Add(this.RpcTimeout));
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
@@ -74,12 +74,6 @@ internal sealed class GetLargePayloadTombstonesActivity(
                 "'mcr.microsoft.com/dts/dts-emulator'), then call SetLargePayloadAutoPurgeAsync(true, ...) " +
                 $"again to re-enable it. Backend detail: {e.Status.Detail}",
                 e);
-        }
-
-        List<LargePayloadTombstone> tombstones = new(response.Tombstones.Count);
-        foreach (LP.LargePayloadTombstone tombstone in response.Tombstones)
-        {
-            tombstones.Add(new LargePayloadTombstone(tombstone.TombstoneToken, tombstone.PayloadToken));
         }
 
         this.logger.BlobPurgeFetchedTombstones(tombstones.Count);

@@ -413,6 +413,80 @@ public class WorkItemAbandonmentTests
     }
 
     /// <summary>
+    /// A send failure cannot override a completion accepted while that send was still pending.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Dispatch_CompletedDeliveryPreservesResultAfterSendFailureAsync(bool activity)
+    {
+        // Arrange
+        TaskCompletionSource releaseWrite = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using ServerSession session = new(async _ =>
+        {
+            await releaseWrite.Task.WaitAsync(Timeout);
+            throw new InvalidOperationException("Expected send failure");
+        });
+        Task execution = session.StartExecution(activity, historyPayload: 'x');
+        P.WorkItem delivery = await session.ReadAsync();
+
+        try
+        {
+            // Act
+            if (activity)
+            {
+                await session.Server.CompleteActivityTask(new()
+                {
+                    InstanceId = delivery.ActivityRequest.OrchestrationInstance.InstanceId,
+                    TaskId = delivery.ActivityRequest.TaskId,
+                    CompletionToken = delivery.CompletionToken,
+                    Result = "\"accepted result\"",
+                }, CreateContext());
+            }
+            else
+            {
+                await session.Server.CompleteOrchestratorTask(new()
+                {
+                    InstanceId = delivery.OrchestratorRequest.InstanceId,
+                    CompletionToken = delivery.CompletionToken,
+                    CustomStatus = "\"accepted status\"",
+                    Actions = { new P.OrchestratorAction
+                    {
+                        Id = 7,
+                        ScheduleTask = new() { Name = "Accepted", Input = "\"accepted input\"" },
+                    } },
+                }, CreateContext());
+            }
+
+            Assert.False(execution.IsCompleted);
+            releaseWrite.SetResult();
+
+            // Assert
+            if (activity)
+            {
+                ActivityExecutionResult result = await ((Task<ActivityExecutionResult>)execution).WaitAsync(Timeout);
+                TaskCompletedEvent completed = Assert.IsType<TaskCompletedEvent>(result.ResponseEvent);
+                Assert.Equal(delivery.ActivityRequest.TaskId, completed.TaskScheduledId);
+                Assert.Equal("\"accepted result\"", completed.Result);
+            }
+            else
+            {
+                GrpcOrchestratorExecutionResult result = await ((Task<GrpcOrchestratorExecutionResult>)execution).WaitAsync(Timeout);
+                ScheduleTaskOrchestratorAction action = Assert.IsAssignableFrom<ScheduleTaskOrchestratorAction>(Assert.Single(result.Actions));
+                Assert.Equal(7, action.Id);
+                Assert.Equal("Accepted", action.Name);
+                Assert.Equal("\"accepted input\"", action.Input);
+                Assert.Equal("\"accepted status\"", result.CustomStatus);
+                Assert.Empty(WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server));
+            }
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
+    /// <summary>
     /// A disconnected work-item stream does not implicitly abandon already delivered work.
     /// </summary>
     [Theory]

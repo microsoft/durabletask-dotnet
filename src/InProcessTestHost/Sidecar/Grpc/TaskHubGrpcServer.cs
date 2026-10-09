@@ -844,6 +844,20 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             //       Probably need to have a static timeout (e.g. 5 minutes).
             return await pending.CompletionSource.Task;
         }
+        catch
+        {
+            lock (this.pendingTasksLock)
+            {
+                if (this.pendingOrchestratorTasks.Remove(completionToken) ||
+                    !pending.CompletionSource.Task.IsCompletedSuccessfully)
+                {
+                    throw;
+                }
+            }
+
+            // An accepted completion takes precedence over a late send failure.
+            return await pending.CompletionSource.Task;
+        }
         finally
         {
             lock (this.pendingTasksLock)
@@ -902,6 +916,20 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             await this.SendWorkItemToClientAsync(workItem);
 
             // Explicit abandonment cancels this delivery; disconnecting the stream does not.
+            return await pending.CompletionSource.Task;
+        }
+        catch
+        {
+            lock (this.pendingTasksLock)
+            {
+                if (this.pendingActivityTasks.Remove(completionToken) ||
+                    !pending.CompletionSource.Task.IsCompletedSuccessfully)
+                {
+                    throw;
+                }
+            }
+
+            // An accepted completion takes precedence over a late send failure.
             return await pending.CompletionSource.Task;
         }
         finally

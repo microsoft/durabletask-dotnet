@@ -83,6 +83,9 @@ abandonment and late completion cannot affect a replacement delivery. Abandoning
 orchestration also discards its partial response actions and releases its temporary
 worker history snapshot, without deleting committed history.
 
+An accepted completion takes precedence over a later failure of that delivery's pending
+stream write. The send failure cannot replace the accepted result or requeue completed work.
+
 Closing the `GetWorkItems` stream does **not** implicitly abandon work that was already
 delivered. An activity can still finish and send its completion through an independent
 RPC. This behavior does not add an activity timeout, heartbeat, or lease policy.

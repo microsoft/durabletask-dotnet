@@ -49,7 +49,8 @@ public class WorkerHistorySnapshotTests
 
         try
         {
-            P.OrchestratorRequest request = (await workItems.Reader.ReadAsync(timeout.Token)).OrchestratorRequest;
+            P.WorkItem delivery = await workItems.Reader.ReadAsync(timeout.Token);
+            P.OrchestratorRequest request = delivery.OrchestratorRequest;
             Assert.True(request.RequiresHistoryStreaming);
             Assert.Empty(request.PastEvents);
             Assert.Equal(history.Select(ProtobufUtils.ToHistoryEventProto),
@@ -61,6 +62,7 @@ public class WorkerHistorySnapshotTests
                 await server.CompleteOrchestratorTask(new()
                 {
                     InstanceId = instance.InstanceId,
+                    CompletionToken = delivery.CompletionToken,
                     IsPartial = true,
                     Actions = { new P.OrchestratorAction { Id = 0, ScheduleTask = new() { Name = "First" } } },
                 }, CreateContext());
@@ -76,6 +78,7 @@ public class WorkerHistorySnapshotTests
             await server.CompleteOrchestratorTask(new()
             {
                 InstanceId = instance.InstanceId,
+                CompletionToken = delivery.CompletionToken,
                 CustomStatus = "\"waiting for activity\"",
                 Actions = { new P.OrchestratorAction { Id = 1, ScheduleTask = new() { Name = "Next" } } },
             }, CreateContext());
@@ -107,11 +110,18 @@ public class WorkerHistorySnapshotTests
         using TaskHubGrpcServer server = CreateServer(timeout.Token);
         Channel<P.WorkItem> workItems = Channel.CreateUnbounded<P.WorkItem>();
         Mock<IServerStreamWriter<P.WorkItem>> writer = new();
+        string failedCompletionToken = string.Empty;
         writer.Setup(w => w.WriteAsync(It.IsAny<P.WorkItem>())).Returns<P.WorkItem>(workItem =>
-            workItem.OrchestratorRequest.InstanceId == "failed"
-                ? Task.FromException(new InvalidOperationException(
-                    streamClosed ? "The request is complete." : "Expected dispatch failure"))
-                : workItems.Writer.WriteAsync(workItem).AsTask());
+        {
+            if (workItem.OrchestratorRequest.InstanceId == "failed")
+            {
+                failedCompletionToken = workItem.CompletionToken;
+                return Task.FromException(new InvalidOperationException(
+                    streamClosed ? "The request is complete." : "Expected dispatch failure"));
+            }
+
+            return workItems.Writer.WriteAsync(workItem).AsTask();
+        });
         Task connection = server.GetWorkItems(
             new() { Capabilities = { P.WorkerCapability.HistoryStreaming } },
             writer.Object, CreateContext(timeout.Token));
@@ -119,7 +129,7 @@ public class WorkerHistorySnapshotTests
         OrchestrationInstance other = new() { InstanceId = "other", ExecutionId = "current" };
         HistoryEvent[] otherHistory = CreateHistory(other);
         Task<GrpcOrchestratorExecutionResult> otherEpisode = executor.ExecuteOrchestrator(other, otherHistory, []);
-        await workItems.Reader.ReadAsync(timeout.Token);
+        P.WorkItem otherDelivery = await workItems.Reader.ReadAsync(timeout.Token);
         OrchestrationInstance failed = new() { InstanceId = "failed", ExecutionId = "current" };
 
         try
@@ -147,11 +157,19 @@ public class WorkerHistorySnapshotTests
             Assert.Equal(otherHistory.Select(ProtobufUtils.ToHistoryEventProto),
                 await ReadWorkerHistoryAsync(server, other.InstanceId));
             RpcException missing = await Assert.ThrowsAsync<RpcException>(() =>
-                server.CompleteOrchestratorTask(new() { InstanceId = failed.InstanceId }, CreateContext()));
+                server.CompleteOrchestratorTask(new()
+                {
+                    InstanceId = failed.InstanceId,
+                    CompletionToken = failedCompletionToken,
+                }, CreateContext()));
             Assert.Equal(StatusCode.NotFound, missing.StatusCode);
             Assert.False(otherEpisode.IsCompleted);
 
-            await server.CompleteOrchestratorTask(new() { InstanceId = other.InstanceId }, CreateContext());
+            await server.CompleteOrchestratorTask(new()
+            {
+                InstanceId = other.InstanceId,
+                CompletionToken = otherDelivery.CompletionToken,
+            }, CreateContext());
             await otherEpisode.WaitAsync(timeout.Token);
             Assert.Equal(0, snapshots.Count);
         }
@@ -180,7 +198,7 @@ public class WorkerHistorySnapshotTests
         OrchestrationInstance instance = new() { InstanceId = "instance", ExecutionId = "previous" };
         HistoryEvent[] history = CreateHistory(instance);
         Task<GrpcOrchestratorExecutionResult> episode = executor.ExecuteOrchestrator(instance, history, []);
-        await workItems.Reader.ReadAsync(timeout.Token);
+        P.WorkItem delivery = await workItems.Reader.ReadAsync(timeout.Token);
         TaskCompletionSource firstChunkWritten = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource releaseReader = new(TaskCreationOptions.RunContinuationsAsynchronously);
         List<P.HistoryChunk> chunks = new();
@@ -203,7 +221,11 @@ public class WorkerHistorySnapshotTests
             await firstChunkWritten.Task.WaitAsync(timeout.Token);
 
             // Act
-            await server.CompleteOrchestratorTask(new() { InstanceId = instance.InstanceId }, CreateContext());
+            await server.CompleteOrchestratorTask(new()
+            {
+                InstanceId = instance.InstanceId,
+                CompletionToken = delivery.CompletionToken,
+            }, CreateContext());
             await episode.WaitAsync(timeout.Token);
 
             // Assert
@@ -211,7 +233,8 @@ public class WorkerHistorySnapshotTests
             OrchestrationInstance next = new() { InstanceId = instance.InstanceId, ExecutionId = "current" };
             HistoryEvent[] nextHistory = CreateHistory(next, 'y');
             Task<GrpcOrchestratorExecutionResult> nextEpisode = executor.ExecuteOrchestrator(next, nextHistory, []);
-            P.OrchestratorRequest nextRequest = (await workItems.Reader.ReadAsync(timeout.Token)).OrchestratorRequest;
+            P.WorkItem nextDelivery = await workItems.Reader.ReadAsync(timeout.Token);
+            P.OrchestratorRequest nextRequest = nextDelivery.OrchestratorRequest;
             Assert.Equal(next.ExecutionId, nextRequest.ExecutionId);
             Assert.True(nextRequest.RequiresHistoryStreaming);
             Assert.Equal(nextHistory.Select(ProtobufUtils.ToHistoryEventProto),
@@ -226,7 +249,11 @@ public class WorkerHistorySnapshotTests
                 WorkerHistorySnapshotTestHelpers.GetSnapshots(server)[next.InstanceId]);
             Assert.False(nextEpisode.IsCompleted);
 
-            await server.CompleteOrchestratorTask(new() { InstanceId = next.InstanceId }, CreateContext());
+            await server.CompleteOrchestratorTask(new()
+            {
+                InstanceId = next.InstanceId,
+                CompletionToken = nextDelivery.CompletionToken,
+            }, CreateContext());
             await nextEpisode.WaitAsync(timeout.Token);
             Assert.Equal(0, WorkerHistorySnapshotTestHelpers.GetSnapshots(server).Count);
         }

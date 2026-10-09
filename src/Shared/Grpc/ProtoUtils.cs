@@ -813,6 +813,9 @@ static class ProtoUtils
                     Input = operationAction.StartNewOrchestration.Input,
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
+                    Tags = operationAction.StartNewOrchestration.Tags.Count > 0
+                        ? new Dictionary<string, string>(operationAction.StartNewOrchestration.Tags, StringComparer.Ordinal)
+                        : null,
                     ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
                     RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTimeOffset(),
                     ParentTraceContext = operationAction.StartNewOrchestration.ParentTraceContext != null ?
@@ -879,6 +882,14 @@ static class ProtoUtils
                         }
                     : null,
                 };
+                if (startNewOrchestrationAction.Tags != null)
+                {
+                    foreach (KeyValuePair<string, string> tag in startNewOrchestrationAction.Tags)
+                    {
+                        action.StartNewOrchestration.Tags[tag.Key] = tag.Value;
+                    }
+                }
+
                 break;
         }
 

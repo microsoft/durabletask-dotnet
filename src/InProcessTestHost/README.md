@@ -70,6 +70,23 @@ PurgeResult purgeResult = await testHost.Client.PurgeAllInstancesAsync(
 creation-time range. You can provide `CreatedTo` without `CreatedFrom`. Explicit
 bounds are inclusive and are evaluated in UTC.
 
+## Explicit Work-Item Abandonment
+
+The in-process sidecar honors explicit worker abandonment of activity and orchestration
+work items. Abandonment cancels that delivery's pending execution, allowing the existing
+dispatcher to release and requeue the work item for another attempt.
+
+Each delivery has a fresh completion token in the existing gRPC `completionToken` field.
+Completion and abandonment requests must echo that token. Missing tokens return
+`InvalidArgument`; unknown or already settled tokens return `NotFound`. Duplicate
+abandonment and late completion cannot affect a replacement delivery. Abandoning an
+orchestration also discards its partial response actions and releases its temporary
+worker history snapshot, without deleting committed history.
+
+Closing the `GetWorkItems` stream does **not** implicitly abandon work that was already
+delivered. An activity can still finish and send its completion through an independent
+RPC. This behavior does not add an activity timeout, heartbeat, or lease policy.
+
 ## Dependency Injection
 
 When your activities depend on services, there are two approaches:

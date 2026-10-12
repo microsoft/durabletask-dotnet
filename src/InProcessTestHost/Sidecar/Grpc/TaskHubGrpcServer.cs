@@ -580,15 +580,6 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     public override Task<P.CompleteTaskResponse> CompleteOrchestratorTask(P.OrchestratorResponse request, ServerCallContext context)
     {
         ValidateCompletionToken(request.CompletionToken);
-#pragma warning disable CS0612 // Reject deprecated chunk fields instead of treating a fragment as a full response.
-        if (request.IsPartial || request.ChunkIndex is not null)
-#pragma warning restore CS0612
-        {
-            throw new RpcException(new Status(
-                StatusCode.InvalidArgument,
-                "Chunked orchestrator completion is not supported by the in-process test host. Send a single full response without chunk fields."));
-        }
-
         lock (this.pendingTasksLock)
         {
             if (!this.pendingOrchestratorTasks.TryGetValue(request.CompletionToken, out PendingOrchestratorTask? pending))
@@ -599,6 +590,27 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             if (!string.Equals(pending.InstanceId, request.InstanceId, StringComparison.OrdinalIgnoreCase))
             {
                 throw new RpcException(new Status(StatusCode.InvalidArgument, "Completion token does not match the orchestration instance."));
+            }
+
+#pragma warning disable CS0612 // Reject deprecated chunk fields instead of treating a fragment as a full response.
+            if (request.IsPartial || request.ChunkIndex is not null)
+#pragma warning restore CS0612
+            {
+                const string unsupportedMessage =
+                    "Chunked orchestrator completion is not supported by the in-process test host. Send a single full response without chunk fields.";
+                GrpcOrchestratorExecutionResult failure = new()
+                {
+                    Actions = [new OrchestrationCompleteOrchestratorAction
+                    {
+                        OrchestrationStatus = OrchestrationStatus.Failed,
+                        FailureDetails = new FailureDetails(typeof(NotSupportedException).FullName!, unsupportedMessage, null, null, true),
+                    }],
+                };
+
+                // A failed-action result commits terminal failure; faulting the source would requeue unsupported work.
+                this.pendingOrchestratorTasks.Remove(request.CompletionToken);
+                pending.CompletionSource.SetResult(failure);
+                throw new RpcException(new Status(StatusCode.InvalidArgument, unsupportedMessage));
             }
 
             List<OrchestratorAction> actions = request.Actions.Select(ProtobufUtils.ToOrchestratorAction).ToList();

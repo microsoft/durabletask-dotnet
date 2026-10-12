@@ -174,8 +174,8 @@ public class WorkItemCompletionTests
         Task execution = session.StartExecution(activity);
         P.WorkItem delivery = await session.ReadAsync();
         TaskCompletionSource start = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task<StatusCode> first = Task.Run(() => CompleteAfterSignalAsync(start.Task, session.Server, delivery, "\"first\""));
-        Task<StatusCode> second = Task.Run(() => CompleteAfterSignalAsync(start.Task, session.Server, delivery, "\"second\""));
+        Task<StatusCode> first = Task.Run(() => CompleteAfterSignalAsync(start.Task, () => CompleteAsync(session.Server, delivery, "\"first\"")));
+        Task<StatusCode> second = Task.Run(() => CompleteAfterSignalAsync(start.Task, () => CompleteAsync(session.Server, delivery, "\"second\"")));
 
         // Act
         start.SetResult();
@@ -238,20 +238,19 @@ public class WorkItemCompletionTests
     }
 
     /// <summary>
-    /// Unsupported response fragments leave the delivery and its replay snapshot available for a full response.
+    /// Unsupported response fragments explicitly fail their delivery and release its replay snapshot.
     /// </summary>
     [Theory]
     [InlineData(true, null)]
     [InlineData(true, 0)]
     [InlineData(false, 0)]
     [InlineData(false, 1)]
-    public async Task CompleteOrchestrator_RejectsChunkedResponsesWithoutSettlingDeliveryAsync(bool partial, int? chunkIndex)
+    public async Task CompleteOrchestrator_RejectsChunkedResponsesWithFailedResultAsync(bool partial, int? chunkIndex)
     {
         // Arrange
         await using ServerSession session = new();
         Task execution = session.StartExecution(activity: false, historyPayload: 'x');
         P.WorkItem delivery = await session.ReadAsync();
-        List<P.HistoryEvent> snapshot = WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server)["instance"];
 #pragma warning disable CS0612 // Exercise rejection of the deprecated chunk fields.
         P.OrchestratorResponse fragment = new()
         {
@@ -270,25 +269,109 @@ public class WorkItemCompletionTests
         // Assert
         Assert.Equal(StatusCode.InvalidArgument, unsupported.StatusCode);
         Assert.Contains("Chunked orchestrator completion is not supported", unsupported.Status.Detail);
+        GrpcOrchestratorExecutionResult result = await ((Task<GrpcOrchestratorExecutionResult>)execution).WaitAsync(Timeout);
+        OrchestrationCompleteOrchestratorAction failure = Assert.IsType<OrchestrationCompleteOrchestratorAction>(Assert.Single(result.Actions));
+        Assert.Equal(OrchestrationStatus.Failed, failure.OrchestrationStatus);
+        Assert.NotNull(failure.FailureDetails);
+        Assert.Equal(typeof(NotSupportedException).FullName, failure.FailureDetails.ErrorType);
+        Assert.Equal(unsupported.Status.Detail, failure.FailureDetails.ErrorMessage);
+        Assert.True(failure.FailureDetails.IsNonRetriable);
+        Assert.Empty(WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server));
+        RpcException duplicate = await Assert.ThrowsAsync<RpcException>(() => CompleteAsync(session.Server, delivery));
+        Assert.Equal(StatusCode.NotFound, duplicate.StatusCode);
+    }
+
+    /// <summary>
+    /// Invalid chunk-request tokens and identities cannot fail a valid delivery.
+    /// </summary>
+    [Theory]
+    [InlineData("missing", StatusCode.InvalidArgument)]
+    [InlineData("unknown", StatusCode.NotFound)]
+    [InlineData("activity", StatusCode.NotFound)]
+    [InlineData("instance", StatusCode.InvalidArgument)]
+    public async Task CompleteOrchestrator_InvalidChunkRequestsDoNotSettleDeliveryAsync(string invalid, StatusCode expected)
+    {
+        // Arrange
+        await using ServerSession session = new();
+        Task execution = session.StartExecution(activity: false, historyPayload: 'x');
+        P.WorkItem delivery = await session.ReadAsync();
+        Task otherExecution = session.StartExecution(activity: true, "other");
+        P.WorkItem other = await session.ReadAsync();
+        List<P.HistoryEvent> snapshot = WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server)["instance"];
+#pragma warning disable CS0612 // Validate ownership before rejecting deprecated chunk fields.
+        P.OrchestratorResponse request = new()
+        {
+            InstanceId = invalid == "instance" ? "other" : delivery.OrchestratorRequest.InstanceId,
+            CompletionToken = invalid switch
+            {
+                "missing" => string.Empty,
+                "unknown" => "unknown",
+                "activity" => other.CompletionToken,
+                _ => delivery.CompletionToken,
+            },
+            IsPartial = true,
+            ChunkIndex = 0,
+        };
+#pragma warning restore CS0612
+
+        // Act
+        RpcException rejected = await Assert.ThrowsAsync<RpcException>(() =>
+            session.Server.CompleteOrchestratorTask(request, CreateContext()));
+
+        // Assert
+        Assert.Equal(expected, rejected.StatusCode);
         Assert.False(execution.IsCompleted);
+        Assert.False(otherExecution.IsCompleted);
         Assert.Same(snapshot, WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server)["instance"]);
-        await session.Server.CompleteOrchestratorTask(new()
+        await CompleteAsync(session.Server, delivery);
+        await CompleteAsync(session.Server, other);
+        await Task.WhenAll(execution, otherExecution).WaitAsync(Timeout);
+    }
+
+    /// <summary>
+    /// A rejected chunk and a valid final response compete for one delivery's settlement.
+    /// </summary>
+    [Fact]
+    public async Task CompleteOrchestrator_ChunkAndFullResponseOnlyOneClaimsDeliveryAsync()
+    {
+        // Arrange
+        await using ServerSession session = new();
+        Task execution = session.StartExecution(activity: false, historyPayload: 'x');
+        P.WorkItem delivery = await session.ReadAsync();
+        TaskCompletionSource start = new(TaskCreationOptions.RunContinuationsAsynchronously);
+#pragma warning disable CS0612 // Exercise legacy chunk rejection racing a whole response.
+        P.OrchestratorResponse fragment = new()
         {
             InstanceId = delivery.OrchestratorRequest.InstanceId,
             CompletionToken = delivery.CompletionToken,
-            CustomStatus = "\"accepted status\"",
-            Actions = { new P.OrchestratorAction
-            {
-                Id = 7,
-                ScheduleTask = new() { Name = "Accepted", Input = "\"accepted input\"" },
-            } },
-        }, CreateContext());
+            IsPartial = true,
+        };
+#pragma warning restore CS0612
+        Task<StatusCode> chunk = Task.Run(() => CompleteAfterSignalAsync(
+            start.Task, () => session.Server.CompleteOrchestratorTask(fragment, CreateContext())));
+        Task<StatusCode> full = Task.Run(() => CompleteAfterSignalAsync(
+            start.Task, () => CompleteAsync(session.Server, delivery, "\"accepted\"")));
+
+        // Act
+        start.SetResult();
+        StatusCode[] outcomes = await Task.WhenAll(chunk, full).WaitAsync(Timeout);
         GrpcOrchestratorExecutionResult result = await ((Task<GrpcOrchestratorExecutionResult>)execution).WaitAsync(Timeout);
-        ScheduleTaskOrchestratorAction action = Assert.IsAssignableFrom<ScheduleTaskOrchestratorAction>(Assert.Single(result.Actions));
-        Assert.Equal(7, action.Id);
-        Assert.Equal("Accepted", action.Name);
-        Assert.Equal("\"accepted input\"", action.Input);
-        Assert.Equal("\"accepted status\"", result.CustomStatus);
+
+        // Assert
+        if (outcomes[0] == StatusCode.InvalidArgument)
+        {
+            Assert.Equal(StatusCode.NotFound, outcomes[1]);
+            Assert.Equal(OrchestrationStatus.Failed,
+                Assert.IsType<OrchestrationCompleteOrchestratorAction>(Assert.Single(result.Actions)).OrchestrationStatus);
+        }
+        else
+        {
+            Assert.Equal(StatusCode.NotFound, outcomes[0]);
+            Assert.Equal(StatusCode.OK, outcomes[1]);
+            Assert.Empty(result.Actions);
+            Assert.Equal("\"accepted\"", result.CustomStatus);
+        }
+
         Assert.Empty(WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server));
     }
 
@@ -353,9 +436,10 @@ public class WorkItemCompletionTests
     /// A send failure cannot override a completion accepted while that send was still pending.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Dispatch_CompletedDeliveryPreservesResultAfterSendFailureAsync(bool activity)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Dispatch_CompletedDeliveryPreservesResultAfterSendFailureAsync(bool activity, bool chunked)
     {
         // Arrange
         TaskCompletionSource releaseWrite = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -382,7 +466,7 @@ public class WorkItemCompletionTests
             }
             else
             {
-                await session.Server.CompleteOrchestratorTask(new()
+                P.OrchestratorResponse response = new()
                 {
                     InstanceId = delivery.OrchestratorRequest.InstanceId,
                     CompletionToken = delivery.CompletionToken,
@@ -392,7 +476,20 @@ public class WorkItemCompletionTests
                         Id = 7,
                         ScheduleTask = new() { Name = "Accepted", Input = "\"accepted input\"" },
                     } },
-                }, CreateContext());
+                };
+                if (chunked)
+                {
+#pragma warning disable CS0612 // A terminal unsupported-chunk result also owns settlement over a late send failure.
+                    response.IsPartial = true;
+#pragma warning restore CS0612
+                    RpcException unsupported = await Assert.ThrowsAsync<RpcException>(() =>
+                        session.Server.CompleteOrchestratorTask(response, CreateContext()));
+                    Assert.Equal(StatusCode.InvalidArgument, unsupported.StatusCode);
+                }
+                else
+                {
+                    await session.Server.CompleteOrchestratorTask(response, CreateContext());
+                }
             }
 
             Assert.False(execution.IsCompleted);
@@ -409,11 +506,21 @@ public class WorkItemCompletionTests
             else
             {
                 GrpcOrchestratorExecutionResult result = await ((Task<GrpcOrchestratorExecutionResult>)execution).WaitAsync(Timeout);
-                ScheduleTaskOrchestratorAction action = Assert.IsAssignableFrom<ScheduleTaskOrchestratorAction>(Assert.Single(result.Actions));
-                Assert.Equal(7, action.Id);
-                Assert.Equal("Accepted", action.Name);
-                Assert.Equal("\"accepted input\"", action.Input);
-                Assert.Equal("\"accepted status\"", result.CustomStatus);
+                if (chunked)
+                {
+                    OrchestrationCompleteOrchestratorAction failure = Assert.IsType<OrchestrationCompleteOrchestratorAction>(Assert.Single(result.Actions));
+                    Assert.Equal(OrchestrationStatus.Failed, failure.OrchestrationStatus);
+                    Assert.Equal(typeof(NotSupportedException).FullName, failure.FailureDetails?.ErrorType);
+                }
+                else
+                {
+                    ScheduleTaskOrchestratorAction action = Assert.IsAssignableFrom<ScheduleTaskOrchestratorAction>(Assert.Single(result.Actions));
+                    Assert.Equal(7, action.Id);
+                    Assert.Equal("Accepted", action.Name);
+                    Assert.Equal("\"accepted input\"", action.Input);
+                    Assert.Equal("\"accepted status\"", result.CustomStatus);
+                }
+
                 Assert.Empty(WorkerHistorySnapshotTestHelpers.GetSnapshots(session.Server));
             }
         }
@@ -493,12 +600,12 @@ public class WorkItemCompletionTests
                 CustomStatus = value,
             }, CreateContext());
 
-    static async Task<StatusCode> CompleteAfterSignalAsync(Task signal, TaskHubGrpcServer server, P.WorkItem delivery, string value)
+    static async Task<StatusCode> CompleteAfterSignalAsync(Task signal, Func<Task> complete)
     {
         await signal;
         try
         {
-            await CompleteAsync(server, delivery, value);
+            await complete();
             return StatusCode.OK;
         }
         catch (RpcException exception)

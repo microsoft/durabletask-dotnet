@@ -18,13 +18,13 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     /// Validates that multiple activity actions complete in one response below the configured size limit.
     /// </summary>
     [Fact]
-    public async Task FullResponse_MultipleActions_CompletesSuccessfully()
+    public async Task FullResponse_MultipleActions_CompletesSuccessfullyAsync()
     {
         // Arrange
         const int ActivityCount = 16;
         const int PayloadSizePerActivity = 30 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(FullResponse_MultipleActions_CompletesSuccessfully);
+        TaskName orchestratorName = nameof(FullResponse_MultipleActions_CompletesSuccessfullyAsync);
         TaskName activityName = "Echo";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
@@ -64,7 +64,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     /// Validates a full response with mixed action types (activities, timers, sub-orchestrations).
     /// </summary>
     [Fact]
-    public async Task FullResponse_MixedActions_CompletesSuccessfully()
+    public async Task FullResponse_MixedActions_CompletesSuccessfullyAsync()
     {
         // Arrange
         const int ActivityCount = 30;
@@ -72,7 +72,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         const int SubOrchCount = 50;
         const int PayloadSizePerActivity = 20 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(FullResponse_MixedActions_CompletesSuccessfully);
+        TaskName orchestratorName = nameof(FullResponse_MixedActions_CompletesSuccessfullyAsync);
         TaskName activityName = "Echo";
         TaskName subOrchName = "SubOrch";
 

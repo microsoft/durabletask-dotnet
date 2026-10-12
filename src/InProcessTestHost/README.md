@@ -77,6 +77,9 @@ using the existing gRPC `WorkItem.completionToken` field. Completion is matched 
 delivery, not just its logical instance or activity task ID. Duplicate and stale completion
 requests cannot settle a replacement delivery.
 
+Treat completion tokens as opaque, case-sensitive values and echo them exactly; do not
+parse them or change their casing. Logical instance IDs remain case-insensitive.
+
 **Migration for direct gRPC callers:** copy the received `WorkItem.completionToken` into
 `ActivityResponse.completionToken` or `OrchestratorResponse.completionToken` on every
 whole completion request. Keep the original instance ID and, for activities, the task ID

@@ -575,6 +575,8 @@ public class WorkItemCompletionTests
 
         public async ValueTask DisposeAsync()
         {
+            using CancellationTokenSource stopping = this.stopping;
+            using CancellationTokenSource connectionCancellation = this.connectionCancellation;
             try
             {
                 foreach (P.WorkItem delivery in this.deliveries)
@@ -596,11 +598,9 @@ public class WorkItemCompletionTests
             }
             finally
             {
-                this.stopping.Cancel();
+                stopping.Cancel();
                 await this.DisconnectAsync();
                 this.Server.Dispose();
-                this.connectionCancellation.Dispose();
-                this.stopping.Dispose();
             }
         }
     }

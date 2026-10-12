@@ -33,6 +33,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     static readonly Task<P.CompleteTaskResponse> EmptyCompleteTaskResponse = Task.FromResult(new P.CompleteTaskResponse());
 
     // Token lookup and settlement share the same delivery-ownership boundary.
+    // Delivery tokens are opaque, case-sensitive keys; logical instance IDs are validated separately.
     readonly object pendingTasksLock = new();
     readonly Dictionary<string, PendingOrchestratorTask> pendingOrchestratorTasks = new(StringComparer.Ordinal);
     readonly Dictionary<string, PendingActivityTask> pendingActivityTasks = new(StringComparer.Ordinal);
@@ -637,20 +638,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 throw new RpcException(new Status(StatusCode.InvalidArgument, "Completion token does not match the activity instance and task ID."));
             }
 
-            HistoryEvent resultEvent;
-            if (request.FailureDetails == null)
-            {
-                resultEvent = new TaskCompletedEvent(-1, request.TaskId, request.Result);
-            }
-            else
-            {
-                resultEvent = new TaskFailedEvent(
+            HistoryEvent resultEvent = request.FailureDetails == null
+                ? new TaskCompletedEvent(-1, request.TaskId, request.Result)
+                : new TaskFailedEvent(
                     eventId: -1,
                     taskScheduledId: request.TaskId,
                     reason: null,
                     details: null,
                     failureDetails: ProtobufUtils.GetFailureDetails(request.FailureDetails));
-            }
 
             this.pendingActivityTasks.Remove(request.CompletionToken);
             pending.CompletionSource.SetResult(new ActivityExecutionResult { ResponseEvent = resultEvent });

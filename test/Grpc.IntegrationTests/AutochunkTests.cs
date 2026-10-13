@@ -1,36 +1,39 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Xunit.Abstractions;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
 /// <summary>
-/// Integration tests for validating autochunk functionality when orchestration completion responses
-/// exceed the maximum chunk size and are automatically split into multiple chunks.
+/// Integration tests for whole orchestration completion responses and single-action size validation.
 /// </summary>
 public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
 {
+    readonly P.TaskHubSidecarService.TaskHubSidecarServiceClient sidecarClient = new(sidecarFixture.Channel);
+
     /// <summary>
-    /// Validates that orchestrations complete successfully when the completion response
-    /// exceeds the chunk size and must be split into multiple chunks.
+    /// Validates that multiple activity actions complete in one response below the configured size limit.
     /// </summary>
     [Fact]
-    public async Task Autochunk_MultipleChunks_CompletesSuccessfully()
+    public async Task FullResponse_MultipleActions_CompletesSuccessfullyAsync()
     {
-        const int ActivityCount = 36;
+        // Arrange
+        const int ActivityCount = 16;
         const int PayloadSizePerActivity = 30 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(Autochunk_MultipleChunks_CompletesSuccessfully);
+        TaskName orchestratorName = nameof(FullResponse_MultipleActions_CompletesSuccessfullyAsync);
         TaskName activityName = "Echo";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
-            // Set a small chunk size to force chunking
+            // Keep the response below the minimum configured chunk size.
             b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
@@ -48,11 +51,13 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
                 .AddActivityFunc<string, string>(activityName, (ctx, input) => Task.FromResult(input)));
         });
 
+        // Act
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
+        // Assert
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
@@ -60,24 +65,24 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     }
 
     /// <summary>
-    /// Validates autochunking with mixed action types (activities, timers, sub-orchestrations).
+    /// Validates a full response with mixed action types (activities, timers, sub-orchestrations).
     /// </summary>
     [Fact]
-    public async Task Autochunk_MixedActions_CompletesSuccessfully()
+    public async Task FullResponse_MixedActions_CompletesSuccessfullyAsync()
     {
-        // Use minimum allowed chunk size (1 MB) and ensure total payload exceeds it to trigger chunking
+        // Arrange
         const int ActivityCount = 30;
         const int TimerCount = 100;
         const int SubOrchCount = 50;
         const int PayloadSizePerActivity = 20 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(Autochunk_MixedActions_CompletesSuccessfully);
+        TaskName orchestratorName = nameof(FullResponse_MixedActions_CompletesSuccessfullyAsync);
         TaskName activityName = "Echo";
         TaskName subOrchName = "SubOrch";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
-            // Set a small chunk size to force chunking
+            // The mixed actions fit in a single response below the minimum configured chunk size.
             b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
@@ -111,15 +116,101 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
                 .AddActivityFunc<string, string>(activityName, (ctx, input) => Task.FromResult(input)));
         });
 
+        // Act
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
+        // Assert
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal(ActivityCount + TimerCount + SubOrchCount, metadata.ReadOutputAs<int>());
+    }
+
+    /// <summary>
+    /// Unsupported SDK chunks fail the orchestration instead of leaving its delivery pending.
+    /// </summary>
+    [Fact]
+    public async Task ChunkedResponse_FailsWithoutSchedulingFragmentActionsAsync()
+    {
+        // Arrange
+        const int ActivityCount = 36;
+        const int PayloadSize = 30 * 1024;
+        TaskName orchestratorName = nameof(ChunkedResponse_FailsWithoutSchedulingFragmentActionsAsync);
+        TaskName activityName = "MustNotRun";
+        int activitiesRun = 0;
+        await using HostTestLifetime server = await this.StartWorkerAsync(builder =>
+        {
+            builder.UseGrpc(options => options.CompleteOrchestrationWorkItemChunkSizeInBytes =
+                GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes);
+            builder.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async context =>
+                {
+                    Task<int>[] activities = Enumerable.Range(0, ActivityCount)
+                        .Select(_ => context.CallActivityAsync<int>(activityName, new string('A', PayloadSize)))
+                        .ToArray();
+                    return (await Task.WhenAll(activities)).Length;
+                })
+                .AddActivityFunc<string, int>(activityName, (_, _) =>
+                {
+                    Interlocked.Increment(ref activitiesRun);
+                    return Task.FromResult(1);
+                }));
+        });
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+
+        try
+        {
+            // Act
+            using CancellationTokenSource completionTimeout = new(TimeSpan.FromSeconds(10));
+            OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+                instanceId, getInputsAndOutputs: true, completionTimeout.Token);
+
+            // Assert
+            Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+            Assert.NotNull(metadata.FailureDetails);
+            Assert.Equal(typeof(NotSupportedException).FullName, metadata.FailureDetails.ErrorType);
+            Assert.Contains("Chunked orchestrator completion is not supported", metadata.FailureDetails.ErrorMessage);
+            Assert.Contains("single full response", metadata.FailureDetails.ErrorMessage);
+            Assert.Equal(0, Volatile.Read(ref activitiesRun));
+        }
+        finally
+        {
+            // Release the old implementation's pending delivery so a red regression cannot strand the fixture.
+            foreach (LogEntry log in this.GetLogs().Where(entry => entry.EventId.Name == "AbandoningOrchestratorWorkItem"))
+            {
+                if (log.State is not IReadOnlyCollection<KeyValuePair<string, object>> state)
+                {
+                    continue;
+                }
+
+                Dictionary<string, object> metadata = new(state);
+                if (metadata.GetValueOrDefault("instanceId") as string != instanceId ||
+                    metadata.GetValueOrDefault("completionToken") is not string token)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await this.sidecarClient.CompleteOrchestratorTaskAsync(new()
+                    {
+                        InstanceId = instanceId,
+                        CompletionToken = token,
+                        Actions = { new P.OrchestratorAction
+                        {
+                            CompleteOrchestration = new() { OrchestrationStatus = P.OrchestrationStatus.Failed },
+                        } },
+                    }).ResponseAsync.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (RpcException exception) when (exception.StatusCode == StatusCode.NotFound)
+                {
+                    // The fixed implementation has already settled this delivery.
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -160,4 +251,3 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         Assert.Equal("System.InvalidOperationException: A single orchestrator action of type ScheduleTask with id 0 exceeds the 1.00MB limit: 1.10MB. Enable large-payload externalization to Azure Blob Storage to support oversized actions.", metadata.FailureDetails.ToString());
     }
 }
-

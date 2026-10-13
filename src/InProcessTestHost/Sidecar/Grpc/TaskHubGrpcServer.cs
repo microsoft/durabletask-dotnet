@@ -1011,7 +1011,18 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>An abandon activity task response.</returns>
     public override Task<P.AbandonActivityTaskResponse> AbandonTaskActivityWorkItem(P.AbandonActivityTaskRequest request, ServerCallContext context)
     {
-        return Task.FromResult<P.AbandonActivityTaskResponse>(new());
+        ValidateCompletionToken(request.CompletionToken);
+        lock (this.pendingTasksLock)
+        {
+            if (!this.pendingActivityTasks.Remove(request.CompletionToken, out PendingActivityTask? pending))
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, "Activity delivery not found."));
+            }
+
+            pending.CompletionSource.SetCanceled();
+        }
+
+        return Task.FromResult(new P.AbandonActivityTaskResponse());
     }
 
     /// <summary>
@@ -1022,7 +1033,18 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>An abandon orchestration task response.</returns>
     public override Task<P.AbandonOrchestrationTaskResponse> AbandonTaskOrchestratorWorkItem(P.AbandonOrchestrationTaskRequest request, ServerCallContext context)
     {
-        return Task.FromResult<P.AbandonOrchestrationTaskResponse>(new());
+        ValidateCompletionToken(request.CompletionToken);
+        lock (this.pendingTasksLock)
+        {
+            if (!this.pendingOrchestratorTasks.Remove(request.CompletionToken, out PendingOrchestratorTask? pending))
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, "Orchestrator delivery not found."));
+            }
+
+            pending.CompletionSource.SetCanceled();
+        }
+
+        return Task.FromResult(new P.AbandonOrchestrationTaskResponse());
     }
 
     /// <summary>

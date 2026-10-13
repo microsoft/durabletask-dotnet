@@ -221,8 +221,10 @@ public class WorkItemAbandonmentIntegrationTests(ITestOutputHelper output)
 
             if (compatibleWorker is not null)
             {
-                await compatibleWorker.StopAsync().WaitAsync(Timeout);
-                compatibleWorker.Dispose();
+                using (compatibleWorker)
+                {
+                    await compatibleWorker.StopAsync().WaitAsync(Timeout);
+                }
             }
 
             await sidecar.StopAsync().WaitAsync(Timeout);

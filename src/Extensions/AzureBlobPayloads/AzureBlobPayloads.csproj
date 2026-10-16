@@ -30,4 +30,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.DurableTask.Grpc.IntegrationTests" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
+
+  <!-- Reuse friend-visible validation helpers, but retain local compiler compatibility types. -->
+  <Target Name="RemoveDuplicateSharedValidation" AfterTargets="IncludeSharedItems">
+    <ItemGroup>
+      <Compile Remove="$([MSBuild]::NormalizePath('$(SharedRoot)Core\Validation\Check.cs'))" />
+      <Compile Remove="$([MSBuild]::NormalizePath('$(SharedRoot)Core\Validation\Verify.cs'))" />
+    </ItemGroup>
+  </Target>
 </Project>

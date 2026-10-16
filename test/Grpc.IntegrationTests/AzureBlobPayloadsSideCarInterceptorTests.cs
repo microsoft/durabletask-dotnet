@@ -457,6 +457,24 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task ExternalizeRequestPayloadsAsync_CreateInstanceRequest_KnownTokenBypassesSizeLimits()
+    {
+        // Arrange
+        TrackingPayloadStore store = new();
+        string token = store.Seed("original input");
+        LargePayloadStorageOptions options = new() { ThresholdBytes = 1, MaxPayloadBytes = 1 };
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, options);
+        P.CreateInstanceRequest request = new() { Input = token };
+
+        // Act
+        await ExternalizeAsync(interceptor, request, CancellationToken.None);
+
+        // Assert
+        request.Input.Should().Be(token);
+        store.UploadCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ExternalizeRequestPayloadsAsync_RewindInstanceRequest_ExternalizesReason()
     {
         // Arrange
@@ -519,6 +537,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
 
         // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
         await ExternalizeAsync(interceptor, response, CancellationToken.None);
 
         // Assert
@@ -587,6 +606,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
         // Act
         await ExternalizeAsync(interceptor, request, CancellationToken.None);
+        await ExternalizeAsync(interceptor, request, CancellationToken.None);
 
         // Assert
         store.GetUploadedValue(request.EntityState).Should().Be("state-0");
@@ -596,6 +616,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             token.Should().NotBe(expectedInputs[i]);
             store.GetUploadedValue(token).Should().Be(expectedInputs[i]);
         }
+
+        store.UploadCount.Should().Be(operationCount + 1);
     }
 
     [Fact]
@@ -628,6 +650,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
         // Act
         await ExternalizeAsync(interceptor, result, CancellationToken.None);
+        await ExternalizeAsync(interceptor, result, CancellationToken.None);
 
         // Assert
         store.GetUploadedValue(result.EntityState).Should().Be("state-final");
@@ -638,6 +661,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
         store.GetUploadedValue(result.Actions[0].SendSignal.Input).Should().Be("signal-input");
         store.GetUploadedValue(result.Actions[1].StartNewOrchestration.Input).Should().Be("start-input");
+        store.UploadCount.Should().Be(resultCount + 3);
     }
 
     [Fact]
@@ -697,6 +721,80 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         response.IsPartial.Should().BeFalse();
         response.ChunkIndex.Should().BeNull();
 #pragma warning restore CS0612
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_PermanentFailure_PreservesEntityUnlocks(
+        bool useLegacyEntityEvents)
+    {
+        // Arrange
+        TrackingPayloadStore store = new();
+        LargePayloadStorageOptions options = new() { ThresholdBytes = 1024, MaxPayloadBytes = 2048 };
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, options);
+        P.OrchestratorAction unlock = new() { Id = 7 };
+        if (useLegacyEntityEvents)
+        {
+            unlock.SendEvent = new P.SendEventAction
+            {
+                Instance = new P.OrchestrationInstance { InstanceId = "@counter@one" },
+                Name = "release",
+                Data = """{"id":"11111111-1111-1111-1111-111111111111","parent":"instance-1"}""",
+            };
+        }
+        else
+        {
+            unlock.SendEntityMessage = new P.SendEntityMessageAction
+            {
+                EntityUnlockSent = new P.EntityUnlockSentEvent
+                {
+                    CriticalSectionId = "11111111-1111-1111-1111-111111111111",
+                    ParentInstanceId = "instance-1",
+                    TargetInstanceId = "@counter@one",
+                },
+            };
+        }
+
+        P.OrchestratorResponse response = new()
+        {
+            InstanceId = "instance-1",
+            CompletionToken = "completion-token",
+            Actions =
+            {
+                unlock,
+                new P.OrchestratorAction
+                {
+                    Id = 8,
+                    SendEvent = new P.SendEventAction
+                    {
+                        Instance = new P.OrchestrationInstance { InstanceId = "another-orchestration" },
+                        Name = "release",
+                        Data = "discarded",
+                    },
+                },
+                new P.OrchestratorAction
+                {
+                    Id = 9,
+                    CompleteOrchestration = new P.CompleteOrchestrationAction
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Completed,
+                        Result = new string('x', 4096),
+                    },
+                },
+            },
+        };
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        response.Actions.Should().HaveCount(2);
+        response.Actions[0].Should().BeSameAs(unlock);
+        response.Actions[1].CompleteOrchestration.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Failed);
+        response.Actions[1].CompleteOrchestration.FailureDetails.IsNonRetriable.Should().BeTrue();
+        response.CompletionToken.Should().Be("completion-token");
+        store.UploadCount.Should().Be(0);
     }
 
     [Fact]

@@ -27,6 +27,50 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
     Action<object>? SharedMessageLockAcquiredForTest { get; set; }
 
+    /// <summary>
+    /// Externalizes a response before the worker finalizes terminal entity cleanup.
+    /// </summary>
+    /// <param name="response">The orchestration response.</param>
+    /// <param name="cancellation">Cancellation token.</param>
+    /// <returns>A task representing response preparation.</returns>
+    internal async Task PrepareOrchestratorResponseAsync(P.OrchestratorResponse response, CancellationToken cancellation)
+    {
+        try
+        {
+            await this.ExternalizeOrchestratorResponseAsync(response, cancellation);
+        }
+        catch (Exception ex) when (IsPermanentStorageFailure(ex))
+        {
+            // Retain entity releases when replacing actions with a Failed completion so
+            // the orchestration terminates without leaving its entities locked.
+            P.OrchestratorAction[] unlocks = response.Actions.Where(action =>
+                action.SendEntityMessage?.EntityUnlockSent is not null
+                || (action.SendEvent is { Name: "release", Instance: { } instance }
+                    && global::DurableTask.Core.Common.Entities.IsEntityInstance(instance.InstanceId))).ToArray();
+            response.Actions.Clear();
+            response.Actions.AddRange(unlocks);
+            response.CustomStatus = null;
+#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
+            response.IsPartial = false;
+            response.ChunkIndex = null;
+#pragma warning restore CS0612
+            response.Actions.Add(new P.OrchestratorAction
+            {
+                CompleteOrchestration = new P.CompleteOrchestrationAction
+                {
+                    OrchestrationStatus = P.OrchestrationStatus.Failed,
+                    FailureDetails = new P.TaskFailureDetails
+                    {
+                        ErrorType = ex.GetType().FullName,
+                        ErrorMessage = ex.Message,
+                        StackTrace = ex.StackTrace,
+                        IsNonRetriable = true,
+                    },
+                },
+            });
+        }
+    }
+
     /// <inheritdoc/>
     protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
@@ -76,37 +120,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
                 break;
             case P.OrchestratorResponse r:
-                try
-                {
-                    await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
-                }
-                catch (Exception ex) when (IsPermanentStorageFailure(ex))
-                {
-                    // Permanent failure during orchestration response externalization.
-                    // Replace all actions with a single Failed completion so the orchestration
-                    // terminates instead of being abandoned and redelivered indefinitely.
-                    r.Actions.Clear();
-                    r.CustomStatus = null;
-#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
-                    r.IsPartial = false;
-                    r.ChunkIndex = null;
-#pragma warning restore CS0612
-                    r.Actions.Add(new P.OrchestratorAction
-                    {
-                        CompleteOrchestration = new P.CompleteOrchestrationAction
-                        {
-                            OrchestrationStatus = P.OrchestrationStatus.Failed,
-                            FailureDetails = new P.TaskFailureDetails
-                            {
-                                ErrorType = ex.GetType().FullName,
-                                ErrorMessage = ex.Message,
-                                StackTrace = ex.StackTrace,
-                                IsNonRetriable = true,
-                            },
-                        },
-                    });
-                }
-
+                await this.PrepareOrchestratorResponseAsync(r, cancellation);
                 break;
             case P.EntityBatchResult r:
                 await this.ExternalizeEntityBatchResultAsync(r, cancellation);

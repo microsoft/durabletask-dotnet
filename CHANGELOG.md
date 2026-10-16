@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep externalized payload tokens stable across completion retries and release entity locks when payload storage permanently fails an orchestration.
 - Preserve the original orchestration version when restarting through the orchestration-service client shim ([#463](https://github.com/microsoft/durabletask-dotnet/issues/463)).
 - Support configurable scheduler token audiences and government defaults ([#806](https://github.com/microsoft/durabletask-dotnet/pull/806))
 

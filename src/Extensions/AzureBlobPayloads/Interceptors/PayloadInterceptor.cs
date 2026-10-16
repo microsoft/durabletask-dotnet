@@ -174,7 +174,7 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     protected abstract Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation);
 
     /// <summary>
-    /// Externalizes a payload if it exceeds the threshold.
+    /// Externalizes a payload if it exceeds the threshold and is not already a known payload token.
     /// </summary>
     /// <param name="value">The value to potentially externalize.</param>
     /// <param name="cancellation">Cancellation token.</param>
@@ -232,11 +232,11 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     /// Calculates a value's UTF-8 size and determines whether it requires externalization.
     /// </summary>
     /// <param name="value">The value to inspect.</param>
-    /// <param name="size">The calculated UTF-8 size, or zero when <paramref name="value"/> is empty.</param>
-    /// <returns><c>true</c> when the value meets the configured externalization threshold.</returns>
+    /// <param name="size">The calculated UTF-8 size, or zero when <paramref name="value"/> is empty or a known payload token.</param>
+    /// <returns><c>true</c> when a non-token value meets the configured externalization threshold.</returns>
     private protected bool TryGetExternalizationSize(string? value, out int size)
     {
-        if (string.IsNullOrEmpty(value))
+        if (string.IsNullOrEmpty(value) || this.payloadStore.IsKnownPayloadToken(value!))
         {
             size = 0;
             return false;

@@ -136,6 +136,12 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public bool InsertEntityUnlocksOnCompletion { get; set; }
 
         /// <summary>
+        /// Gets or sets optional payload preparation that runs before terminal entity cleanup and chunking.
+        /// Permanent payload failures can turn a pending response into a terminal completion.
+        /// </summary>
+        public Func<P.OrchestratorResponse, CancellationToken, Task>? PrepareOrchestratorResponseAsync { get; set; }
+
+        /// <summary>
         /// Gets or sets the maximum amount of time to wait for the Hello handshake with the backend before
         /// treating the connect attempt as failed and retrying. A non-positive value disables the deadline.
         /// Defaults to 30 seconds. The absolute deadline is clamped to UTC <see cref="DateTime.MaxValue"/>

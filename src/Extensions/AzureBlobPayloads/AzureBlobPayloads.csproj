@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\..\Client\Core\Client.csproj" />
+    <ProjectReference Include="..\..\LargePayloadPurge.Abstractions\LargePayloadPurge.Abstractions.csproj" />
     <ProjectReference Include="..\..\Worker\Core\Worker.csproj" />
     <ProjectReference Include="..\..\Client\Grpc\Client.Grpc.csproj" />
     <ProjectReference Include="..\..\Worker\Grpc\Worker.Grpc.csproj" />

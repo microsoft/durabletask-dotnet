@@ -1,0 +1,1 @@
+- Initial service and activity transport contracts for large payload auto-purge, using the canonical Durable Task SDK Client models.

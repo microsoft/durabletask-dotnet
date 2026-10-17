@@ -24,7 +24,7 @@ public class PurgeActivityBackendStatusTests
         // Arrange - the backend rejects the fetch RPC because it does not implement it.
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Unimplemented, "unknown method"))));
-        GetLargePayloadTombstonesActivity activity = new(client, new TestLogger<GetLargePayloadTombstonesActivity>());
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), new TestLogger<GetLargePayloadTombstonesActivity>());
 
         // Act
         Func<Task> act = () => activity.RunAsync(null!, 100);
@@ -42,7 +42,7 @@ public class PurgeActivityBackendStatusTests
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Unimplemented, "unknown method"))));
         ReportLargePayloadPurgeResultsActivity activity =
-            new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>());
+            new(new GrpcLargePayloadPurgeClient(client), new TestLogger<ReportLargePayloadPurgeResultsActivity>());
         List<LargePayloadPurgeResult> results = new()
         {
             new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
@@ -64,7 +64,7 @@ public class PurgeActivityBackendStatusTests
         TestLogger<GetLargePayloadTombstonesActivity> logger = new();
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.FailedPrecondition, Detail))));
-        GetLargePayloadTombstonesActivity activity = new(client, logger);
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), logger);
 
         // Act
         List<LargePayloadTombstone> tombstones = await activity.RunAsync(null!, 100);
@@ -88,7 +88,7 @@ public class PurgeActivityBackendStatusTests
         TestLogger<GetLargePayloadTombstonesActivity> logger = new();
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.FailedPrecondition, Detail))));
-        GetLargePayloadTombstonesActivity activity = new(client, logger);
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), logger);
 
         // Act
         List<LargePayloadTombstone> tombstones = await activity.RunAsync(null!, 100);
@@ -109,7 +109,7 @@ public class PurgeActivityBackendStatusTests
         // Arrange - cancellation is unrelated to the new precondition path and must keep its own translation.
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Cancelled, "canceled"))));
-        GetLargePayloadTombstonesActivity activity = new(client, new TestLogger<GetLargePayloadTombstonesActivity>());
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), new TestLogger<GetLargePayloadTombstonesActivity>());
 
         // Act
         Func<Task> act = () => activity.RunAsync(null!, 100);
@@ -126,7 +126,7 @@ public class PurgeActivityBackendStatusTests
         TestLogger<GetLargePayloadTombstonesActivity> logger = new();
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Unavailable, "backend down"))));
-        GetLargePayloadTombstonesActivity activity = new(client, logger);
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), logger);
 
         // Act
         Func<Task> act = () => activity.RunAsync(null!, 100);
@@ -147,7 +147,7 @@ public class PurgeActivityBackendStatusTests
         LargePayloadPurgeClient client = new(
             new ThrowingCallInvoker(new RpcException(new Status(StatusCode.Cancelled, "canceled"))));
         ReportLargePayloadPurgeResultsActivity activity =
-            new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>());
+            new(new GrpcLargePayloadPurgeClient(client), new TestLogger<ReportLargePayloadPurgeResultsActivity>());
         List<LargePayloadPurgeResult> results = new()
         {
             new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
@@ -172,7 +172,7 @@ public class PurgeActivityBackendStatusTests
         RpcException error = new(new Status(statusCode, "backend failure"));
         LargePayloadPurgeClient client = new(new ThrowingCallInvoker(error));
         TestLogger<ReportLargePayloadPurgeResultsActivity> logger = new();
-        ReportLargePayloadPurgeResultsActivity activity = new(client, logger);
+        ReportLargePayloadPurgeResultsActivity activity = new(new GrpcLargePayloadPurgeClient(client), logger);
         List<LargePayloadPurgeResult> results = new()
         {
             new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),
@@ -196,7 +196,7 @@ public class PurgeActivityBackendStatusTests
         RpcException error = new(new Status(StatusCode.DeadlineExceeded, "deadline exceeded"));
         ThrowingCallInvoker invoker = new(error);
         LargePayloadPurgeClient client = new(invoker);
-        GetLargePayloadTombstonesActivity activity = new(client, new TestLogger<GetLargePayloadTombstonesActivity>());
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), new TestLogger<GetLargePayloadTombstonesActivity>());
         DateTime earliestDeadline = DateTime.UtcNow.AddSeconds(60);
 
         // Act
@@ -223,7 +223,7 @@ public class PurgeActivityBackendStatusTests
         ThrowingCallInvoker invoker = new(error);
         LargePayloadPurgeClient client = new(invoker);
         ReportLargePayloadPurgeResultsActivity activity =
-            new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>());
+            new(new GrpcLargePayloadPurgeClient(client), new TestLogger<ReportLargePayloadPurgeResultsActivity>());
         List<LargePayloadPurgeResult> results = new()
         {
             new LargePayloadPurgeResult("tombstone-token-1", LargePayloadPurgeDisposition.Deleted),

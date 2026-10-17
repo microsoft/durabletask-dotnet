@@ -1,1 +1,2 @@
-- Add new `IDurableTaskClientBuilder AddDurableTaskClient(IServiceCollection, string?)` API
+- Add `LargePayloadTombstone`, `LargePayloadPurgeResult`, and `LargePayloadPurgeDisposition` models for large-payload blob cleanup.
+- Update the transitive `Microsoft.Azure.DurableTask.Core` dependency to `3.11.1`.

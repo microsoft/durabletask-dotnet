@@ -1,0 +1,6 @@
+- Return ordered, committed history snapshots for the current orchestration execution, including terminal events.
+- Treat omitted creation-time purge bounds as unbounded and evaluate explicit inclusive bounds in UTC.
+- Release temporary worker history snapshots after work-item completion or dispatch failure.
+- Await backend operations when creating, starting, stopping, or deleting a task hub.
+- Isolate activity and orchestration completion by per-delivery completion tokens. Direct gRPC callers must echo the received `completionToken`; partial or chunked orchestration completion is unsupported and fails the orchestration.
+- Update the `Microsoft.Azure.DurableTask.Core` dependency to `3.11.1`.

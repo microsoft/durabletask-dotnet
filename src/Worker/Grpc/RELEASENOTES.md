@@ -1,0 +1,3 @@
+- Add configurable gRPC interceptors that remain attached when the worker recreates its channel.
+- Keep infrastructure auto-purge tasks independent of customer task-version policies while preserving customer task filters and version checks.
+- Update the `Microsoft.Azure.DurableTask.Core` dependency to `3.11.1`.

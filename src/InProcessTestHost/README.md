@@ -54,7 +54,66 @@ Only the current execution is retained. `ContinueAsNew` replaces the previous ge
 history when the new generation commits. The underlying in-memory service also accepts an
 execution ID: null or empty selects the current execution, and a different execution ID
 returns no history (gRPC `NotFound`). Worker history streaming continues to use the dispatched
-episode's replay snapshot rather than this management snapshot.
+episode's replay snapshot rather than this management snapshot. These temporary worker snapshots
+remain available until the episode's final response and are released before the dispatcher commits
+that episode or starts its next generation. A failed dispatch also releases its snapshot; committed
+history is retained independently until purge or generation replacement.
+
+### 5. Purge completed instances
+
+```csharp
+PurgeResult purgeResult = await testHost.Client.PurgeAllInstancesAsync(
+    new PurgeInstancesFilter(Statuses: new[] { OrchestrationRuntimeStatus.Completed }));
+```
+
+`CreatedFrom` and `CreatedTo` are optional: omit either for an unbounded end of the
+creation-time range. You can provide `CreatedTo` without `CreatedFrom`. Explicit
+bounds are inclusive and are evaluated in UTC.
+
+## Work-Item Completion Ownership
+
+The in-process sidecar assigns a fresh token to every activity and orchestration delivery
+using the existing gRPC `WorkItem.completionToken` field. Completion is matched to that
+delivery, not just its logical instance or activity task ID. Duplicate and stale completion
+requests cannot settle a replacement delivery.
+
+Treat completion tokens as opaque, case-sensitive values and echo them exactly; do not
+parse them or change their casing. Logical instance IDs remain case-insensitive.
+
+**Migration for direct gRPC callers:** copy the received `WorkItem.completionToken` into
+`ActivityResponse.completionToken` or `OrchestratorResponse.completionToken` on every
+whole completion request. Keep the original instance ID and, for activities, the task ID
+from that delivery. Missing tokens or mismatched identities return `InvalidArgument`; unknown,
+wrong-kind, or already settled tokens return `NotFound`. Invalid token or identity requests
+do not consume a valid delivery.
+The SDK worker already echoes these tokens. SDK and protobuf implementations are unchanged.
+
+The test host accepts a single full orchestration completion response only. Deprecated partial
+or chunked completion is not supported: `isPartial = true` or any present `chunkIndex`
+(including zero on a final fragment) returns `InvalidArgument`. After validating the token
+and instance identity, the host settles that delivery with a single terminal Failed action
+and actionable `NotSupportedException` failure details. All fragment actions are discarded.
+The dispatcher commits the failure and releases the delivery's replay snapshot instead of
+leaving execution pending or repeatedly requeueing unsupported work. Invalid tokens or
+mismatched identities still leave valid deliveries untouched.
+
+Direct callers must send all actions in one response, with `isPartial` false and `chunkIndex`
+omitted, within the configured SDK chunk-size and gRPC message-size limits. The SDK's
+existing oversized-response chunking path is unchanged: if it sends chunks to this test
+host, the orchestration fails terminally; chunking is not supported here.
+
+Replay history streaming is separate and remains supported. A full response releases the
+delivery's temporary replay snapshot, while an already captured history reader can still finish
+independently.
+
+An accepted completion takes precedence over a later failure of that delivery's pending
+stream write. A send failure without an accepted completion still propagates. Closing the
+`GetWorkItems` stream does not implicitly settle already delivered work; completion can
+arrive through an independent RPC. No timeout, heartbeat, or lease behavior is added.
+
+Explicit abandonment is unchanged: both Abandon RPCs only acknowledge requests and do not
+validate tokens, cancel execution, or requeue work. Honoring abandonment is left to the
+dependent follow-up [#814](https://github.com/microsoft/durabletask-dotnet/pull/814).
 
 ## Dependency Injection
 

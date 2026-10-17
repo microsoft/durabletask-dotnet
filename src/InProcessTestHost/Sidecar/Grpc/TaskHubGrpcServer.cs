@@ -3,7 +3,6 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 using DurableTask.Core;
 using DurableTask.Core.Command;
@@ -33,30 +32,28 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 {
     static readonly Task<P.CompleteTaskResponse> EmptyCompleteTaskResponse = Task.FromResult(new P.CompleteTaskResponse());
 
-    readonly ConcurrentDictionary<string, TaskCompletionSource<GrpcOrchestratorExecutionResult>> pendingOrchestratorTasks = new(StringComparer.OrdinalIgnoreCase);
-    readonly ConcurrentDictionary<string, TaskCompletionSource<ActivityExecutionResult>> pendingActivityTasks = new(StringComparer.OrdinalIgnoreCase);
-    readonly ConcurrentDictionary<string, PartialOrchestratorChunk> partialOrchestratorChunks = new(StringComparer.OrdinalIgnoreCase);
+    // Token lookup and settlement share the same delivery-ownership boundary.
+    // Delivery tokens are opaque, case-sensitive keys; logical instance IDs are validated separately.
+    readonly object pendingTasksLock = new();
+    readonly Dictionary<string, PendingOrchestratorTask> pendingOrchestratorTasks = new(StringComparer.Ordinal);
+    readonly Dictionary<string, PendingActivityTask> pendingActivityTasks = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Helper class to accumulate partial orchestrator chunks.
-    /// </summary>
-    sealed class PartialOrchestratorChunk
+    sealed class PendingOrchestratorTask(string instanceId)
     {
-        readonly object lockObject = new();
+        public string InstanceId { get; } = instanceId;
 
-        public TaskCompletionSource<GrpcOrchestratorExecutionResult> TaskCompletionSource { get; set; } = null!;
-        public List<OrchestratorAction> AccumulatedActions { get; } = new();
+        public TaskCompletionSource<GrpcOrchestratorExecutionResult> CompletionSource { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
 
-        /// <summary>
-        /// Thread-safely adds actions to the accumulated actions list.
-        /// </summary>
-        public void AddActions(IEnumerable<OrchestratorAction> actions)
-        {
-            lock (this.lockObject)
-            {
-                this.AccumulatedActions.AddRange(actions);
-            }
-        }
+    sealed class PendingActivityTask(string instanceId, int taskId)
+    {
+        public string InstanceId { get; } = instanceId;
+
+        public int TaskId { get; } = taskId;
+
+        public TaskCompletionSource<ActivityExecutionResult> CompletionSource { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     readonly ILogger log;
@@ -193,10 +190,10 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <param name="request">The create task hub request.</param>
     /// <param name="context">The server call context.</param>
     /// <returns>A create task hub response.</returns>
-    public override Task<P.CreateTaskHubResponse> CreateTaskHub(P.CreateTaskHubRequest request, ServerCallContext context)
+    public override async Task<P.CreateTaskHubResponse> CreateTaskHub(P.CreateTaskHubRequest request, ServerCallContext context)
     {
-        this.service.CreateAsync(request.RecreateIfExists);
-        return Task.FromResult(new P.CreateTaskHubResponse());
+        await this.service.CreateAsync(request.RecreateIfExists);
+        return new P.CreateTaskHubResponse();
     }
 
     /// <summary>
@@ -205,10 +202,10 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <param name="request">The delete task hub request.</param>
     /// <param name="context">The server call context.</param>
     /// <returns>A delete task hub response.</returns>
-    public override Task<P.DeleteTaskHubResponse> DeleteTaskHub(P.DeleteTaskHubRequest request, ServerCallContext context)
+    public override async Task<P.DeleteTaskHubResponse> DeleteTaskHub(P.DeleteTaskHubRequest request, ServerCallContext context)
     {
-        this.service.DeleteAsync();
-        return Task.FromResult(new P.DeleteTaskHubResponse());
+        await this.service.DeleteAsync();
+        return new P.DeleteTaskHubResponse();
     }
 
     /// <summary>
@@ -582,73 +579,53 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>Returns an empty ack back to the remote SDK that we've received the completion.</returns>
     public override Task<P.CompleteTaskResponse> CompleteOrchestratorTask(P.OrchestratorResponse request, ServerCallContext context)
     {
-#pragma warning disable CS0612 // isPartial is deprecated but still required for chunked response wire compatibility.
-        if (request.IsPartial)
-#pragma warning restore CS0612
+        ValidateCompletionToken(request.CompletionToken);
+        lock (this.pendingTasksLock)
         {
-            // This is a partial chunk - accumulate actions but don't complete yet
-            PartialOrchestratorChunk partialChunk = this.partialOrchestratorChunks.GetOrAdd(
-                request.InstanceId,
-                _ =>
-                {
-                    // First chunk - get the TCS and initialize the partial chunk
-                    if (!this.pendingOrchestratorTasks.TryGetValue(request.InstanceId, out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
-                    {
-                        throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration with instance ID '{request.InstanceId}' not found"));
-                    }
-
-                    return new PartialOrchestratorChunk
-                    {
-                        TaskCompletionSource = tcs,
-                    };
-                });
-
-            // Accumulate actions from this chunk (thread-safe)
-            partialChunk.AddActions(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
-
-            return EmptyCompleteTaskResponse;
-        }
-
-        // This is the final chunk (or a single non-chunked response)
-        if (this.partialOrchestratorChunks.TryRemove(request.InstanceId, out PartialOrchestratorChunk? existingPartialChunk))
-        {
-            // We've been accumulating chunks - combine with final chunk (thread-safe)
-            existingPartialChunk.AddActions(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
-
-            GrpcOrchestratorExecutionResult res = new()
+            if (!this.pendingOrchestratorTasks.TryGetValue(request.CompletionToken, out PendingOrchestratorTask? pending))
             {
-                Actions = existingPartialChunk.AccumulatedActions,
+                throw new RpcException(new Status(StatusCode.NotFound, "Orchestrator delivery not found."));
+            }
+
+            if (!string.Equals(pending.InstanceId, request.InstanceId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Completion token does not match the orchestration instance."));
+            }
+
+#pragma warning disable CS0612 // Reject deprecated chunk fields instead of treating a fragment as a full response.
+            if (request.IsPartial || request.ChunkIndex is not null)
+#pragma warning restore CS0612
+            {
+                const string unsupportedMessage =
+                    "Chunked orchestrator completion is not supported by the in-process test host. Send a single full response without chunk fields.";
+                GrpcOrchestratorExecutionResult failure = new()
+                {
+                    Actions = [new OrchestrationCompleteOrchestratorAction
+                    {
+                        OrchestrationStatus = OrchestrationStatus.Failed,
+                        FailureDetails = new FailureDetails(typeof(NotSupportedException).FullName!, unsupportedMessage, null, null, true),
+                    }],
+                };
+
+                // A failed-action result commits terminal failure; faulting the source would requeue unsupported work.
+                this.pendingOrchestratorTasks.Remove(request.CompletionToken);
+                pending.CompletionSource.SetResult(failure);
+                throw new RpcException(new Status(StatusCode.InvalidArgument, unsupportedMessage));
+            }
+
+            List<OrchestratorAction> actions = request.Actions.Select(ProtobufUtils.ToOrchestratorAction).ToList();
+            GrpcOrchestratorExecutionResult result = new()
+            {
+                Actions = actions,
                 CustomStatus = request.CustomStatus,
+                OrchestrationActivitySpanId = request.OrchestrationTraceContext?.SpanID,
+                OrchestrationActivityStartTime = request.OrchestrationTraceContext?.SpanStartTime?.ToDateTimeOffset(),
             };
 
-            // Remove the TCS from pending tasks and complete it
-            this.pendingOrchestratorTasks.TryRemove(request.InstanceId, out _);
-            existingPartialChunk.TaskCompletionSource.TrySetResult(res);
-
+            this.pendingOrchestratorTasks.Remove(request.CompletionToken);
+            pending.CompletionSource.SetResult(result);
             return EmptyCompleteTaskResponse;
         }
-
-        // Single non-chunked response (no partial chunks)
-        if (!this.pendingOrchestratorTasks.TryRemove(
-            request.InstanceId,
-            out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
-        {
-            // TODO: Log?
-            // CA2201: Use specific exception types
-            throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration not found"));
-        }
-
-        GrpcOrchestratorExecutionResult result = new()
-        {
-            Actions = request.Actions.Select(ProtobufUtils.ToOrchestratorAction),
-            CustomStatus = request.CustomStatus,
-            OrchestrationActivitySpanId = request.OrchestrationTraceContext?.SpanID,
-            OrchestrationActivityStartTime = request.OrchestrationTraceContext?.SpanStartTime?.ToDateTimeOffset(),
-        };
-
-        tcs.TrySetResult(result);
-
-        return EmptyCompleteTaskResponse;
     }
 
     /// <summary>
@@ -659,31 +636,33 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>Returns an empty ack back to the remote SDK that we've received the completion.</returns>
     public override Task<P.CompleteTaskResponse> CompleteActivityTask(P.ActivityResponse request, ServerCallContext context)
     {
-        string taskIdKey = GetTaskIdKey(request.InstanceId, request.TaskId);
-        if (!this.pendingActivityTasks.TryRemove(taskIdKey, out TaskCompletionSource<ActivityExecutionResult>? tcs))
+        ValidateCompletionToken(request.CompletionToken);
+        lock (this.pendingTasksLock)
         {
-            // TODO: Log?
-            // CA2201: Use specific exception types
-            throw new RpcException(new Status(StatusCode.NotFound, $"Activity not found"));
-        }
+            if (!this.pendingActivityTasks.TryGetValue(request.CompletionToken, out PendingActivityTask? pending))
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, "Activity delivery not found."));
+            }
 
-        HistoryEvent resultEvent;
-        if (request.FailureDetails == null)
-        {
-            resultEvent = new TaskCompletedEvent(-1, request.TaskId, request.Result);
-        }
-        else
-        {
-            resultEvent = new TaskFailedEvent(
-                eventId: -1,
-                taskScheduledId: request.TaskId,
-                reason: null,
-                details: null,
-                failureDetails: ProtobufUtils.GetFailureDetails(request.FailureDetails));
-        }
+            if (!string.Equals(pending.InstanceId, request.InstanceId, StringComparison.OrdinalIgnoreCase) ||
+                pending.TaskId != request.TaskId)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Completion token does not match the activity instance and task ID."));
+            }
 
-        tcs.TrySetResult(new ActivityExecutionResult { ResponseEvent = resultEvent });
-        return EmptyCompleteTaskResponse;
+            HistoryEvent resultEvent = request.FailureDetails == null
+                ? new TaskCompletedEvent(-1, request.TaskId, request.Result)
+                : new TaskFailedEvent(
+                    eventId: -1,
+                    taskScheduledId: request.TaskId,
+                    reason: null,
+                    details: null,
+                    failureDetails: ProtobufUtils.GetFailureDetails(request.FailureDetails));
+
+            this.pendingActivityTasks.Remove(request.CompletionToken);
+            pending.CompletionSource.SetResult(new ActivityExecutionResult { ResponseEvent = resultEvent });
+            return EmptyCompleteTaskResponse;
+        }
     }
 
     /// <summary>
@@ -818,10 +797,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             }
             : null;
 
-        // Create a task completion source that represents the async completion of the orchestrator execution.
-        // This must be done before we start the orchestrator execution.
-        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs =
-            this.CreateTaskCompletionSourceForOrchestrator(instance.InstanceId);
+        string completionToken = Guid.NewGuid().ToString("N");
+        PendingOrchestratorTask pending = new(instance.InstanceId);
+        lock (this.pendingTasksLock)
+        {
+            this.pendingOrchestratorTasks.Add(completionToken, pending);
+        }
+
+        List<P.HistoryEvent>? streamedPastEvents = null;
 
         try
         {
@@ -845,7 +828,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             if (this.supportsHistoryStreaming && totalBytes > HistoryStreamingThresholdBytes)
             {
                 orkRequest.RequiresHistoryStreaming = true;
-                // Store past events to serve via StreamInstanceHistory
+                // Keep this episode's replay snapshot available until execution finishes.
+                streamedPastEvents = protoPastEvents;
                 this.streamingPastEvents[instance.InstanceId] = protoPastEvents;
             }
             else
@@ -857,33 +841,57 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             await this.SendWorkItemToClientAsync(new P.WorkItem
             {
                 OrchestratorRequest = orkRequest,
+                CompletionToken = completionToken,
             });
+
+            // The TCS will be completed on the message stream handler when it gets a response back from the remote process
+            // TODO: How should we handle timeouts if the remote process never sends a response?
+            //       Probably need to have a static timeout (e.g. 5 minutes).
+            return await pending.CompletionSource.Task;
         }
         catch
         {
-            // Remove the TaskCompletionSource that we just created
-            this.RemoveOrchestratorTaskCompletionSource(instance.InstanceId);
-            throw;
-        }
+            lock (this.pendingTasksLock)
+            {
+                if (this.pendingOrchestratorTasks.Remove(completionToken) ||
+                    !pending.CompletionSource.Task.IsCompletedSuccessfully)
+                {
+                    throw;
+                }
+            }
 
-        // The TCS will be completed on the message stream handler when it gets a response back from the remote process
-        // TODO: How should we handle timeouts if the remote process never sends a response?
-        //       Probably need to have a static timeout (e.g. 5 minutes).
-        return await tcs.Task;
+            // An accepted completion takes precedence over a late send failure.
+            return await pending.CompletionSource.Task;
+        }
+        finally
+        {
+            lock (this.pendingTasksLock)
+            {
+                this.pendingOrchestratorTasks.Remove(completionToken);
+            }
+
+            if (streamedPastEvents is not null)
+            {
+                this.streamingPastEvents.TryRemove(
+                    new KeyValuePair<string, List<P.HistoryEvent>>(instance.InstanceId, streamedPastEvents));
+            }
+        }
     }
 
     async Task<ActivityExecutionResult> ITaskExecutor.ExecuteActivity(OrchestrationInstance instance, TaskScheduledEvent activityEvent)
     {
-        // Create a task completion source that represents the async completion of the activity.
-        // This must be done before we start the activity execution.
-        TaskCompletionSource<ActivityExecutionResult> tcs = this.CreateTaskCompletionSourceForActivity(
-            instance.InstanceId,
-            activityEvent.EventId);
+        string completionToken = Guid.NewGuid().ToString("N");
+        PendingActivityTask pending = new(instance.InstanceId, activityEvent.EventId);
+        lock (this.pendingTasksLock)
+        {
+            this.pendingActivityTasks.Add(completionToken, pending);
+        }
 
         try
         {
             P.WorkItem workItem = new()
             {
+                CompletionToken = completionToken,
                 ActivityRequest = new P.ActivityRequest
                 {
                     Name = activityEvent.Name,
@@ -911,19 +919,31 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             }
 
             await this.SendWorkItemToClientAsync(workItem);
+
+            // Closing the work-item stream does not settle an already delivered activity.
+            return await pending.CompletionSource.Task;
         }
         catch
         {
-            // Remove the TaskCompletionSource that we just created
-            this.RemoveActivityTaskCompletionSource(instance.InstanceId, activityEvent.EventId);
-            throw;
-        }
+            lock (this.pendingTasksLock)
+            {
+                if (this.pendingActivityTasks.Remove(completionToken) ||
+                    !pending.CompletionSource.Task.IsCompletedSuccessfully)
+                {
+                    throw;
+                }
+            }
 
-        // The TCS will be completed on the message stream handler when it gets a response back from the remote process.
-        // TODO: How should we handle timeouts if the remote process never sends a response?
-        //       Probably need a timeout feature for activities and/or a heartbeat API that activities
-        //       can use to signal that they're still running.
-        return await tcs.Task;
+            // An accepted completion takes precedence over a late send failure.
+            return await pending.CompletionSource.Task;
+        }
+        finally
+        {
+            lock (this.pendingTasksLock)
+            {
+                this.pendingActivityTasks.Remove(completionToken);
+            }
+        }
     }
 
     async Task SendWorkItemToClientAsync(P.WorkItem workItem)
@@ -975,36 +995,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
-    TaskCompletionSource<GrpcOrchestratorExecutionResult> CreateTaskCompletionSourceForOrchestrator(string instanceId)
+    static void ValidateCompletionToken(string completionToken)
     {
-        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        this.pendingOrchestratorTasks.TryAdd(instanceId, tcs);
-        return tcs;
-    }
-
-    void RemoveOrchestratorTaskCompletionSource(string instanceId)
-    {
-        this.pendingOrchestratorTasks.TryRemove(instanceId, out _);
-        this.partialOrchestratorChunks.TryRemove(instanceId, out _);
-    }
-
-    TaskCompletionSource<ActivityExecutionResult> CreateTaskCompletionSourceForActivity(string instanceId, int taskId)
-    {
-        string taskIdKey = GetTaskIdKey(instanceId, taskId);
-        TaskCompletionSource<ActivityExecutionResult> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        this.pendingActivityTasks.TryAdd(taskIdKey, tcs);
-        return tcs;
-    }
-
-    void RemoveActivityTaskCompletionSource(string instanceId, int taskId)
-    {
-        string taskIdKey = GetTaskIdKey(instanceId, taskId);
-        this.pendingActivityTasks.TryRemove(taskIdKey, out _);
-    }
-
-    static string GetTaskIdKey(string instanceId, int taskId)
-    {
-        return string.Concat(instanceId, "_", taskId.ToString(CultureInfo.InvariantCulture));
+        if (string.IsNullOrEmpty(completionToken))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "A completion token is required."));
+        }
     }
 
     /// <summary>

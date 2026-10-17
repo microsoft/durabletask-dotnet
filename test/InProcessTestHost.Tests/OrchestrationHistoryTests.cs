@@ -15,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
+using PurgeResult = Microsoft.DurableTask.Client.PurgeResult;
 
 namespace InProcessTestHost.Tests;
 
@@ -130,6 +131,76 @@ public class OrchestrationHistoryTests
             completed.Take(running.Count).Select(ProtobufUtils.ToHistoryEventProto));
         Assert.Single(completed.OfType<TaskCompletedEvent>());
         Assert.Single(completed.OfType<ExecutionCompletedEvent>());
+    }
+
+    /// <summary>
+    /// Reuses one host without retaining completed episodes' replay snapshots or losing committed history.
+    /// </summary>
+    [Theory]
+    [InlineData(32, false)]
+    [InlineData(600 * 1024, false)]
+    [InlineData(600 * 1024, true)]
+    public async Task GetHistoryAsync_ReusedHost_ReleasesWorkerSnapshots(int payloadSize, bool continueAsNew)
+    {
+        // Arrange
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+        HistoryRequestInterceptor interceptor = new();
+        await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(tasks =>
+        {
+            tasks.AddOrchestratorFunc<string, int>("PayloadLength", async (context, input) =>
+            {
+                int length = await context.CallActivityAsync<int>("Length", input);
+                if (continueAsNew && input[0] == 'x')
+                {
+                    context.ContinueAsNew(new string('y', input.Length));
+                }
+
+                return length;
+            });
+            tasks.AddActivityFunc<string, int>("Length", (context, input) => input.Length);
+        }, new DurableTaskTestHostOptions
+        {
+            ConfigureServices = services => services.Configure<GrpcDurableTaskWorkerOptions>(
+                options => options.Interceptors.Add(interceptor)),
+        }, timeout.Token);
+        string[] instanceIds = new string[2];
+
+        for (int i = 0; i < instanceIds.Length; i++)
+        {
+            // Act
+            string instanceId = await host.Client.ScheduleNewOrchestrationInstanceAsync(
+                "PayloadLength", new string('x', payloadSize), cancellation: timeout.Token);
+            instanceIds[i] = instanceId;
+            OrchestrationMetadata metadata = await host.Client.WaitForInstanceCompletionAsync(
+                instanceId, getInputsAndOutputs: true, cancellation: timeout.Token);
+            IList<HistoryEvent> history = await host.Client.GetOrchestrationHistoryAsync(instanceId, timeout.Token);
+
+            // Assert
+            Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+            Assert.Equal(payloadSize, metadata.ReadOutputAs<int>());
+            Assert.Equal(8, history.Count);
+            Assert.StartsWith(continueAsNew ? "\"y" : "\"x", Assert.Single(history.OfType<ExecutionStartedEvent>()).Input);
+            Assert.Single(history.OfType<TaskCompletedEvent>());
+            Assert.Single(history.OfType<ExecutionCompletedEvent>());
+            int pastEventBytes = history.Take(4).Sum(e => ProtobufUtils.ToHistoryEventProto(e).CalculateSize());
+            bool streamsHistory = payloadSize > 32;
+            int streamsPerInstance = streamsHistory ? (continueAsNew ? 2 : 1) : 0;
+            this.output.WriteLine(
+                $"Instance {i + 1}: past-event protobuf size {pastEventBytes} bytes; worker history requests {interceptor.HistoryRequestCount}");
+            Assert.Equal(streamsHistory, pastEventBytes > 1024 * 1024);
+            Assert.Equal(streamsPerInstance * (i + 1), interceptor.HistoryRequestCount);
+            Assert.Equal(0, WorkerHistorySnapshotTestHelpers.GetSnapshots(host).Count);
+
+            PurgeResult purge = await host.Client.PurgeInstanceAsync(instanceId, cancellation: timeout.Token);
+            Assert.Equal(1, purge.PurgedInstanceCount);
+            Assert.Null(await host.Client.GetInstanceAsync(instanceId, cancellation: timeout.Token));
+            ArgumentException missing = await Assert.ThrowsAsync<ArgumentException>(() =>
+                host.Client.GetOrchestrationHistoryAsync(instanceId, timeout.Token));
+            Assert.Equal(StatusCode.NotFound, Assert.IsType<RpcException>(missing.InnerException).StatusCode);
+            Assert.Equal(0, WorkerHistorySnapshotTestHelpers.GetSnapshots(host).Count);
+        }
+
+        Assert.NotEqual(instanceIds[0], instanceIds[1]);
     }
 
     [Fact]

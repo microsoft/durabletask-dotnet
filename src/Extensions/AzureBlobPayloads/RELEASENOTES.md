@@ -1,4 +1,0 @@
-- Add opt-in large-payload blob auto-purge with a persistent orchestration, controlled through `SetLargePayloadAutoPurgeAsync`.
-- Reclaim self-describing `blob:v2` payloads; legacy `blob:v1` payloads are not deleted.
-- Expose the shared purge orchestrator and activities for alternate-host integration through `Microsoft.DurableTask.LargePayloadPurge.Abstractions`.
-- Keep purge transport attached to each named worker's authenticated channel across reconnections, and include infrastructure tasks in work-item filters without applying customer task-version policies to them.

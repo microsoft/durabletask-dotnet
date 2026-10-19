@@ -1,1 +1,1 @@
-- Add `ILargePayloadPurgeClient` fetch/report and `IOrchestrationServiceLargePayloadPurgeClient` service-setting contracts for large-payload auto-purge, using the canonical Durable Task SDK Client models.
+- Initial service and activity transport contracts for large payload auto-purge, using the canonical Durable Task SDK Client models.

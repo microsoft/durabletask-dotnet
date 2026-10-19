@@ -1,1 +1,1 @@
-- Update the transitive `Microsoft.Azure.DurableTask.Core` dependency to `3.11.1`.
+- Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API

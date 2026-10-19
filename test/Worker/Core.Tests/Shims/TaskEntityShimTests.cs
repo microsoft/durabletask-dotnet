@@ -232,11 +232,16 @@ public class TaskEntityShimTests
             });
     }
 
-    [Fact]
-    public async Task ScheduleNewOrchestration_NullTagValue_RollsBackWithinOperationAsync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ScheduleNewOrchestration_NullTagKeyOrValue_RollsBackWithinOperationAsync(bool nullKey)
     {
         // Arrange
         string? stateAfterFailure = null;
+        KeyValuePair<string, string>[] nullKeyEntries = [new("valid", string.Empty), new(null!, "invalid")];
+        Mock<IReadOnlyDictionary<string, string>> nullKeyTags = new(MockBehavior.Strict);
+        nullKeyTags.Setup(tags => tags.GetEnumerator()).Returns(() => nullKeyEntries.AsEnumerable().GetEnumerator());
 
         // Act
         EntityBatchResult result = await RunAsync(operation =>
@@ -255,7 +260,9 @@ public class TaskEntityShimTests
             {
                 operation.Context.ScheduleNewOrchestration("Child", new StartOrchestrationOptions("invalid-tags")
                 {
-                    Tags = new Dictionary<string, string> { ["valid"] = string.Empty, ["invalid"] = null! },
+                    Tags = nullKey
+                        ? nullKeyTags.Object
+                        : new Dictionary<string, string> { ["valid"] = string.Empty, ["invalid"] = null! },
                 });
             }
 

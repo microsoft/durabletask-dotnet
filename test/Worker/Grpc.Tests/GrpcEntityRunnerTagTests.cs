@@ -213,12 +213,17 @@ public class GrpcEntityRunnerTagTests
             });
     }
 
-    [Fact]
-    public async Task LoadAndRunAsync_NullTagValue_RollsBackBeforeSerializationAndCachingAsync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadAndRunAsync_NullTagKeyOrValue_RollsBackBeforeSerializationAndCachingAsync(bool nullKey)
     {
         // Arrange
         using ExtendedSessionsCache cache = new();
         string? stateAfterFailure = null;
+        KeyValuePair<string, string>[] nullKeyEntries = [new("valid", string.Empty), new(null!, "invalid")];
+        Mock<IReadOnlyDictionary<string, string>> nullKeyTags = new(MockBehavior.Strict);
+        nullKeyTags.Setup(tags => tags.GetEnumerator()).Returns(() => nullKeyEntries.AsEnumerable().GetEnumerator());
 
         // Act
         P.EntityBatchResult result = await RunAsync(operation =>
@@ -237,7 +242,9 @@ public class GrpcEntityRunnerTagTests
             {
                 operation.Context.ScheduleNewOrchestration("Child", new StartOrchestrationOptions("invalid-tags")
                 {
-                    Tags = new Dictionary<string, string> { ["valid"] = string.Empty, ["invalid"] = null! },
+                    Tags = nullKey
+                        ? nullKeyTags.Object
+                        : new Dictionary<string, string> { ["valid"] = string.Empty, ["invalid"] = null! },
                 });
             }
 

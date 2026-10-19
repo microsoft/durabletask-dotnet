@@ -72,6 +72,7 @@ $packages = @(
     "Microsoft.DurableTask.Worker.Grpc",
     "Microsoft.DurableTask.Client.OrchestrationServiceClientShim",
     "Microsoft.DurableTask.Extensions.AzureBlobPayloads",
+    "Microsoft.DurableTask.LargePayloadPurge.Abstractions",
     "Microsoft.DurableTask.Client.AzureManaged",
     "Microsoft.DurableTask.Worker.AzureManaged",
     "Microsoft.DurableTask.ScheduledTasks",

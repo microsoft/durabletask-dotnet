@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Matches the Client model library; .NET 8/10 consumers use the same interface-only asset. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>Service and activity transport contracts for large payload purge using the Durable Task SDK client models.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Client\Core\Client.csproj" />
+  </ItemGroup>
+
+</Project>

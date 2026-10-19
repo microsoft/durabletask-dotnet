@@ -24,7 +24,7 @@ public class PurgeActivityDeadlineTests
         using BlockingHttpMessageHandler handler = new();
         using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions { HttpHandler = handler });
         LargePayloadPurgeClient client = new(channel);
-        GetLargePayloadTombstonesActivity activity = new(client, new TestLogger<GetLargePayloadTombstonesActivity>())
+        GetLargePayloadTombstonesActivity activity = new(new GrpcLargePayloadPurgeClient(client), new TestLogger<GetLargePayloadTombstonesActivity>())
         {
             RpcTimeout = TimeSpan.FromMilliseconds(200),
         };
@@ -47,7 +47,7 @@ public class PurgeActivityDeadlineTests
         using BlockingHttpMessageHandler handler = new();
         using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions { HttpHandler = handler });
         LargePayloadPurgeClient client = new(channel);
-        ReportLargePayloadPurgeResultsActivity activity = new(client, new TestLogger<ReportLargePayloadPurgeResultsActivity>())
+        ReportLargePayloadPurgeResultsActivity activity = new(new GrpcLargePayloadPurgeClient(client), new TestLogger<ReportLargePayloadPurgeResultsActivity>())
         {
             RpcTimeout = TimeSpan.FromMilliseconds(200),
         };

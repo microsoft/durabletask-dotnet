@@ -248,6 +248,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 Version = options?.Version ?? string.Empty,
                 InstanceId = instanceId,
                 Input = this.dataConverter.Serialize(input),
+                Tags = options?.Tags?.ToDictionary(tag => tag.Key, tag => Check.NotNull(tag.Value)),
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
                 RequestTime = DateTimeOffset.UtcNow,
                 ParentTraceContext = this.parentTraceContext,

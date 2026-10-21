@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+
+## v1.27.1
+- Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))
+
 ## v1.27.0
 
 - Add `Microsoft.DurableTask.LargePayloadPurge.Abstractions` with shared fetch/report and service-setting interfaces, and expose the existing blob purge tasks for host integration ([#805](https://github.com/microsoft/durabletask-dotnet/pull/805)).

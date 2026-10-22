@@ -21,19 +21,25 @@ Its package and assembly name is `Microsoft.DurableTask.LargePayloadPurge.Abstra
 standard `Microsoft.DurableTask.*.dll` signing pattern. The existing source traversal, SBOM inclusion,
 NuGet signing and per-package approval-gated publication steps apply.
 
-Contract publication also waits for successful Client and Abstractions publication. If either prerequisite
-fails, including a duplicate-version upload failure, or is skipped or canceled, contract publication is
-skipped rather than treating that result as success.
+Contract publication also waits for successful Client and Abstractions jobs. Each prerequisite must
+either publish successfully or complete an explicit successful no-op because the operator confirmed its
+selected artifact version is already on NuGet.org using `alreadyPublishedPackages`. If either job fails,
+including a duplicate-version upload failure, or is intentionally held back, skipped or canceled, contract
+publication is skipped rather than treating that result as success.
 
 `Microsoft.DurableTask.Extensions.AzureBlobPayloads` depends on the contract package at every target
 framework, so its publication job also waits for successful contract publication (in addition to approval).
-If contract publication fails for any reason above, including a duplicate-version upload failure, or is
-skipped or canceled, Blob publication is skipped rather than treating that result as success. This extends
-the same fail-closed chain: approval, then Client and Abstractions, then the contract, then Blob. A
-prerequisite that deliberately skips — for example because its exact version is already published — still
-skips the dependent job; this is not a general-purpose publication-idempotency mechanism, just the minimum
-ordering these two packages require. Other packages retain their own independent publication jobs gated
-only on approval.
+If the contract job fails for any reason above, including a duplicate-version upload failure, or is
+intentionally held back, skipped or canceled, Blob publication is skipped rather than treating that result
+as success. This extends the same fail-closed chain: approval, then Client and Abstractions, then the
+contract, then Blob. An already-published confirmation succeeds without staging or submitting that
+package, allowing recovery of a partial release: confirm Client/Abstractions to retry the contract and
+Blob. For a Blob-only retry, confirm all selected versions already published, including Client,
+Abstractions and the contract; their jobs still follow the dependency chain but complete as no-ops.
+Intentional holds belong in `skipPackages` and still block dependents. If a package appears in both
+lists, the hold takes precedence; it is not permission to publish dependents. Both lists default to
+empty and apply only to the selected run. Other packages retain their own independent publication
+jobs gated only on approval.
 
 Keep its `RELEASENOTES.md`: `eng/targets/Release.targets` reads it into NuGet package metadata, whereas the
 root `CHANGELOG.md` retains repository release history. The shared target also appends a link using the
@@ -131,16 +137,21 @@ After the PR is merged, follow the **Publishing** steps below.
    official artifact run is selected.
 4. Supply `nuGetOrganization`, the NuGet.org organization confirmed during ESRP NuGet onboarding.
    There is no organization default; an unset or unresolved value fails before any ESRP submission.
-   Set `skipPackages` to an array of exact public package IDs whose selected versions are already
-   published or are intentionally held back. This is a per-run exclusion, not a permanent package removal.
+   Set `alreadyPublishedPackages` to exact public package IDs only after verifying their **selected
+   artifact versions** already exist on NuGet.org. Those jobs log a successful no-op, without package
+   staging or an ESRP task, so dependent jobs can proceed.
+   Use `skipPackages` only for intentional holds: those jobs are skipped and still block dependents.
+   A hold takes precedence if a package is in both lists. These are per-run inputs, not permanent removals.
 5. The publisher first stages the signed packages to the existing internal ADO feed. Only after that
    succeeds does `nugetApproval` wait for manual approval. The gate displays the selected organization
-   and requires confirmation of NuGet onboarding, publisher allowlisting and Trusted Publishing.
-   Do not approve until those prerequisites, the selected artifacts, exclusion list and dependency
+   and both package lists, and requires confirmation of NuGet onboarding, publisher allowlisting,
+   Trusted Publishing and each exact already-published version.
+   Do not approve until those prerequisites, the selected artifacts, both lists and dependency
    availability have been checked. Stop at the gate for a validation-only trial.
    Rejecting or timing out the gate prevents all public publication.
-6. After approval, each selected public package is copied unchanged into its own ESRP folder using
-   the exact nuspec ID, then submitted with `EsrpRelease@14` and `WaitForReleaseCompletion: true`.
+6. After approval, each public package not held or already confirmed published is copied unchanged into
+   its own ESRP folder using the exact nuspec ID, then submitted with `EsrpRelease@14` and
+   `WaitForReleaseCompletion: true`.
    Internal-only/test packages and symbol packages are not submitted. Missing or multiple matching
    packages fail explicitly. Each package retains its independent job and the dependency gates above;
    ESRP does not guarantee ordering within a multi-package submission.
@@ -175,9 +186,10 @@ The signed official drop has 18 `.nupkg` files: 14 public stable packages at `1.
 `ExportHistory` and `ScheduledTasks` at `1.27.1-preview.2`, the unchanged public
 `Microsoft.DurableTask.Generators` at `2.1.0-preview.2`, and internal-only
 `Microsoft.DurableTask.InProcessTestHost` at `0.2.3-preview.1`.
-For this trial, set `skipPackages: [Microsoft.DurableTask.Generators]` because that exact generator
-version is already public. This leaves 16 public targets; the test host has no public job.
-The default exclusion list is empty so future generator releases remain enabled.
+For this trial, set `alreadyPublishedPackages: [Microsoft.DurableTask.Generators]` and
+`skipPackages: []` because that exact generator version is already public. Its job succeeds through a
+logged no-op, not an ESRP submission. This leaves 16 public submission targets; the test host has no
+public job. Both default lists are empty so future generator releases remain enabled.
 Keep `officialPipeline` pinned to the approved signed run `311120` (build number `20261021.2`,
 source `2a409da4ac7dcf03c4f25985337eb4623ea6394e`), while the publisher uses the new reviewed and mirrored
 source containing this migration (normally the reviewed `main` commit). A run ID and build number
@@ -187,8 +199,9 @@ search indexing alone is not proof that a version has never been published.
 
 #### Pinned trial request and queue permissions
 
-The pipeline's `skipPackages` parameter is a YAML/UI list, for example
-`[Microsoft.DurableTask.Generators]`. For the verified REST request through the installed Azure DevOps
+The pipeline's `skipPackages` and `alreadyPublishedPackages` parameters are YAML/UI lists. For the
+trial, use an empty hold list and `[Microsoft.DurableTask.Generators]` as the already-published list.
+For the verified REST request through the installed Azure DevOps
 CLI SDK, however, `RunPipelineParameters.template_parameters` is typed as `{str}`: send
 `templateParameters` as a map of strings, with the list serialized as JSON **inside a string**.
 This request fragment illustrates the wire value; `<confirmed-org>` is a placeholder, not a default:
@@ -197,12 +210,13 @@ This request fragment illustrates the wire value; `<confirmed-org>` is a placeho
 {
   "templateParameters": {
     "nuGetOrganization": "<confirmed-org>",
-    "skipPackages": "[\"Microsoft.DurableTask.Generators\"]"
+    "skipPackages": "[]",
+    "alreadyPublishedPackages": "[\"Microsoft.DurableTask.Generators\"]"
   }
 }
 ```
 
-Do not send `skipPackages` as a native JSON array through that client. In the trial, that request
+Do not send either list as a native JSON array through that client. In the earlier trial, that request
 invalidated or ignored overrides and resolved default source/artifact selections instead.
 Verify the resolved publisher source, official artifact run, organization bindings and exclusion
 conditions in the actual expanded preview before attempting a run; an HTTP 200 alone is insufficient.
@@ -217,7 +231,7 @@ credentials/APIs, or loosen policies to bypass the denial. This queue-configurat
 separate from authorization to use `dtfx-internal-esrp-prod`, ESRP `ESRPRELPACMAN` allowlisting,
 NuGet channel onboarding and Trusted Publishing.
 
-#### Observed trial status (2026-10-22)
+#### Observed trial status before partial-release recovery fix (2026-10-22)
 
 The tested runtime source is `261b233a828211dae2439afba6a9cf3601d79c5c`. Mirror run `311345`
 succeeded and its locked internal ref matched that commit. The actual-source publisher preview
@@ -236,7 +250,11 @@ This is a hard ADO authorization blocker, not a source compilation failure or an
 ESRP/backend/NuGet failure. No permission grant, policy change, approval or public distribution was
 performed. Post-denial run inventory confirmed that the corrected request created no run and that
 `311347` was completed/canceled; no accidental publisher remained active.
-Later documentation-only commits do not replace `261b233a` as the exact runtime tested.
+Later documentation-only commits did not replace `261b233a` as the exact runtime tested in that preview.
+The subsequent source change adds `alreadyPublishedPackages` to distinguish successful no-ops from
+intentional holds. It is not covered by that earlier server preview; the final recovery/holdback variants
+need their own actual-source compilation before use. The queue-configuration and downstream onboarding
+prerequisites remain separate and unresolved; no trial parameter change bypasses them.
 
 For source-only validation, PowerShell 7 with the `Pester` (5.x) and `powershell-yaml` modules can run:
 

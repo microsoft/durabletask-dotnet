@@ -8,7 +8,11 @@ parameters:
   type: string
   default: ''
 - name: skipPackages
-  displayName: Public package IDs to skip for this run (already published or intentionally held back)
+  displayName: Public package IDs intentionally held back (also blocks dependent releases)
+  type: object
+  default: []
+- name: alreadyPublishedPackages
+  displayName: Public package IDs whose selected versions are confirmed on NuGet.org (successful no-op)
   type: object
   default: []
 
@@ -77,7 +81,12 @@ extends:
                 Confirm that this is the organization approved during ESRP NuGet onboarding.
                 Confirm the Durable ESRP client is allowlisted for ESRPRELPACMAN and the NuGet
                 Trusted Publishing policy covers the selected package IDs/prefixes and operations.
-                Validate the selected signed official build, package exclusions and dependency availability.
+                Intentional holds (skipPackages): ${{ join(', ', parameters.skipPackages) }}
+                Selected versions confirmed already public (alreadyPublishedPackages): ${{ join(', ', parameters.alreadyPublishedPackages) }}
+                Confirm the exact selected artifact version of each already-published package exists on NuGet.org.
+                Those jobs succeed without staging or ESRP submission so dependent releases can proceed.
+                Intentional holds take precedence over already-published confirmations and block dependents.
+                Validate the selected signed official build, both package lists and dependency availability.
                 Stop here for a validation-only trial or if any prerequisite remains unverified.
                 Approving this gate starts public ESRP NuGet submissions.
               onTimeout: 'reject'
@@ -85,7 +94,8 @@ extends:
       #================== NuGet publishing section ==================
       # Keep one package per ESRP submission: duplicate versions fail independently, and ESRP
       # does not guarantee publication order within a submission. Preserve the dependency jobs below.
-      # skipPackages applies only to this run; it does not remove future releases of a package.
+      # Intentional holds skip jobs and block dependents; confirmed public versions use a successful
+      # no-op instead. A hold takes precedence if a package is in both per-run lists.
       # The shared steps select the exact nuspec ID, not a filename prefix, from the signed drop.
 
       # NuGet release (Microsoft.DurableTask.Abstractions)
@@ -106,6 +116,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Abstractions
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Abstractions') }}
 
       # NuGet release (Microsoft.DurableTask.Client)
       - job: nugetRelease_Microsoft_DurableTask_Client
@@ -125,6 +136,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Client
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client') }}
 
       # NuGet release (Microsoft.DurableTask.Client.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Client_Grpc
@@ -144,6 +156,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Client.Grpc
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.Grpc') }}
 
       # NuGet release (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)
       - job: nugetRelease_Microsoft_DurableTask_Client_OrchestrationServiceClientShim
@@ -163,6 +176,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Client.OrchestrationServiceClientShim
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim') }}
 
       # NuGet release (Microsoft.DurableTask.Generators)
       - job: nugetRelease_Microsoft_DurableTask_Generators
@@ -182,6 +196,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Generators
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Generators') }}
 
       # NuGet release (Microsoft.DurableTask.Analyzers)
       - job: nugetRelease_Microsoft_DurableTask_Analyzers
@@ -201,6 +216,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Analyzers
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Analyzers') }}
 
       # NuGet release (Microsoft.DurableTask.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Grpc
@@ -220,6 +236,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Grpc
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Grpc') }}
 
       # NuGet release (Microsoft.DurableTask.Worker)
       - job: nugetRelease_Microsoft_DurableTask_Worker
@@ -239,6 +256,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Worker
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker') }}
 
       # NuGet release (Microsoft.DurableTask.Worker.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Worker_Grpc
@@ -258,6 +276,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Worker.Grpc
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker.Grpc') }}
 
       # NuGet release (Microsoft.DurableTask.Client.AzureManaged)
       - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged
@@ -277,6 +296,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Client.AzureManaged
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.AzureManaged') }}
 
       # NuGet release (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)
       - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged_Sandboxes
@@ -296,6 +316,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Client.AzureManaged.Sandboxes
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.AzureManaged.Sandboxes') }}
 
       # NuGet release (Microsoft.DurableTask.Worker.AzureManaged)
       - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged
@@ -315,6 +336,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Worker.AzureManaged
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker.AzureManaged') }}
 
       # NuGet release (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)
       - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged_Sandboxes
@@ -334,6 +356,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Worker.AzureManaged.Sandboxes
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker.AzureManaged.Sandboxes') }}
 
       # NuGet release (Microsoft.DurableTask.ScheduledTasks)
       - job: nugetRelease_Microsoft_DurableTask_ScheduledTasks
@@ -353,6 +376,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.ScheduledTasks
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.ScheduledTasks') }}
 
       # NuGet release (Microsoft.DurableTask.ExportHistory)
       - job: nugetRelease_Microsoft_DurableTask_ExportHistory
@@ -372,6 +396,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.ExportHistory
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.ExportHistory') }}
 
       # add it for Microsoft.DurableTask.Extensions.AzureBlobPayloads
       - job: nugetRelease_Microsoft_DurableTask_Extensions_AzureBlobPayloads
@@ -393,6 +418,7 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.Extensions.AzureBlobPayloads
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Extensions.AzureBlobPayloads') }}
 
       # NuGet release (Microsoft.DurableTask.LargePayloadPurge.Abstractions)
       - job: nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
@@ -415,3 +441,4 @@ extends:
           parameters:
             packageId: Microsoft.DurableTask.LargePayloadPurge.Abstractions
             organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.LargePayloadPurge.Abstractions') }}

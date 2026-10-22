@@ -95,6 +95,11 @@ Describe 'Publisher pipeline' {
         $approval.pool | Should -Be 'server'
         $approval.steps[0].task | Should -Be 'ManualValidation@1'
         $approval.steps[0].inputs.onTimeout | Should -Be 'reject'
+        $approval.steps[0].inputs.instructions | Should -Match ([regex]::Escape('${{ parameters.nuGetOrganization }}'))
+        $approval.steps[0].inputs.instructions | Should -Match 'ESRP NuGet onboarding'
+        $approval.steps[0].inputs.instructions | Should -Match 'ESRPRELPACMAN'
+        $approval.steps[0].inputs.instructions | Should -Match 'Trusted Publishing'
+        $approval.steps[0].inputs.instructions | Should -Match 'Stop here for a validation-only trial'
     }
 
     It 'retains fail-closed dependency gates and run-scoped exclusions for every public job' {

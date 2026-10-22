@@ -123,17 +123,21 @@ After the PR is merged, follow the **Publishing** steps below.
 3. Use [`durabletask-dotnet.publish`](https://dev.azure.com/azfunc/internal/_build?definitionId=1100)
    (`eng/publish/publish.yml`). The publisher source ref and the `officialPipeline` artifact resource
    are separate selections: explicitly pin the official run, not just its branch or "latest".
-   Use the reviewed publisher-source commit on `main` after the normal code-mirror pipeline has
-   mirrored it to ADO. Individual user branches are not mirrored; do not expand the mirror allowlist
-   for a trial. Selecting the old release tag as the publisher source loads the old publisher YAML,
-   even when the correct signed official artifact run is selected.
+   Normally use the reviewed publisher-source commit on `main` after the code-mirror pipeline has
+   mirrored it to ADO. The branch allowlist controls automatic mirror triggers; it does not rule out
+   a separately authorized manual invocation of the existing mirror workflow for an exact trial ref.
+   Do not expand the trigger allowlist or change mirror policies for a trial. Selecting the old
+   release tag as the publisher source loads the old publisher YAML, even when the correct signed
+   official artifact run is selected.
 4. Supply `nuGetOrganization`, the NuGet.org organization confirmed during ESRP NuGet onboarding.
    There is no organization default; an unset or unresolved value fails before any ESRP submission.
    Set `skipPackages` to an array of exact public package IDs whose selected versions are already
    published or are intentionally held back. This is a per-run exclusion, not a permanent package removal.
 5. The publisher first stages the signed packages to the existing internal ADO feed. Only after that
-   succeeds does `nugetApproval` wait for manual approval. Do not approve until the selected artifacts,
-   exclusion list, dependency availability, and ESRP prerequisites below have been checked.
+   succeeds does `nugetApproval` wait for manual approval. The gate displays the selected organization
+   and requires confirmation of NuGet onboarding, publisher allowlisting and Trusted Publishing.
+   Do not approve until those prerequisites, the selected artifacts, exclusion list and dependency
+   availability have been checked. Stop at the gate for a validation-only trial.
    Rejecting or timing out the gate prevents all public publication.
 6. After approval, each selected public package is copied unchanged into its own ESRP folder using
    the exact nuspec ID, then submitted with `EsrpRelease@14` and `WaitForReleaseCompletion: true`.
@@ -176,7 +180,8 @@ version is already public. This leaves 16 public targets; the test host has no p
 The default exclusion list is empty so future generator releases remain enabled.
 Keep `officialPipeline` pinned to the approved signed run `311120` (build number `20261021.2`,
 source `2a409da4ac7dcf03c4f25985337eb4623ea6394e`), while the publisher uses the new reviewed and mirrored
-`main` commit containing this migration. A run ID and build number are not interchangeable.
+source containing this migration (normally the reviewed `main` commit). A run ID and build number
+are not interchangeable.
 Recheck exact-version absence for every intended target immediately before any submission;
 search indexing alone is not proof that a version has never been published.
 

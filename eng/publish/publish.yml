@@ -72,7 +72,14 @@ extends:
           # Wait for manual approval. 
           - task: ManualValidation@1
             inputs:
-              instructions: Confirm you want to push to NuGet
+              instructions: |
+                Selected NuGet.org organization: ${{ parameters.nuGetOrganization }}
+                Confirm that this is the organization approved during ESRP NuGet onboarding.
+                Confirm the Durable ESRP client is allowlisted for ESRPRELPACMAN and the NuGet
+                Trusted Publishing policy covers the selected package IDs/prefixes and operations.
+                Validate the selected signed official build, package exclusions and dependency availability.
+                Stop here for a validation-only trial or if any prerequisite remains unverified.
+                Approving this gate starts public ESRP NuGet submissions.
               onTimeout: 'reject'
 
       #================== NuGet publishing section ==================

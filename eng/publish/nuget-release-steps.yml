@@ -1,0 +1,86 @@
+parameters:
+- name: packageId
+  type: string
+- name: organizationName
+  type: string
+
+steps:
+- pwsh: |
+    $ErrorActionPreference = 'Stop'
+
+    if ([string]::IsNullOrWhiteSpace($env:NUGET_ORGANIZATION) -or $env:NUGET_ORGANIZATION -match '\$\(|\$\{\{') {
+      throw 'Set nuGetOrganization to the NuGet.org organization confirmed during ESRP NuGet onboarding before publishing.'
+    }
+
+    $packages = @(
+      foreach ($file in Get-ChildItem -LiteralPath $env:SOURCE_FOLDER -Filter '*.nupkg' -File) {
+        if ($file.Name -like '*.symbols.nupkg') {
+          continue
+        }
+
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($file.FullName)
+        try {
+          $nuspecs = @($archive.Entries | Where-Object { $_.FullName -notmatch '[/\\]' -and $_.Name -like '*.nuspec' })
+          if ($nuspecs.Count -ne 1) {
+            throw "Expected one root nuspec in '$($file.Name)', found $($nuspecs.Count)."
+          }
+
+          $reader = [System.IO.StreamReader]::new($nuspecs[0].Open())
+          try {
+            [xml]$nuspec = $reader.ReadToEnd()
+          }
+          finally {
+            $reader.Dispose()
+          }
+
+          if ([string]::IsNullOrWhiteSpace($nuspec.package.metadata.id)) {
+            throw "Missing package ID in '$($file.Name)'."
+          }
+
+          if ($nuspec.package.metadata.id -eq $env:PACKAGE_ID) {
+            $file
+          }
+        }
+        finally {
+          $archive.Dispose()
+        }
+      }
+    )
+
+    if ($packages.Count -ne 1) {
+      throw "Expected exactly one package for '$env:PACKAGE_ID' in '$env:SOURCE_FOLDER', found $($packages.Count)."
+    }
+
+    if (Test-Path -LiteralPath $env:STAGING_FOLDER) {
+      throw "ESRP staging folder '$env:STAGING_FOLDER' already exists; refusing to reuse possibly stale content."
+    }
+
+    New-Item -ItemType Directory -Path $env:STAGING_FOLDER | Out-Null
+    Copy-Item -LiteralPath $packages[0].FullName -Destination $env:STAGING_FOLDER
+    Write-Host "Staged '$($packages[0].Name)' for NuGet organization '$env:NUGET_ORGANIZATION'."
+  displayName: Stage ${{ parameters.packageId }} for ESRP
+  env:
+    PACKAGE_ID: ${{ parameters.packageId }}
+    NUGET_ORGANIZATION: ${{ parameters.organizationName }}
+    SOURCE_FOLDER: $(System.DefaultWorkingDirectory)\drop
+    STAGING_FOLDER: $(System.DefaultWorkingDirectory)\esrp\${{ parameters.packageId }}
+
+- task: SFP.release-tasks.custom-build-release-task.EsrpRelease@14
+  displayName: ESRP NuGet release (${{ parameters.packageId }})
+  inputs:
+    ConnectedServiceName: dtfx-internal-esrp-prod
+    UseManagedIdentity: true
+    KeyVaultName: durable-esrp-akv
+    SignCertName: dts-esrp-cert
+    ClientId: 0b3ed1a4-0727-4a50-b82a-02c2bd9dec89
+    DomainTenantId: 33e01921-4d64-4f8c-a055-5bdaffd5e33d
+    Intent: PackageDistribution
+    ContentType: NuGet
+    OrganizationName: ${{ parameters.organizationName }}
+    ContentSource: Folder
+    FolderLocation: $(System.DefaultWorkingDirectory)\esrp\${{ parameters.packageId }}
+    WaitForReleaseCompletion: true
+    Owners: $(Build.RequestedForEmail)
+    Approvers: $(Build.RequestedForEmail)
+    ServiceEndpointUrl: https://api.esrp.microsoft.com
+    MainPublisher: ESRPRELPACMAN

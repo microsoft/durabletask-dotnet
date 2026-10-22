@@ -117,14 +117,77 @@ After the PR is merged, follow the **Publishing** steps below.
 
 ## Publishing (After Release PR is Merged)
 
-1. Kick off [ADO release build](https://dev.azure.com/durabletaskframework/Durable%20Task%20Framework%20CI/_build?definitionId=29) (use the tag as the build target, enter `refs/tags/<tag>`)
-2. Validate signing, package contents (if build changes were made.)
-3. Create ADO release.
-    - From successful ADO release build, click 3 dots in top right → 'Release'.
-4. Release to ADO feed.
-5. Release to NuGet once validated (and dependencies are also released to NuGet.)
-6. Publish GitHub draft release.
-7. Delete contents of all `RELEASENOTES.md` files.
+1. Select a successful, signed `durabletask-dotnet.official` build in the `azfunc/internal` project.
+   Reuse the approved build's `drop`; the publisher does not rebuild, repack, or change package versions.
+2. Validate the selected build's source commit, signatures, package contents, and exact versions.
+3. Use [`durabletask-dotnet.publish`](https://dev.azure.com/azfunc/internal/_build?definitionId=1100)
+   (`eng/publish/publish.yml`). The publisher source ref and the `officialPipeline` artifact resource
+   are separate selections: explicitly pin the official run, not just its branch or "latest".
+   Use the reviewed publisher-source commit on `main` after the normal code-mirror pipeline has
+   mirrored it to ADO. Individual user branches are not mirrored; do not expand the mirror allowlist
+   for a trial. Selecting the old release tag as the publisher source loads the old publisher YAML,
+   even when the correct signed official artifact run is selected.
+4. Supply `nuGetOrganization`, the NuGet.org organization confirmed during ESRP NuGet onboarding.
+   There is no organization default; an unset or unresolved value fails before any ESRP submission.
+   Set `skipPackages` to an array of exact public package IDs whose selected versions are already
+   published or are intentionally held back. This is a per-run exclusion, not a permanent package removal.
+5. The publisher first stages the signed packages to the existing internal ADO feed. Only after that
+   succeeds does `nugetApproval` wait for manual approval. Do not approve until the selected artifacts,
+   exclusion list, dependency availability, and ESRP prerequisites below have been checked.
+   Rejecting or timing out the gate prevents all public publication.
+6. After approval, each selected public package is copied unchanged into its own ESRP folder using
+   the exact nuspec ID, then submitted with `EsrpRelease@14` and `WaitForReleaseCompletion: true`.
+   Internal-only/test packages and symbol packages are not submitted. Missing or multiple matching
+   packages fail explicitly. Each package retains its independent job and the dependency gates above;
+   ESRP does not guarantee ordering within a multi-package submission.
+7. Publish GitHub draft release.
+8. Delete contents of all `RELEASENOTES.md` files.
+
+### ESRP NuGet prerequisites
+
+The [ESRP NuGet guide](https://eng.ms/docs/microsoft-security/identity/trust-and-security-services/tss-release-distribute/tss-release-esrp-parent/oss-publishing/releasing-open-source/nuget)
+requires channel onboarding and a NuGet.org Trusted Publishing policy for the customer's organization,
+ESRP client identity, package IDs or delegated prefixes, and required operations (new IDs and/or new
+versions). Confirm organization ownership and any collaborator access required by that onboarding.
+Existing ESRP customers use the existing-customer onboarding process to enable the NuGet channel.
+
+The template reuses the Durable ESRP service connection `dtfx-internal-esrp-prod`, managed identity
+`0b3ed1a4-0727-4a50-b82a-02c2bd9dec89`, tenant `33e01921-4d64-4f8c-a055-5bdaffd5e33d`,
+vault `durable-esrp-akv`, and signing certificate `dts-esrp-cert`. NuGet distribution uses
+`MainPublisher: ESRPRELPACMAN`, not the `durabletask-java` publisher used for other registries.
+The client must be allowlisted for this publisher. `Owners` and `Approvers` use the individual
+Microsoft identity of the person who queued the run (`Build.RequestedForEmail`), not a group alias.
+The publishing pipeline must also be authorized to use this service connection; that ADO authorization
+is separate from ESRP publisher allowlisting and NuGet Trusted Publishing permissions.
+
+**Durable-specific NuGet onboarding, organization choice, publisher allowlisting, and Trusted Publishing
+permissions have not been verified by this source migration.** Package owner names alone do not prove
+that either owner is the onboarded organization. Confirm these prerequisites with the ESRP/NuGet teams
+before approving publication. A failed ESRP submission fails the job; there is no direct NuGet push fallback.
+
+### v1.27.1 trial selection
+
+The signed official drop has 18 `.nupkg` files: 14 public stable packages at `1.27.1`,
+`ExportHistory` and `ScheduledTasks` at `1.27.1-preview.2`, the unchanged public
+`Microsoft.DurableTask.Generators` at `2.1.0-preview.2`, and internal-only
+`Microsoft.DurableTask.InProcessTestHost` at `0.2.3-preview.1`.
+For this trial, set `skipPackages: [Microsoft.DurableTask.Generators]` because that exact generator
+version is already public. This leaves 16 public targets; the test host has no public job.
+The default exclusion list is empty so future generator releases remain enabled.
+Keep `officialPipeline` pinned to the approved signed run `311120` (build number `20261021.2`,
+source `2a409da4ac7dcf03c4f25985337eb4623ea6394e`), while the publisher uses the new reviewed and mirrored
+`main` commit containing this migration. A run ID and build number are not interchangeable.
+Recheck exact-version absence for every intended target immediately before any submission;
+search indexing alone is not proof that a version has never been published.
+
+For source-only validation, PowerShell 7 with the `Pester` (5.x) and `powershell-yaml` modules can run:
+
+```powershell
+Invoke-Pester -Path .\eng\publish\publish.Tests.ps1 -CI
+```
+
+These checks exercise local staging and pipeline structure only. They do not compile the server-side
+1ES templates, validate backend permissions, queue a release, or publish a package.
 
 ## Manual Release Process (Alternative)
 

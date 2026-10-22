@@ -2,6 +2,20 @@
 # When executed, it automatically publishes the output of the 'official pipeline' (the nupkgs) to our internal ADO feed.
 # It may optionally also publish the packages to NuGet, but that is gated behind a manual approval.
 
+parameters:
+- name: nuGetOrganization
+  displayName: NuGet.org organization confirmed during ESRP onboarding (required)
+  type: string
+  default: ''
+- name: skipPackages
+  displayName: Public package IDs intentionally held back (also blocks dependent releases)
+  type: object
+  default: []
+- name: alreadyPublishedPackages
+  displayName: Public package IDs whose selected versions are confirmed on NuGet.org (successful no-op)
+  type: object
+  default: []
+
 trigger: none # only trigger is manual
 pr: none # only trigger is manual
 
@@ -56,46 +70,39 @@ extends:
       # NuGet approval gate
       - job: nugetApproval
         displayName: NuGetApproval
+        dependsOn: AdoRelease
         pool: server # This task only works when executed on serverl pools, so this needs to be specified
         steps:
           # Wait for manual approval. 
           - task: ManualValidation@1
             inputs:
-              instructions: Confirm you want to push to NuGet
+              instructions: |
+                Selected NuGet.org organization: ${{ parameters.nuGetOrganization }}
+                Confirm that this is the organization approved during ESRP NuGet onboarding.
+                Confirm the Durable ESRP client is allowlisted for ESRPRELPACMAN and the NuGet
+                Trusted Publishing policy covers the selected package IDs/prefixes and operations.
+                Intentional holds (skipPackages): ${{ join(', ', parameters.skipPackages) }}
+                Selected versions confirmed already public (alreadyPublishedPackages): ${{ join(', ', parameters.alreadyPublishedPackages) }}
+                Confirm the exact selected artifact version of each already-published package exists on NuGet.org.
+                Those jobs succeed without staging or ESRP submission so dependent releases can proceed.
+                Intentional holds take precedence over already-published confirmations and block dependents.
+                Validate the selected signed official build, both package lists and dependency availability.
+                Stop here for a validation-only trial or if any prerequisite remains unverified.
+                Approving this gate starts public ESRP NuGet submissions.
               onTimeout: 'reject'
 
       #================== NuGet publishing section ==================
-      # Next, we publish the nupkgs to NuGet, one at a time; for good reason.
-      # 
-      # When publishing to NuGet, the `1ES.PublishNuget@1` will fail the ADO job if we attempt
-      # to push any package versions that were already uploaded to NuGet.
-      # For instance, imagine the latest DTFx packages on NuGet are: DTFx.Core@v1.1 and DTFx.AzureStorage@v1.0
-      # and that our official pipeline generated these packages: DTFx.Core@v1.1 and DTFx.AzureStorage@v1.1.
-      # In the end, we want NuGet to have both packages at version v1.1.
-      #
-      # In this case, if we try to publish both packages in the same ADO job, it will fail as soon as it detects
-      # we're trying to push DTFx.Core@v1.1 as that already exists on NuGet, and this could prevent
-      # DTFx.AzureStorage@v1.1 from being published in the first place.
-      # 
-      # Unfortunately, skipping duplicate package versions is only supported for publishing to ADO feeds, which explains
-      # why we did not have this issue when pushing to ADO.
-      # 
-      # So we split each package upload to a separate job, so they be uploaded independently. In our example, the
-      # DTFx.Core upload task would fail (as expected, it was already uploaded), 
-      # but the DTFx.AzureStorage upload would succeed.
-
-      # Implementor's note:
-      # What follows could use some refactoring as there's a lot of repetition, perhaps an ADO template could hide the repeated details.
-      # Pay close attention to the `packagesToPush` property of each job. We need to make sure the pattern specified there uniquely identifies
-      # the package we want to push, and this is difficult when the full name of one package is the prefix of another.
-      # For example: `Microsoft.DurableTask.Client` and `Microsoft.DurableTask.Client.Grpc`.
-      # The trick is to exclude the `Microsoft.DurableTask.Client.Grpc` in the `packagesToPush` property for `Microsoft.DurableTask.Client`
+      # Keep one package per ESRP submission: duplicate versions fail independently, and ESRP
+      # does not guarantee publication order within a submission. Preserve the dependency jobs below.
+      # Intentional holds skip jobs and block dependents; confirmed public versions use a successful
+      # no-op instead. A hold takes precedence if a package is in both per-run lists.
+      # The shared steps select the exact nuspec ID, not a filename prefix, from the signed drop.
 
       # NuGet release (Microsoft.DurableTask.Abstractions)
       - job: nugetRelease_Microsoft_DurableTask_Abstractions
         displayName: NuGet Release (Microsoft.DurableTask.Abstractions)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Abstractions')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -105,20 +112,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Abstractions)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Abstractions.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Abstractions
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Abstractions') }}
 
       # NuGet release (Microsoft.DurableTask.Client)
       - job: nugetRelease_Microsoft_DurableTask_Client
         displayName: NuGet Release (Microsoft.DurableTask.Client)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -128,25 +132,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Client)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            # the packages to push pattern explicitly excludes:
-            # - 'Microsoft.DurableTask.Client.Grpc'
-            # - 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim'
-            # - 'Microsoft.DurableTask.Client.AzureManaged.*'
-            # which are pushed by their respective jobs
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.OrchestrationServiceClientShim.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Client
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client') }}
 
       # NuGet release (Microsoft.DurableTask.Client.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Client_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Client.Grpc)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.Grpc')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -156,20 +152,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Client.Grpc)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Client.Grpc
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.Grpc') }}
 
       # NuGet release (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)
       - job: nugetRelease_Microsoft_DurableTask_Client_OrchestrationServiceClientShim
         displayName: NuGet Release (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -179,20 +172,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.OrchestrationServiceClientShim.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Client.OrchestrationServiceClientShim
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim') }}
 
       # NuGet release (Microsoft.DurableTask.Generators)
       - job: nugetRelease_Microsoft_DurableTask_Generators
         displayName: NuGet Release (Microsoft.DurableTask.Generators)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Generators')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -202,20 +192,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Generators)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Generators.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Generators
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Generators') }}
 
       # NuGet release (Microsoft.DurableTask.Analyzers)
       - job: nugetRelease_Microsoft_DurableTask_Analyzers
         displayName: NuGet Release (Microsoft.DurableTask.Analyzers)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Analyzers')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -225,20 +212,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Analyzers)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Analyzers.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Analyzers
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Analyzers') }}
 
       # NuGet release (Microsoft.DurableTask.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Grpc)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Grpc')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -248,20 +232,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Grpc)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Grpc
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Grpc') }}
 
       # NuGet release (Microsoft.DurableTask.Worker)
       - job: nugetRelease_Microsoft_DurableTask_Worker
         displayName: NuGet Release (Microsoft.DurableTask.Worker)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -271,21 +252,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Worker)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            # the packages to push pattern explicitly excludes 'Microsoft.DurableTask.Worker.Grpc' and 'Microsoft.DurableTask.Worker.AzureManaged', which are pushed by another job in this file
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.Grpc*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Worker
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker') }}
 
       # NuGet release (Microsoft.DurableTask.Worker.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Worker_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Worker.Grpc)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker.Grpc')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -295,20 +272,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Worker.Grpc)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Worker.Grpc
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker.Grpc') }}
 
       # NuGet release (Microsoft.DurableTask.Client.AzureManaged)
       - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged
         displayName: NuGet Release (Microsoft.DurableTask.Client.AzureManaged)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.AzureManaged')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -318,20 +292,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Client.AzureManaged)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Client.AzureManaged
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.AzureManaged') }}
 
       # NuGet release (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)
       - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged_Sandboxes
         displayName: NuGet Release (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.AzureManaged.Sandboxes')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -341,20 +312,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Client.AzureManaged.Sandboxes
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Client.AzureManaged.Sandboxes') }}
 
       # NuGet release (Microsoft.DurableTask.Worker.AzureManaged)
       - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged
         displayName: NuGet Release (Microsoft.DurableTask.Worker.AzureManaged)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker.AzureManaged')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -364,20 +332,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Worker.AzureManaged)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Worker.AzureManaged
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker.AzureManaged') }}
 
       # NuGet release (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)
       - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged_Sandboxes
         displayName: NuGet Release (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker.AzureManaged.Sandboxes')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -387,20 +352,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Worker.AzureManaged.Sandboxes
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Worker.AzureManaged.Sandboxes') }}
 
       # NuGet release (Microsoft.DurableTask.ScheduledTasks)
       - job: nugetRelease_Microsoft_DurableTask_ScheduledTasks
         displayName: NuGet Release (Microsoft.DurableTask.ScheduledTasks)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.ScheduledTasks')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -410,20 +372,17 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.ScheduledTasks)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.ScheduledTasks.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.ScheduledTasks
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.ScheduledTasks') }}
 
       # NuGet release (Microsoft.DurableTask.ExportHistory)
       - job: nugetRelease_Microsoft_DurableTask_ExportHistory
         displayName: NuGet Release (Microsoft.DurableTask.ExportHistory)
         dependsOn: nugetApproval
-        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.ExportHistory')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -433,14 +392,11 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.ExportHistory)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.ExportHistory.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.ExportHistory
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.ExportHistory') }}
 
       # add it for Microsoft.DurableTask.Extensions.AzureBlobPayloads
       - job: nugetRelease_Microsoft_DurableTask_Extensions_AzureBlobPayloads
@@ -448,7 +404,7 @@ extends:
         dependsOn:
         - nugetApproval
         - nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
-        condition: succeeded() # the Blob package depends on the new contract package, which must publish first
+        condition: and(succeeded(), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Extensions.AzureBlobPayloads')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -458,14 +414,11 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.Extensions.AzureBlobPayloads)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Extensions.AzureBlobPayloads.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
-            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.Extensions.AzureBlobPayloads
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.Extensions.AzureBlobPayloads') }}
 
       # NuGet release (Microsoft.DurableTask.LargePayloadPurge.Abstractions)
       - job: nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
@@ -474,7 +427,7 @@ extends:
         - nugetApproval
         - nugetRelease_Microsoft_DurableTask_Abstractions
         - nugetRelease_Microsoft_DurableTask_Client
-        condition: succeeded()
+        condition: and(succeeded(), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.LargePayloadPurge.Abstractions')) }})
         templateContext:
           type: releaseJob
           isProduction: true
@@ -484,11 +437,8 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - task: 1ES.PublishNuget@1
-          displayName: 'NuGet push (Microsoft.DurableTask.LargePayloadPurge.Abstractions)'
-          inputs:
-            command: push
-            nuGetFeedType: external
-            publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.LargePayloadPurge.Abstractions.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg'
-            packageParentPath: $(System.DefaultWorkingDirectory)
+        - template: /eng/publish/nuget-release-steps.yml@self
+          parameters:
+            packageId: Microsoft.DurableTask.LargePayloadPurge.Abstractions
+            organizationName: ${{ parameters.nuGetOrganization }}
+            alreadyPublished: ${{ containsValue(parameters.alreadyPublishedPackages, 'Microsoft.DurableTask.LargePayloadPurge.Abstractions') }}

@@ -102,7 +102,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Abstractions
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -121,7 +121,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Client
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -140,7 +140,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Client.Grpc
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -159,7 +159,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Client.OrchestrationServiceClientShim
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -178,7 +178,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Generators
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -197,7 +197,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Analyzers
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -216,7 +216,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Grpc
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -235,7 +235,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Worker
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -254,7 +254,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Worker.Grpc
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -273,7 +273,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Client.AzureManaged
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -292,7 +292,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Client.AzureManaged.Sandboxes
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -311,7 +311,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Worker.AzureManaged
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -330,7 +330,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Worker.AzureManaged.Sandboxes
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -349,7 +349,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.ScheduledTasks
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -368,7 +368,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.ExportHistory
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -389,7 +389,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.Extensions.AzureBlobPayloads
             organizationName: ${{ parameters.nuGetOrganization }}
@@ -411,7 +411,7 @@ extends:
             artifactName: drop
             targetPath: $(System.DefaultWorkingDirectory)/drop
         steps:
-        - template: nuget-release-steps.yml
+        - template: /eng/publish/nuget-release-steps.yml@self
           parameters:
             packageId: Microsoft.DurableTask.LargePayloadPurge.Abstractions
             organizationName: ${{ parameters.nuGetOrganization }}

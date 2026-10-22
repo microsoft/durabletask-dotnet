@@ -73,8 +73,21 @@ Describe 'Publisher pipeline' {
             $job.templateContext.isProduction | Should -BeTrue
             $job.templateContext.inputs[0].pipeline | Should -Be 'officialPipeline'
             $job.templateContext.inputs[0].artifactName | Should -Be 'drop'
-            $job.steps[0].template | Should -Be 'nuget-release-steps.yml'
             $job.steps[0].parameters.organizationName | Should -Be '${{ parameters.nuGetOrganization }}'
+        }
+    }
+
+    It 'anchors every NuGet step template to self when passed through the external 1ES stage template' {
+        # Arrange
+        $expectedTemplate = '/eng/publish/nuget-release-steps.yml@self'
+
+        # Act
+        $references = @($publicJobs | ForEach-Object { $_.steps[0].template })
+
+        # Assert
+        $references.Count | Should -Be 17
+        foreach ($reference in $references) {
+            $reference | Should -Be $expectedTemplate
         }
     }
 

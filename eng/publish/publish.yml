@@ -32,9 +32,27 @@ extends:
     - stage: release
       jobs:
 
+      # Validate the build we're about to publish
+      - job: ValidateBuild
+        displayName: Validate Build
+        steps:
+        - pwsh: |
+            Write-Host "=============================================="
+            Write-Host "Build Information for Publishing"
+            Write-Host "=============================================="
+            Write-Host "Run ID: $(resources.pipeline.officialPipeline.runID)"
+            Write-Host "Run Name: $(resources.pipeline.officialPipeline.runName)"
+            Write-Host "Source Branch: $(resources.pipeline.officialPipeline.sourceBranch)"
+            Write-Host "Source Commit: $(resources.pipeline.officialPipeline.sourceCommit)"
+            Write-Host "=============================================="
+            Write-Host ""
+            Write-Host "Please verify that this is the intended build before proceeding with the release."
+          displayName: 'Display Build Information'
+
       # ADO release
       - job: AdoRelease
         displayName: ADO Release
+        dependsOn: ValidateBuild
         templateContext:
           type: releaseJob
           isProduction: true

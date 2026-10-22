@@ -185,6 +185,59 @@ are not interchangeable.
 Recheck exact-version absence for every intended target immediately before any submission;
 search indexing alone is not proof that a version has never been published.
 
+#### Pinned trial request and queue permissions
+
+The pipeline's `skipPackages` parameter is a YAML/UI list, for example
+`[Microsoft.DurableTask.Generators]`. For the verified REST request through the installed Azure DevOps
+CLI SDK, however, `RunPipelineParameters.template_parameters` is typed as `{str}`: send
+`templateParameters` as a map of strings, with the list serialized as JSON **inside a string**.
+This request fragment illustrates the wire value; `<confirmed-org>` is a placeholder, not a default:
+
+```json
+{
+  "templateParameters": {
+    "nuGetOrganization": "<confirmed-org>",
+    "skipPackages": "[\"Microsoft.DurableTask.Generators\"]"
+  }
+}
+```
+
+Do not send `skipPackages` as a native JSON array through that client. In the trial, that request
+invalidated or ignored overrides and resolved default source/artifact selections instead.
+Verify the resolved publisher source, official artifact run, organization bindings and exclusion
+conditions in the actual expanded preview before attempting a run; an HTTP 200 alone is insufficient.
+
+Selecting nondefault pinned trial inputs requires **Edit queue build configuration** on
+`internal` project pipeline `1100` (`durabletask-dotnet.publish`): Build security action
+`EditPipelineQueueConfigurationPermission` (bit `65536`), distinct from **Queue builds** (bit `128`)
+and **Edit build pipeline** (bit `2048`). If Azure DevOps returns
+`TF215106` requesting that permission, stop and have an ADO administrator grant that narrow permission
+to the intended requester before another attempt. Do not change pipeline defaults, switch
+credentials/APIs, or loosen policies to bypass the denial. This queue-configuration permission is
+separate from authorization to use `dtfx-internal-esrp-prod`, ESRP `ESRPRELPACMAN` allowlisting,
+NuGet channel onboarding and Trusted Publishing.
+
+#### Observed trial status (2026-10-22)
+
+The tested runtime source is `261b233a828211dae2439afba6a9cf3601d79c5c`. Mirror run `311345`
+succeeded and its locked internal ref matched that commit. The actual-source publisher preview
+returned HTTP 200; scalar positive-control and corrected string-map previews confirmed all 17
+organization/environment bindings, the visible selected-organization/STOP approval instructions,
+the Generator job condition set to `False`, and the remaining 16 runnable jobs with dependency-success
+gates preserved. The organization used for compilation was a candidate, not verified onboarding.
+
+An earlier malformed array-valued request created run `311347` with default old `main` source
+`2a409da4`, latest official run `311261`, and empty template parameters. It was canceled before any
+manual approval; it is not evidence of a correctly pinned trial.
+With the corrected request, official build `20261021.2`, and fresh exact-version HTTP 404s for all
+16 targets, the queue attempt returned HTTP 500 / `TF215106` before assigning a run ID:
+the requester lacked **Edit queue build configuration** on pipeline `1100`.
+This is a hard ADO authorization blocker, not a source compilation failure or an observed
+ESRP/backend/NuGet failure. No permission grant, policy change, approval or public distribution was
+performed. Post-denial run inventory confirmed that the corrected request created no run and that
+`311347` was completed/canceled; no accidental publisher remained active.
+Later documentation-only commits do not replace `261b233a` as the exact runtime tested.
+
 For source-only validation, PowerShell 7 with the `Pester` (5.x) and `powershell-yaml` modules can run:
 
 ```powershell

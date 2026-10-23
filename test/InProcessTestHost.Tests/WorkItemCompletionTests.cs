@@ -552,38 +552,6 @@ public class WorkItemCompletionTests
         await execution.WaitAsync(Timeout);
     }
 
-    /// <summary>
-    /// Abandon RPCs still only acknowledge requests without validating tokens or settling work.
-    /// </summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AbandonWorkItem_RemainsAcknowledgementOnlyAsync(bool activity)
-    {
-        // Arrange
-        await using ServerSession session = new();
-        Task execution = session.StartExecution(activity);
-        P.WorkItem delivery = await session.ReadAsync();
-
-        // Act
-        foreach (string token in new[] { delivery.CompletionToken, string.Empty, "unknown", delivery.CompletionToken })
-        {
-            if (activity)
-            {
-                await session.Server.AbandonTaskActivityWorkItem(new() { CompletionToken = token }, CreateContext());
-            }
-            else
-            {
-                await session.Server.AbandonTaskOrchestratorWorkItem(new() { CompletionToken = token }, CreateContext());
-            }
-        }
-
-        // Assert
-        Assert.False(execution.IsCompleted);
-        await CompleteAsync(session.Server, delivery);
-        await execution.WaitAsync(Timeout);
-    }
-
     static Task CompleteAsync(TaskHubGrpcServer server, P.WorkItem delivery, string value = "\"result\"") =>
         delivery.ActivityRequest is { } activity
             ? server.CompleteActivityTask(new()

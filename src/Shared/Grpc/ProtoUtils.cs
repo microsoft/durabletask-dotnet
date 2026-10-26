@@ -468,10 +468,6 @@ static class ProtoUtils
             }
 
             response.Actions.Add(protoAction);
-            if (protoAction.CompleteOrchestration is not null)
-            {
-                entityConversionState?.InsertMissingUnlocks(response, protoAction);
-            }
         }
 
         return response;

@@ -889,7 +889,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     class InMemoryPayloadStore : PayloadStore
     {
-        const string TokenPrefix = "blob:v2:";
+        const string TokenPrefix = "blob:v1:";
         readonly Dictionary<string, string> tokenToPayload;
         public readonly HashSet<string> uploadedPayloads = new();
 
@@ -911,7 +911,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         public override Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref this.uploadCount);
-            string token = $"{TokenPrefix}https://payloads.example.invalid/payloads/{Guid.NewGuid():N}";
+            string token = $"blob:v1:test:{Guid.NewGuid():N}";
             this.tokenToPayload[token] = payLoad;
             this.uploadedPayloads.Add(payLoad);
             return Task.FromResult(token);

@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using System.Threading.Channels;
+using Azure;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask.Entities;
@@ -20,21 +22,62 @@ namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests;
 
 public sealed class OrchestratorPayloadFailureTests
 {
+    enum PayloadFailure
+    {
+        None,
+        SizeLimit,
+        ForbiddenUpload,
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public Task PermanentPayloadFailure_ReleasesEntitiesBeforeSendingFailedCompletion(
+        bool completeOrchestration,
+        bool streamHistory,
+        bool failUpload)
+        => RunLockedOrchestrationAsync(
+            completeOrchestration,
+            streamHistory,
+            failUpload ? PayloadFailure.ForbiddenUpload : PayloadFailure.SizeLimit);
+
     [Theory]
     [InlineData(false, false)]
-    [InlineData(true, false)]
     [InlineData(false, true)]
+    [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task PermanentPayloadFailure_ReleasesEntitiesBeforeSendingFailedCompletion(
+    public Task SuccessfulCompletion_ReleasesEntitiesExactlyOnceBeforeCompletion(
+        bool useExternalizedPayloads,
+        bool explicitlyReleaseLocks)
+        => RunLockedOrchestrationAsync(
+            completeOrchestration: true,
+            streamHistory: false,
+            failure: PayloadFailure.None,
+            useExternalizedPayloads: useExternalizedPayloads,
+            explicitlyReleaseLocks: explicitlyReleaseLocks);
+
+    static async Task RunLockedOrchestrationAsync(
         bool completeOrchestration,
-        bool streamHistory)
+        bool streamHistory,
+        PayloadFailure failure,
+        bool useExternalizedPayloads = true,
+        bool explicitlyReleaseLocks = true)
     {
         // Arrange
         const string InstanceId = "locked-payload-instance";
         const string ExecutionId = "execution-1";
         const string OrchestratorName = "LockedPayloadOrchestrator";
         EntityInstanceId[] entities = [new("counter", "one"), new("counter", "two")];
-        string oversizedPayload = new('x', GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes + 1024);
+        string payload = failure == PayloadFailure.None
+            ? "completed"
+            : new('x', GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes + 1024);
+        string serializedPayload = JsonSerializer.Serialize(payload);
         Channel<P.WorkItem> workItems = Channel.CreateUnbounded<P.WorkItem>();
         Channel<P.HistoryChunk> history = Channel.CreateUnbounded<P.HistoryChunk>();
         Channel<P.OrchestratorResponse> completions = Channel.CreateUnbounded<P.OrchestratorResponse>();
@@ -77,6 +120,12 @@ public sealed class OrchestratorPayloadFailureTests
             .Returns(() => CreateUnaryCall(new P.CompleteTaskResponse()));
         Mock<PayloadStore> store = new(MockBehavior.Strict);
         store.Setup(value => value.IsKnownPayloadToken(It.IsAny<string>())).Returns(false);
+        if (failure == PayloadFailure.ForbiddenUpload)
+        {
+            store.Setup(value => value.UploadAsync(serializedPayload, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new RequestFailedException(403, "Simulated permanent Blob upload failure."));
+        }
+
         ServiceCollection services = new();
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
@@ -91,22 +140,29 @@ public sealed class OrchestratorPayloadFailureTests
                 options.CompleteOrchestrationWorkItemChunkSizeInBytes =
                     GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes;
             });
-            builder.UseExternalizedPayloads(options =>
+            if (useExternalizedPayloads)
             {
-                options.ThresholdBytes = 1024;
-                options.MaxPayloadBytes = 2048;
-            });
+                builder.UseExternalizedPayloads(options =>
+                {
+                    options.ThresholdBytes = 1024;
+                    options.MaxPayloadBytes = failure == PayloadFailure.ForbiddenUpload
+                        ? 2 * GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes
+                        : 2048;
+                });
+            }
+
             builder.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
                 OrchestratorName,
                 async (context, _) =>
                 {
-                    await using IAsyncDisposable locks = await context.Entities.LockEntitiesAsync(entities);
+                    IAsyncDisposable locks = await context.Entities.LockEntitiesAsync(entities);
+                    await using IAsyncDisposable? releasedLocks = explicitlyReleaseLocks ? locks : null;
                     if (!completeOrchestration)
                     {
-                        await context.Entities.CallEntityAsync(entities[0], "set", oversizedPayload);
+                        await context.Entities.CallEntityAsync(entities[0], "set", payload);
                     }
 
-                    return oversizedPayload;
+                    return payload;
                 }));
         });
         await using ServiceProvider provider = services.BuildServiceProvider();
@@ -213,30 +269,56 @@ public sealed class OrchestratorPayloadFailureTests
                 OrchestratorRequest = resumedRequest,
                 CompletionToken = "resumed-token",
             }, timeout.Token);
-            P.OrchestratorResponse failed = await completions.Reader.ReadAsync(timeout.Token);
+            P.OrchestratorResponse response = await completions.Reader.ReadAsync(timeout.Token);
 
             // Assert
-            P.CompleteOrchestrationAction completion = failed.Actions.Last().CompleteOrchestration;
-            Assert.NotNull(completion);
-            Assert.Equal(P.OrchestrationStatus.Failed, completion.OrchestrationStatus);
-            Assert.Equal(typeof(PayloadStorageException).FullName, completion.FailureDetails.ErrorType);
-            Assert.True(completion.FailureDetails.IsNonRetriable);
-            Assert.Equal(entities.Length + 1, failed.Actions.Count);
-            P.EntityUnlockSentEvent[] unlocks = failed.Actions.Take(entities.Length)
-                .Select(action => action.SendEntityMessage.EntityUnlockSent).ToArray();
+            P.OrchestratorAction completionAction = Assert.Single(
+                response.Actions, action => action.CompleteOrchestration is not null);
+            Assert.Same(completionAction, response.Actions.Last());
+            P.CompleteOrchestrationAction completion = completionAction.CompleteOrchestration;
+            if (failure == PayloadFailure.None)
+            {
+                Assert.Equal(P.OrchestrationStatus.Completed, completion.OrchestrationStatus);
+                Assert.Null(completion.FailureDetails);
+                Assert.Equal(serializedPayload, completion.Result);
+            }
+            else
+            {
+                Assert.Equal(P.OrchestrationStatus.Failed, completion.OrchestrationStatus);
+                Assert.Equal(
+                    failure == PayloadFailure.ForbiddenUpload
+                        ? typeof(RequestFailedException).FullName
+                        : typeof(PayloadStorageException).FullName,
+                    completion.FailureDetails.ErrorType);
+                Assert.True(completion.FailureDetails.IsNonRetriable);
+                Assert.Null(completion.Result);
+            }
+
+            Assert.Equal(entities.Length + 1, response.Actions.Count);
+            P.EntityUnlockSentEvent[] unlocks = response.Actions.Take(entities.Length)
+                .Select(action => Assert.IsType<P.EntityUnlockSentEvent>(action.SendEntityMessage?.EntityUnlockSent))
+                .ToArray();
             Assert.Equal(entities.Select(entity => entity.ToString()), unlocks.Select(unlock => unlock.TargetInstanceId));
             Assert.All(unlocks, unlock =>
             {
                 Assert.Equal(acquire.CriticalSectionId, unlock.CriticalSectionId);
                 Assert.Equal(InstanceId, unlock.ParentInstanceId);
             });
-            Assert.Equal("resumed-token", failed.CompletionToken);
+            Assert.Equal(InstanceId, response.InstanceId);
+            Assert.Equal("resumed-token", response.CompletionToken);
+            Assert.Null(response.CustomStatus);
+#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
+            Assert.False(response.IsPartial);
+            Assert.Null(response.ChunkIndex);
+#pragma warning restore CS0612
             invoker.Verify(value => value.AsyncUnaryCall(
                 It.IsAny<Method<P.OrchestratorResponse, P.CompleteTaskResponse>>(),
                 It.IsAny<string>(),
                 It.IsAny<CallOptions>(),
                 It.IsAny<P.OrchestratorResponse>()), Times.Exactly(2));
-            store.Verify(value => value.UploadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            store.Verify(
+                value => value.UploadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                failure == PayloadFailure.ForbiddenUpload ? Times.Once() : Times.Never());
         }
         finally
         {

@@ -147,7 +147,7 @@ public static class DurableTaskSchedulerClientExtensions
 
             string optionsName = name ?? Options.DefaultName;
             DurableTaskSchedulerClientOptions source = this.schedulerOptions.Get(optionsName);
-            options.DefaultUnaryCallTimeout = source.DefaultUnaryCallTimeout;
+            options.GrpcCallTimeout = source.GrpcCallTimeout;
 
             // Create a cache key that includes all properties that affect CreateChannel behavior.
             // This ensures channels are reused for the same configuration

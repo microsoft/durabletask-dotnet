@@ -76,9 +76,10 @@ public class DurableTaskSchedulerClientOptions
     /// <remarks>
     /// Earlier interceptor deadlines are preserved and streaming calls are not affected.
     /// Expiration fails the call with <see cref="StatusCode.DeadlineExceeded"/>; it does not retry the operation
-    /// or guarantee that the server stopped processing it. This option is captured when the client is constructed.
+    /// or guarantee that the server stopped processing it. This option is captured when the client is constructed
+    /// and bounds each RPC, not the whole client operation.
     /// </remarks>
-    public TimeSpan? DefaultUnaryCallTimeout { get; set; }
+    public TimeSpan? GrpcCallTimeout { get; set; }
 
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a connection string.

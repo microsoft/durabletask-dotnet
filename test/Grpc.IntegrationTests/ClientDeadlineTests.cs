@@ -3,6 +3,7 @@
 
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Threading.Channels;
 using Google.Protobuf;
@@ -50,7 +51,7 @@ public class ClientDeadlineTests(ITestOutputHelper output)
         {
             builder.UseDurableTaskScheduler(
                 $"Endpoint={sidecar.Address};TaskHub=test;Authentication=None",
-                options => options.DefaultUnaryCallTimeout = CallTimeout);
+                options => options.GrpcCallTimeout = CallTimeout);
             builder.UseExternalizedPayloads();
         });
         await using ServiceProvider provider = services.BuildServiceProvider();
@@ -116,6 +117,63 @@ public class ClientDeadlineTests(ITestOutputHelper output)
             + $"connections: stalled={sidecar.StalledConnection}, recovered={recoveredCall.Connection}, peer={peerCall.Connection}");
     }
 
+    [Fact]
+    public async Task SidecarStartup_WhenItFails_DisposesHostAndPreservesFailure()
+    {
+        // Arrange
+        InvalidOperationException failure = new("startup failure");
+        Mock<IHost> host = new();
+        host.Setup(value => value.StartAsync(It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+
+        // Act
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => StalledSidecar.StartAsync(host.Object));
+
+        // Assert
+        Assert.Same(failure, actual);
+        host.Verify(value => value.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public async Task SidecarStartup_WhenCancelled_FinishesStartupAndDisposesHost()
+    {
+        // Arrange
+        using CancellationTokenSource cancellation = new();
+        TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool startupFinished = false;
+        Mock<IHost> host = new();
+        host.Setup(value => value.StartAsync(It.IsAny<CancellationToken>()))
+            .Returns(async (CancellationToken token) =>
+            {
+                started.TrySetResult();
+                try
+                {
+                    await Task.Delay(System.Threading.Timeout.Infinite, token);
+                }
+                finally
+                {
+                    startupFinished = true;
+                }
+            });
+
+        // Act
+        Task<StalledSidecar> startup = StalledSidecar.StartAsync(host.Object, cancellation.Token);
+        try
+        {
+            await started.Task.WaitAsync(Timeout);
+        }
+        finally
+        {
+            cancellation.Cancel();
+        }
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => startup.WaitAsync(Timeout));
+
+        // Assert
+        Assert.True(startupFinished);
+        host.Verify(value => value.Dispose(), Times.Once);
+    }
+
     async Task AssertDeadlineAsync(DurableTaskClient client, StalledSidecar sidecar)
     {
         using CancellationTokenSource guard = new(Timeout);
@@ -125,6 +183,9 @@ public class ClientDeadlineTests(ITestOutputHelper output)
         RpcException error = await Assert.ThrowsAsync<RpcException>(() => read.WaitAsync(Timeout));
         Assert.Equal(StatusCode.DeadlineExceeded, error.StatusCode);
         Assert.Equal(sidecar.StalledConnection, call.Connection);
+        Assert.EndsWith("m", call.Deadline);
+        int milliseconds = int.Parse(call.Deadline.AsSpan(0, call.Deadline.Length - 1), CultureInfo.InvariantCulture);
+        Assert.InRange(milliseconds, 1, (int)CallTimeout.TotalMilliseconds);
         output.WriteLine($"Stalled GetInstance: {error.StatusCode}, {elapsed.Elapsed.TotalMilliseconds:F0} ms, grpc-timeout={call.Deadline}");
     }
 
@@ -170,19 +231,29 @@ public class ClientDeadlineTests(ITestOutputHelper output)
 
         public ObservedCall[] Calls => this.observedCalls.ToArray();
 
-        public static async Task<StalledSidecar> StartAsync()
+        public static async Task<StalledSidecar> StartAsync(IHost? host = null, CancellationToken cancellation = default)
         {
             StalledSidecar sidecar = new();
-            sidecar.host = Host.CreateDefaultBuilder()
+            sidecar.host = host ?? Host.CreateDefaultBuilder()
                 .ConfigureLogging(logging => logging.ClearProviders())
                 .ConfigureWebHostDefaults(web => web
                     .UseKestrel(options => options.Listen(IPAddress.Loopback, 0, endpoint => endpoint.Protocols = HttpProtocols.Http2))
                     .Configure(app => app.Run(sidecar.HandleAsync)))
                 .Build();
-            await sidecar.host.StartAsync().WaitAsync(Timeout);
-            sidecar.Address = Assert.Single(sidecar.host.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!.Addresses);
-            return sidecar;
+            using CancellationTokenSource startup = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            startup.CancelAfter(Timeout);
+            try
+            {
+                await sidecar.host.StartAsync(startup.Token);
+                sidecar.Address = Assert.Single(sidecar.host.Services.GetRequiredService<IServer>()
+                    .Features.Get<IServerAddressesFeature>()!.Addresses);
+                return sidecar;
+            }
+            catch
+            {
+                sidecar.host.Dispose();
+                throw;
+            }
         }
 
         public Task<ObservedCall> NextCallAsync() => this.calls.Reader.ReadAsync().AsTask().WaitAsync(Timeout);

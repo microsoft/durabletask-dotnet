@@ -200,7 +200,7 @@ public class GrpcDurableTaskClientInterceptorsTests
         using CancellationTokenSource cancellation = new();
         Metadata headers = new() { { "test-header", "preserved" } };
         TimeSpan timeout = TimeSpan.FromSeconds(30);
-        GrpcDurableTaskClientOptions options = new() { CallInvoker = external, DefaultUnaryCallTimeout = timeout };
+        GrpcDurableTaskClientOptions options = new() { CallInvoker = external, GrpcCallTimeout = timeout };
         (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
         await using AsyncDisposable cleanup = disposable;
 
@@ -227,7 +227,7 @@ public class GrpcDurableTaskClientInterceptorsTests
         GrpcDurableTaskClientOptions options = new()
         {
             CallInvoker = external,
-            DefaultUnaryCallTimeout = TimeSpan.FromSeconds(30),
+            GrpcCallTimeout = TimeSpan.FromSeconds(30),
         };
         options.Interceptors.Add(new EarlierDeadlineInterceptor(earlier));
         (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
@@ -251,7 +251,7 @@ public class GrpcDurableTaskClientInterceptorsTests
         GrpcDurableTaskClientOptions options = new()
         {
             CallInvoker = external,
-            DefaultUnaryCallTimeout = TimeSpan.FromSeconds(1),
+            GrpcCallTimeout = TimeSpan.FromSeconds(1),
         };
         (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
         await using AsyncDisposable cleanup = disposable;
@@ -277,14 +277,14 @@ public class GrpcDurableTaskClientInterceptorsTests
         GrpcDurableTaskClientOptions options = new()
         {
             CallInvoker = new StubCallInvoker(),
-            DefaultUnaryCallTimeout = TimeSpan.FromTicks(ticks),
+            GrpcCallTimeout = TimeSpan.FromTicks(ticks),
         };
 
         // Act
         Action construct = () => new GrpcDurableTaskClient("test", options, NullLogger.Instance);
 
         // Assert
-        construct.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*DefaultUnaryCallTimeout must be positive*");
+        construct.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*GrpcCallTimeout must be positive*");
     }
 
     [Fact]
@@ -295,7 +295,7 @@ public class GrpcDurableTaskClientInterceptorsTests
         GrpcDurableTaskClientOptions options = new()
         {
             CallInvoker = external,
-            DefaultUnaryCallTimeout = TimeSpan.MaxValue,
+            GrpcCallTimeout = TimeSpan.MaxValue,
         };
         (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
         await using AsyncDisposable cleanup = disposable;

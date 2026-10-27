@@ -301,7 +301,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         ServiceCollection services = new();
         string connectionString = $"Endpoint=http://localhost;Authentication=None;TaskHub={ValidTaskHub}";
         services.AddDurableTaskClient("bounded", builder => builder.UseDurableTaskScheduler(
-            connectionString, options => options.DefaultUnaryCallTimeout = TimeSpan.FromSeconds(30)));
+            connectionString, options => options.GrpcCallTimeout = TimeSpan.FromSeconds(30)));
         services.AddDurableTaskClient("unbounded", builder => builder.UseDurableTaskScheduler(connectionString));
         await using ServiceProvider provider = services.BuildServiceProvider();
         IOptionsFactory<GrpcDurableTaskClientOptions> factory =
@@ -312,13 +312,13 @@ public class DurableTaskSchedulerClientExtensionsTests
         // Act
         GrpcDurableTaskClientOptions bounded = factory.Create("bounded");
         GrpcDurableTaskClientOptions unbounded = factory.Create("unbounded");
-        schedulerOptions.Get("bounded").DefaultUnaryCallTimeout = TimeSpan.FromSeconds(10);
+        schedulerOptions.Get("bounded").GrpcCallTimeout = TimeSpan.FromSeconds(10);
         GrpcDurableTaskClientOptions updated = factory.Create("bounded");
 
         // Assert
-        bounded.DefaultUnaryCallTimeout.Should().Be(TimeSpan.FromSeconds(30));
-        unbounded.DefaultUnaryCallTimeout.Should().BeNull();
-        updated.DefaultUnaryCallTimeout.Should().Be(TimeSpan.FromSeconds(10));
+        bounded.GrpcCallTimeout.Should().Be(TimeSpan.FromSeconds(30));
+        unbounded.GrpcCallTimeout.Should().BeNull();
+        updated.GrpcCallTimeout.Should().Be(TimeSpan.FromSeconds(10));
         updated.Channel.Should().BeSameAs(bounded.Channel);
     }
 

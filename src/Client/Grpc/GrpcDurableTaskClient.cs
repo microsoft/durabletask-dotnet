@@ -656,7 +656,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
-        DefaultUnaryCallTimeoutInterceptor? timeoutInterceptor = options.DefaultUnaryCallTimeout is TimeSpan timeout
+        GrpcCallTimeoutInterceptor? timeoutInterceptor = options.GrpcCallTimeout is TimeSpan timeout
             ? new(timeout)
             : null;
         AsyncDisposable disposable = GetCallInvokerCore(options, logger, out CallInvoker core);

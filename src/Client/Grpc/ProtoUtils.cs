@@ -92,6 +92,15 @@ public static class ProtoUtils
         return dedupeStatuses;
     }
 
+    /// <summary>
+    /// Identifies RPCs that can wait indefinitely for an orchestration state change.
+    /// </summary>
+    /// <param name="methodFullName">The fully qualified gRPC method name.</param>
+    /// <returns>Whether the method is a long poll.</returns>
+    internal static bool IsLongPollingMethod(string methodFullName)
+        => methodFullName is "/TaskHubSidecarService/WaitForInstanceCompletion"
+            or "/TaskHubSidecarService/WaitForInstanceStart";
+
 #pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.
     /// <summary>
     /// Converts <see cref="OrchestrationRuntimeStatus" /> to <see cref="P.OrchestrationStatus" />.

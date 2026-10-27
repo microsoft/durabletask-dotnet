@@ -28,11 +28,8 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     readonly bool ownsChannel;
     readonly ILogger logger;
 
-    // Cached once per invoker instance (instead of once per RPC) so ObserveOutcome's ContinueWith call
-    // does not allocate a new delegate for every unary call. The method-name diagnostic is threaded
-    // through as the ContinueWith `state` argument (a string, already a reference type) instead of a
-    // boxed (self, methodName) tuple, eliminating that per-call delegate and boxed-tuple allocation
-    // (Task.ContinueWith's own internal continuation/Task bookkeeping is unaffected).
+    // Reuse the continuation delegate. Calls without a caller token also reuse the method-name string
+    // as continuation state; cancellable calls carry the token so local cancellation stays neutral.
     readonly Action<Task, object?> onUnaryCallCompleted;
 
     // Cancelled in DisposeAsync so an in-flight RecreateAsync stops promptly and does not leak the
@@ -86,7 +83,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         }
         catch (RpcException ex)
         {
-            this.RecordFailure(ex.StatusCode, method.FullName);
+            this.RecordFailure(ex.StatusCode, method.FullName, options.CancellationToken);
             throw;
         }
     }
@@ -96,7 +93,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     {
         TransportState current = Volatile.Read(ref this.state);
         AsyncUnaryCall<TResponse> call = current.Invoker.AsyncUnaryCall(method, host, options, request);
-        this.ObserveOutcome(call.ResponseAsync, method.FullName);
+        this.ObserveOutcome(call.ResponseAsync, method.FullName, options.CancellationToken);
         return call;
     }
 
@@ -193,15 +190,12 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         return TimeSpan.FromSeconds((double)elapsedTicks / Stopwatch.Frequency);
     }
 
-    void ObserveOutcome(Task responseAsync, string methodFullName)
+    void ObserveOutcome(Task responseAsync, string methodFullName, CancellationToken cancellation)
     {
-        // Use ContinueWith with TaskScheduler.Default so we don't capture sync context. Both the
-        // continuation delegate (this.onUnaryCallCompleted, cached once per invoker instance) and the
-        // continuation state (methodFullName, already a reference-typed string) are allocation-free
-        // per call: no boxed tuple and no per-call delegate closure.
+        object continuationState = cancellation.CanBeCanceled ? (methodFullName, cancellation) : methodFullName;
         responseAsync.ContinueWith(
             this.onUnaryCallCompleted,
-            methodFullName,
+            continuationState,
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
@@ -209,14 +203,16 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     void OnUnaryCallCompleted(Task task, object? continuationState)
     {
-        string methodFullName = (string)continuationState!;
         if (task.Status == TaskStatus.RanToCompletion)
         {
             this.RecordSuccess();
         }
         else if (task.Exception?.InnerException is RpcException rpcEx)
         {
-            this.RecordFailure(rpcEx.StatusCode, methodFullName);
+            (string methodFullName, CancellationToken cancellation) = continuationState is string method
+                ? (method, default)
+                : ((string, CancellationToken))continuationState!;
+            this.RecordFailure(rpcEx.StatusCode, methodFullName, cancellation);
         }
     }
 
@@ -225,11 +221,11 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         Volatile.Write(ref this.consecutiveFailures, 0);
     }
 
-    void RecordFailure(StatusCode status, string methodFullName)
+    void RecordFailure(StatusCode status, string methodFullName, CancellationToken cancellation)
     {
-        if (status == StatusCode.Cancelled)
+        if (status == StatusCode.Cancelled && cancellation.IsCancellationRequested)
         {
-            // Local cancellation is not evidence of either a transport failure or a successful round-trip.
+            // gRPC does not identify cancellation's origin; an actually cancelled caller token is neutral.
             return;
         }
 
@@ -245,7 +241,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         bool counts = status switch
         {
             StatusCode.Unavailable => true,
-            StatusCode.DeadlineExceeded => !DefaultUnaryCallTimeoutInterceptor.IsLongPollingMethod(methodFullName),
+            StatusCode.DeadlineExceeded => !ProtoUtils.IsLongPollingMethod(methodFullName),
             _ => false,
         };
 

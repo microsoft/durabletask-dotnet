@@ -152,6 +152,40 @@ public class GrpcDurableTaskClientChannelRecreationTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnaryCall_CancelledBetweenTransportFailures_DoesNotResetFailureCount(bool blocking)
+    {
+        // Arrange
+        int callIndex = 0;
+        CallbackHttpMessageHandler handler = new((request, cancellationToken) =>
+            Task.FromResult(CreateFailureResponse(
+                Interlocked.Increment(ref callIndex) == 2 ? StatusCode.Cancelled : StatusCode.Unavailable,
+                "interrupted call")));
+        using GrpcChannel channel = CreateChannel("http://cancelled.client.test", handler);
+        GrpcDurableTaskClientOptions options = new() { Channel = channel };
+        options.Internal.ChannelRecreateFailureThreshold = 2;
+        options.Internal.MinRecreateInterval = TimeSpan.Zero;
+        TaskCompletionSource recreateRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        options.SetChannelRecreator((existingChannel, ct) =>
+        {
+            recreateRequested.TrySetResult();
+            return Task.FromResult(existingChannel);
+        });
+        (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
+        await using AsyncDisposable cleanup = disposable;
+
+        // Act
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable, blocking);
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Cancelled, blocking);
+
+        // Assert
+        GetConsecutiveFailures(callInvoker).Should().Be(1, "caller cancellation is not a successful transport round-trip");
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable, blocking);
+        await recreateRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     [Fact]
     public async Task AsyncUnaryCall_DeadlineExceededOnAllowedLongPollMethod_DoesNotCountTowardThreshold()
     {
@@ -447,10 +481,18 @@ public class GrpcDurableTaskClientChannelRecreationTests
     static async Task AssertRpcFailureAsync(CallInvoker callInvoker) =>
         await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable);
 
-    static async Task AssertRpcFailureAsync(CallInvoker callInvoker, Method<string, string> method, StatusCode expectedStatus)
+    static async Task AssertRpcFailureAsync(
+        CallInvoker callInvoker, Method<string, string> method, StatusCode expectedStatus, bool blocking = false)
     {
         Func<Task> act = async () =>
         {
+            if (blocking)
+            {
+                callInvoker.BlockingUnaryCall(
+                    method, host: null, new CallOptions(deadline: DateTime.UtcNow.AddSeconds(1)), request: "ping");
+                return;
+            }
+
             using AsyncUnaryCall<string> call = callInvoker.AsyncUnaryCall(
                 method,
                 host: null,

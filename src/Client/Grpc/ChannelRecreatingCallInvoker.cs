@@ -22,16 +22,6 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// </remarks>
 sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 {
-    /// <summary>
-    /// Methods on which a <see cref="StatusCode.DeadlineExceeded"/> response is expected behavior
-    /// (long-poll-style waits) and must NOT be counted toward the recreate threshold.
-    /// </summary>
-    static readonly HashSet<string> DeadlineExceededAllowedMethods = new(StringComparer.Ordinal)
-    {
-        "/TaskHubSidecarService/WaitForInstanceCompletion",
-        "/TaskHubSidecarService/WaitForInstanceStart",
-    };
-
     readonly Func<GrpcChannel, CancellationToken, Task<GrpcChannel>> recreator;
     readonly int failureThreshold;
     readonly TimeSpan minRecreateInterval;
@@ -237,6 +227,12 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     void RecordFailure(StatusCode status, string methodFullName)
     {
+        if (status == StatusCode.Cancelled)
+        {
+            // Local cancellation is not evidence of either a transport failure or a successful round-trip.
+            return;
+        }
+
         // Only count statuses that indicate an actual transport problem, not application-level errors:
         //   * Unavailable     — half-open connection, peer reset, or dead routing target.
         //   * DeadlineExceeded — the call exceeded the *client-supplied* deadline. This is a
@@ -249,7 +245,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         bool counts = status switch
         {
             StatusCode.Unavailable => true,
-            StatusCode.DeadlineExceeded => !DeadlineExceededAllowedMethods.Contains(methodFullName),
+            StatusCode.DeadlineExceeded => !DefaultUnaryCallTimeoutInterceptor.IsLongPollingMethod(methodFullName),
             _ => false,
         };
 

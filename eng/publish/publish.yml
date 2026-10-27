@@ -7,10 +7,6 @@ parameters:
   displayName: NuGet.org organization confirmed during ESRP onboarding (required)
   type: string
   default: ''
-- name: skipPackages
-  displayName: Public package IDs intentionally held back (also blocks dependent releases)
-  type: object
-  default: []
 - name: alreadyPublishedPackages
   displayName: Public package IDs whose selected versions are confirmed on NuGet.org (successful no-op)
   type: object
@@ -78,31 +74,23 @@ extends:
             inputs:
               instructions: |
                 Selected NuGet.org organization: ${{ parameters.nuGetOrganization }}
-                Confirm that this is the organization approved during ESRP NuGet onboarding.
-                Confirm the Durable ESRP client is allowlisted for ESRPRELPACMAN and the NuGet
-                Trusted Publishing policy covers the selected package IDs/prefixes and operations.
-                Intentional holds (skipPackages): ${{ join(', ', parameters.skipPackages) }}
-                Selected versions confirmed already public (alreadyPublishedPackages): ${{ join(', ', parameters.alreadyPublishedPackages) }}
-                Confirm the exact selected artifact version of each already-published package exists on NuGet.org.
-                Those jobs succeed without staging or ESRP submission so dependent releases can proceed.
-                Intentional holds take precedence over already-published confirmations and block dependents.
-                Validate the selected signed official build, both package lists and dependency availability.
-                Stop here for a validation-only trial or if any prerequisite remains unverified.
-                Approving this gate starts public ESRP NuGet submissions.
+                Confirmed public package IDs: ${{ join(', ', parameters.alreadyPublishedPackages) }}
+                Verify the signed official artifacts, dependencies and exact selected versions of the confirmed public IDs.
+                Confirm ESRP NuGet onboarding, ESRPRELPACMAN allowlisting and Trusted Publishing for the selected organization.
+                Stop here for validation-only runs or any unverified prerequisite.
+                Approval starts real public ESRP NuGet submissions.
               onTimeout: 'reject'
 
       #================== NuGet publishing section ==================
       # Keep one package per ESRP submission: duplicate versions fail independently, and ESRP
       # does not guarantee publication order within a submission. Preserve the dependency jobs below.
-      # Intentional holds skip jobs and block dependents; confirmed public versions use a successful
-      # no-op instead. A hold takes precedence if a package is in both per-run lists.
       # The shared steps select the exact nuspec ID, not a filename prefix, from the signed drop.
 
       # NuGet release (Microsoft.DurableTask.Abstractions)
       - job: nugetRelease_Microsoft_DurableTask_Abstractions
         displayName: NuGet Release (Microsoft.DurableTask.Abstractions)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Abstractions')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -122,7 +110,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Client
         displayName: NuGet Release (Microsoft.DurableTask.Client)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -142,7 +130,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Client_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Client.Grpc)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.Grpc')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -162,7 +150,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Client_OrchestrationServiceClientShim
         displayName: NuGet Release (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -182,7 +170,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Generators
         displayName: NuGet Release (Microsoft.DurableTask.Generators)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Generators')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -202,7 +190,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Analyzers
         displayName: NuGet Release (Microsoft.DurableTask.Analyzers)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Analyzers')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -222,7 +210,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Grpc)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Grpc')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -242,7 +230,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Worker
         displayName: NuGet Release (Microsoft.DurableTask.Worker)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -262,7 +250,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Worker_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Worker.Grpc)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker.Grpc')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -282,7 +270,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged
         displayName: NuGet Release (Microsoft.DurableTask.Client.AzureManaged)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.AzureManaged')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -302,7 +290,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged_Sandboxes
         displayName: NuGet Release (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Client.AzureManaged.Sandboxes')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -322,7 +310,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged
         displayName: NuGet Release (Microsoft.DurableTask.Worker.AzureManaged)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker.AzureManaged')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -342,7 +330,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged_Sandboxes
         displayName: NuGet Release (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Worker.AzureManaged.Sandboxes')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -362,7 +350,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_ScheduledTasks
         displayName: NuGet Release (Microsoft.DurableTask.ScheduledTasks)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.ScheduledTasks')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -382,7 +370,7 @@ extends:
       - job: nugetRelease_Microsoft_DurableTask_ExportHistory
         displayName: NuGet Release (Microsoft.DurableTask.ExportHistory)
         dependsOn: nugetApproval
-        condition: and(succeeded('nugetApproval'), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.ExportHistory')) }})
+        condition: succeeded('nugetApproval')
         templateContext:
           type: releaseJob
           isProduction: true
@@ -404,7 +392,7 @@ extends:
         dependsOn:
         - nugetApproval
         - nugetRelease_Microsoft_DurableTask_LargePayloadPurge_Abstractions
-        condition: and(succeeded(), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.Extensions.AzureBlobPayloads')) }})
+        condition: succeeded()
         templateContext:
           type: releaseJob
           isProduction: true
@@ -427,7 +415,7 @@ extends:
         - nugetApproval
         - nugetRelease_Microsoft_DurableTask_Abstractions
         - nugetRelease_Microsoft_DurableTask_Client
-        condition: and(succeeded(), ${{ not(containsValue(parameters.skipPackages, 'Microsoft.DurableTask.LargePayloadPurge.Abstractions')) }})
+        condition: succeeded()
         templateContext:
           type: releaseJob
           isProduction: true

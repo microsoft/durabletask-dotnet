@@ -93,7 +93,8 @@ public static class ProtoUtils
     }
 
     /// <summary>
-    /// Identifies RPCs that can wait indefinitely for an orchestration state change.
+    /// Identifies long-poll RPCs excluded from the default call timeout. Their expected
+    /// <c>DeadlineExceeded</c> responses also do not count as transport failures.
     /// </summary>
     /// <param name="methodFullName">The fully qualified gRPC method name.</param>
     /// <returns>Whether the method is a long poll.</returns>

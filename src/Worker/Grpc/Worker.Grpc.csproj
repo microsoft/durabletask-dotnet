@@ -22,7 +22,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Microsoft.DurableTask.Extensions.AzureBlobPayloads" Key="$(StrongNamePublicKey)" />
     <!-- The AzureBlobPayloads auto-purge activities share this worker's gRPC transport, so their tests drive a
          real worker through a channel recreate. Reaching that path quickly needs the internal connect-loop
          knobs (recreate threshold), which are deliberately not part of any supported surface. -->

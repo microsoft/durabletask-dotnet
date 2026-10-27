@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Worker.Grpc.Internal;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -26,6 +27,7 @@ public class GrpcDurableTaskWorkerOptionsInternalTests
         internalOptions.TransientRetryMaxAttempts.Should().Be(10);
         internalOptions.SilentDisconnectTimeout.Should().Be(TimeSpan.FromSeconds(120));
         internalOptions.ChannelRecreator.Should().BeNull();
+        internalOptions.PrepareOrchestratorResponseAsync.Should().BeNull();
         internalOptions.VersioningExemptOrchestrations.Should().BeEmpty();
         internalOptions.VersioningExemptActivities.Should().BeEmpty();
     }
@@ -98,5 +100,36 @@ public class GrpcDurableTaskWorkerOptionsInternalTests
         // Sanity-check that invoking the stored delegate calls the original.
         options.Internal.ChannelRecreator!.Invoke(null!, CancellationToken.None);
         invoked.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(true, "options")]
+    [InlineData(false, "preparation")]
+    public void SetOrchestratorResponsePreparation_NullArgument_Throws(bool nullOptions, string parameterName)
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+        Func<P.OrchestratorResponse, CancellationToken, Task> preparation = (_, _) => Task.CompletedTask;
+
+        // Act
+        Action act = () => (nullOptions ? null! : options)
+            .SetOrchestratorResponsePreparation(nullOptions ? preparation : null!);
+
+        // Assert
+        act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be(parameterName);
+    }
+
+    [Fact]
+    public void SetOrchestratorResponsePreparation_StoresCallbackOnInternalOptions()
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+        Func<P.OrchestratorResponse, CancellationToken, Task> preparation = (_, _) => Task.CompletedTask;
+
+        // Act
+        options.SetOrchestratorResponsePreparation(preparation);
+
+        // Assert
+        options.Internal.PrepareOrchestratorResponseAsync.Should().BeSameAs(preparation);
     }
 }

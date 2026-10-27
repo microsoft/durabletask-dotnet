@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.DependencyInjection;
 
@@ -122,10 +123,67 @@ public class UseExternalizedPayloadsTests
         GrpcDurableTaskWorkerOptions grpcOptions =
             provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(string.Empty);
 
-        // Assert - the configured transport survives PostConfigure untouched, and the large-payload capability
-        // is the only thing this extension adds to the worker's gRPC options.
+        // Assert - the configured transport survives PostConfigure untouched.
         grpcOptions.CallInvoker.Should().BeSameAs(configured);
         grpcOptions.Channel.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("worker-hub")]
+    public async Task UseExternalizedPayloads_Worker_RegistersResponsePreparation(string name)
+    {
+        // Arrange
+        const string Payload = "payload";
+        const string Token = "blob:v1:test:prepared";
+        using CancellationTokenSource cancellation = new();
+        Mock<PayloadStore> store = new(MockBehavior.Strict);
+        store.Setup(value => value.IsKnownPayloadToken(It.IsAny<string>()))
+            .Returns((string value) => value == Token);
+        store.Setup(value => value.UploadAsync(Payload, cancellation.Token)).ReturnsAsync(Token);
+        ServiceCollection services = new();
+        services.AddSingleton(store.Object);
+        Mock<IDurableTaskWorkerBuilder> builder = new();
+        builder.Setup(value => value.Services).Returns(services);
+        builder.Setup(value => value.Name).Returns(name);
+        builder.Object.UseExternalizedPayloads(options =>
+        {
+            options.ThresholdBytes = 1;
+            options.MaxPayloadBytes = 1024;
+        });
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> monitor =
+            provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        P.OrchestratorResponse response = new()
+        {
+            InstanceId = "instance",
+            CompletionToken = "completion-token",
+            Actions =
+            {
+                new P.OrchestratorAction
+                {
+                    CompleteOrchestration = new P.CompleteOrchestrationAction
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Completed,
+                        Result = Payload,
+                    },
+                },
+            },
+        };
+
+        // Act
+        GrpcDurableTaskWorkerOptions grpcOptions = monitor.Get(name);
+        Func<P.OrchestratorResponse, CancellationToken, Task> preparation =
+            Assert.IsType<Func<P.OrchestratorResponse, CancellationToken, Task>>(
+                grpcOptions.Internal.PrepareOrchestratorResponseAsync);
+        await preparation(response, cancellation.Token);
+
+        // Assert
+        preparation.Target.Should().BeSameAs(Assert.Single(grpcOptions.Interceptors));
+        Assert.Single(response.Actions).CompleteOrchestration.Result.Should().Be(Token);
+        response.CompletionToken.Should().Be("completion-token");
+        monitor.Get("other-hub").Internal.PrepareOrchestratorResponseAsync.Should().BeNull();
+        store.Verify(value => value.UploadAsync(Payload, cancellation.Token), Times.Once);
     }
 
     [Theory]

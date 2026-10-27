@@ -105,7 +105,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 
                 // Storage failures must become terminal responses before the worker releases entity locks.
                 // Unary interception still handles other RPCs; known tokens make the second pass a no-op.
-                opt.Internal.PrepareOrchestratorResponseAsync = interceptor.PrepareOrchestratorResponseAsync;
+                opt.SetOrchestratorResponsePreparation(interceptor.PrepareOrchestratorResponseAsync);
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
                 opt.ConfigureVersioningExemptions([nameof(BlobPurgeJobOrchestrator)], AutoPurgeActivityNames);

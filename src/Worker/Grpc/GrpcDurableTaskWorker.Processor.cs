@@ -989,6 +989,7 @@ sealed partial class GrpcDurableTaskWorker
 
             if (completeOrchestrationAction is not null)
             {
+                // Cover direct or newly terminal responses; converter cleanup already drains its obligations.
                 entityConversionState?.InsertMissingUnlocks(response, completeOrchestrationAction);
 
                 if (completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus == P.OrchestrationStatus.Failed)

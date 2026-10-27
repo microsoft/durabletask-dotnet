@@ -136,7 +136,7 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public bool InsertEntityUnlocksOnCompletion { get; set; }
 
         /// <summary>
-        /// Gets or sets optional payload preparation that runs before terminal entity cleanup and chunking.
+        /// Gets or sets optional payload preparation that runs before final worker entity cleanup and chunking.
         /// Permanent payload failures can turn a pending response into a terminal completion.
         /// </summary>
         public Func<P.OrchestratorResponse, CancellationToken, Task>? PrepareOrchestratorResponseAsync { get; set; }

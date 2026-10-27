@@ -170,8 +170,8 @@ public static class InternalOptionsExtensions
     }
 
     /// <summary>
-    /// Sets an asynchronous callback that prepares a built orchestration response before missing entity unlocks
-    /// are synthesized and the response is chunked or sent.
+    /// Sets an asynchronous callback that prepares a built orchestration response before the worker's final
+    /// entity-unlock cleanup and before the response is chunked or sent.
     /// </summary>
     /// <param name="options">The gRPC worker options.</param>
     /// <param name="preparation">The callback receiving the mutable response and the worker cancellation token.</param>

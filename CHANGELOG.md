@@ -4,8 +4,22 @@
 
 - Keep externalized payload tokens stable across completion retries and release entity locks when payload storage permanently fails an orchestration.
 - Add the worker-owned `SetOrchestratorResponsePreparation` infrastructure API for response preparation before final worker entity cleanup and chunking.
-- Preserve the original orchestration version when restarting through the orchestration-service client shim ([#463](https://github.com/microsoft/durabletask-dotnet/issues/463)).
+
+## v1.27.1
+- Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))
+
+## v1.27.0
+
+- Add `Microsoft.DurableTask.LargePayloadPurge.Abstractions` with shared fetch/report and service-setting interfaces, and expose the existing blob purge tasks for host integration ([#805](https://github.com/microsoft/durabletask-dotnet/pull/805)).
+- Isolate in-process test-host work-item completion by delivery token ([#815](https://github.com/microsoft/durabletask-dotnet/pull/815)).
+- Await backend operations for in-process test-host task-hub lifecycle changes ([#813](https://github.com/microsoft/durabletask-dotnet/pull/813)).
+- Release streamed history snapshots after in-process test-host work items complete ([#811](https://github.com/microsoft/durabletask-dotnet/pull/811)).
+- Treat omitted purge start times as unbounded in the in-process test host ([#810](https://github.com/microsoft/durabletask-dotnet/pull/810)).
+- Fix orchestration history retrieval in the in-process test host ([#809](https://github.com/microsoft/durabletask-dotnet/pull/809)).
+- Preserve the original orchestration version when restarting through the orchestration-service client shim ([#808](https://github.com/microsoft/durabletask-dotnet/pull/808), [#463](https://github.com/microsoft/durabletask-dotnet/issues/463)).
 - Support configurable scheduler token audiences and government defaults ([#806](https://github.com/microsoft/durabletask-dotnet/pull/806))
+- Add opt-in large-payload blob auto-purge with a persistent orchestration and shared Client purge models ([#758](https://github.com/microsoft/durabletask-dotnet/pull/758)).
+- Update `Microsoft.Azure.DurableTask.Core` from `3.9.0` to the published `3.11.1` release.
 
 ## v1.26.0
 - Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))

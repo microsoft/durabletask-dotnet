@@ -979,11 +979,19 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
+            if (this.internalOptions.PrepareOrchestratorResponseAsync is { } prepareResponse)
+            {
+                await prepareResponse(response, cancellationToken);
+            }
+
             var completeOrchestrationAction = response.Actions.FirstOrDefault(
                 a => a.CompleteOrchestration is not null);
 
             if (completeOrchestrationAction is not null)
             {
+                // Cover direct or newly terminal responses; converter cleanup already drains its obligations.
+                entityConversionState?.InsertMissingUnlocks(response, completeOrchestrationAction);
+
                 if (completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus == P.OrchestrationStatus.Failed)
                 {
                     traceActivity?.SetStatus(

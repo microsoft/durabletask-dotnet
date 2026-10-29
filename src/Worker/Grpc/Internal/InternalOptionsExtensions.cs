@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Internal;
 
@@ -166,5 +167,25 @@ public static class InternalOptionsExtensions
         Action<CallInvoker> publisher)
     {
         options.Internal.CallInvokerPublisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
+    }
+
+    /// <summary>
+    /// Sets an asynchronous callback that prepares a built orchestration response before the worker's final
+    /// entity-unlock cleanup and before the response is chunked or sent.
+    /// </summary>
+    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="preparation">The callback receiving the mutable response and the worker cancellation token.</param>
+    /// <remarks>
+    /// This is an internal API that supports the DurableTask infrastructure and not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release. The callback must finish all response mutations before its task completes.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> or <paramref name="preparation"/> is null.</exception>
+    public static void SetOrchestratorResponsePreparation(
+        this GrpcDurableTaskWorkerOptions options,
+        Func<P.OrchestratorResponse, CancellationToken, Task> preparation)
+    {
+        Check.NotNull(options);
+        options.Internal.PrepareOrchestratorResponseAsync = preparation ?? throw new ArgumentNullException(nameof(preparation));
     }
 }

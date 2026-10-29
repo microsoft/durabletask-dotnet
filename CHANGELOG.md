@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep externalized payload tokens stable across completion retries and release entity locks when payload storage permanently fails an orchestration.
+- Add the worker-owned `SetOrchestratorResponsePreparation` infrastructure API for response preparation before final worker entity cleanup and chunking.
 
 ## v1.27.1
 - Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))

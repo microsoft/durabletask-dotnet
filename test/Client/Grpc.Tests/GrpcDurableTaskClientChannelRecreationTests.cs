@@ -152,6 +152,101 @@ public class GrpcDurableTaskClientChannelRecreationTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnaryCall_ServerCancelledBetweenTransportFailures_ResetsFailureCount(bool blocking)
+    {
+        // Arrange
+        int callIndex = 0;
+        CallbackHttpMessageHandler handler = new((request, cancellationToken) =>
+            Task.FromResult(CreateFailureResponse(
+                Interlocked.Increment(ref callIndex) == 2 ? StatusCode.Cancelled : StatusCode.Unavailable,
+                "interrupted call")));
+        using GrpcChannel channel = CreateChannel("http://cancelled.client.test", handler);
+        GrpcDurableTaskClientOptions options = new() { Channel = channel };
+        options.Internal.ChannelRecreateFailureThreshold = 2;
+        options.Internal.MinRecreateInterval = TimeSpan.Zero;
+        using CancellationTokenSource cancellation = new();
+        int recreatorCalls = 0;
+        options.SetChannelRecreator((existingChannel, ct) =>
+        {
+            Interlocked.Increment(ref recreatorCalls);
+            return Task.FromResult(existingChannel);
+        });
+        (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
+        await using AsyncDisposable cleanup = disposable;
+
+        // Act
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable, blocking);
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Cancelled, blocking, cancellation.Token);
+
+        // Assert
+        cancellation.IsCancellationRequested.Should().BeFalse();
+        GetConsecutiveFailures(callInvoker).Should().Be(0, "a server-returned Cancelled is an application response");
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable, blocking);
+        GetConsecutiveFailures(callInvoker).Should().Be(1);
+        recreatorCalls.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnaryCall_CallerCancelledBetweenTransportFailures_DoesNotResetFailureCount(bool blocking)
+    {
+        // Arrange
+        int callIndex = 0;
+        TaskCompletionSource requestStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        CallbackHttpMessageHandler handler = new(async (request, cancellationToken) =>
+        {
+            if (Interlocked.Increment(ref callIndex) == 2)
+            {
+                requestStarted.TrySetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            return CreateFailureResponse(StatusCode.Unavailable, "transport failure");
+        });
+        using GrpcChannel channel = CreateChannel("http://caller-cancelled.client.test", handler);
+        GrpcDurableTaskClientOptions options = new() { Channel = channel };
+        options.Internal.ChannelRecreateFailureThreshold = 2;
+        options.Internal.MinRecreateInterval = TimeSpan.Zero;
+        TaskCompletionSource recreateRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        options.SetChannelRecreator((existingChannel, ct) =>
+        {
+            recreateRequested.TrySetResult();
+            return Task.FromResult(existingChannel);
+        });
+        (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
+        await using AsyncDisposable cleanup = disposable;
+        using CancellationTokenSource cancellation = new();
+
+        // Act
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable, blocking);
+        using AsyncUnaryCall<string>? call = blocking ? null : callInvoker.AsyncUnaryCall(
+            TestMethod, host: null, new CallOptions(cancellationToken: cancellation.Token), request: "ping");
+        Task<string> response = blocking
+            ? Task.Run(() => callInvoker.BlockingUnaryCall(
+                TestMethod, host: null, new CallOptions(cancellationToken: cancellation.Token), request: "ping"))
+            : call!.ResponseAsync;
+        try
+        {
+            await requestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            cancellation.Cancel();
+        }
+
+        RpcException error = await Assert.ThrowsAsync<RpcException>(() => response.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // Assert
+        error.StatusCode.Should().Be(StatusCode.Cancelled);
+        GetConsecutiveFailures(callInvoker).Should().Be(1, "caller cancellation is not a successful transport round-trip");
+        await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable, blocking);
+        await recreateRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     [Fact]
     public async Task AsyncUnaryCall_DeadlineExceededOnAllowedLongPollMethod_DoesNotCountTowardThreshold()
     {
@@ -447,14 +542,27 @@ public class GrpcDurableTaskClientChannelRecreationTests
     static async Task AssertRpcFailureAsync(CallInvoker callInvoker) =>
         await AssertRpcFailureAsync(callInvoker, TestMethod, StatusCode.Unavailable);
 
-    static async Task AssertRpcFailureAsync(CallInvoker callInvoker, Method<string, string> method, StatusCode expectedStatus)
+    static async Task AssertRpcFailureAsync(
+        CallInvoker callInvoker,
+        Method<string, string> method,
+        StatusCode expectedStatus,
+        bool blocking = false,
+        CancellationToken cancellation = default)
     {
         Func<Task> act = async () =>
         {
+            if (blocking)
+            {
+                callInvoker.BlockingUnaryCall(
+                    method, host: null, new CallOptions(deadline: DateTime.UtcNow.AddSeconds(1), cancellationToken: cancellation),
+                    request: "ping");
+                return;
+            }
+
             using AsyncUnaryCall<string> call = callInvoker.AsyncUnaryCall(
                 method,
                 host: null,
-                new CallOptions(deadline: DateTime.UtcNow.AddSeconds(1)),
+                new CallOptions(deadline: DateTime.UtcNow.AddSeconds(1), cancellationToken: cancellation),
                 request: "ping");
 
             await call.ResponseAsync;

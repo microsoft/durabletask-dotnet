@@ -656,10 +656,18 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
+        GrpcCallTimeoutInterceptor? timeoutInterceptor = options.GrpcCallTimeout is TimeSpan timeout
+            ? new(timeout)
+            : null;
         AsyncDisposable disposable = GetCallInvokerCore(options, logger, out CallInvoker core);
 
+        if (timeoutInterceptor is not null)
+        {
+            core = core.Intercept(timeoutInterceptor);
+        }
+
         // Intercept outside any ChannelRecreatingCallInvoker so the wrapper's internal channel swaps
-        // stay transparent to the configured interceptors.
+        // stay transparent to the configured interceptors. User interceptors can supply an earlier deadline.
         callInvoker = ApplyInterceptors(options.Interceptors, core);
         return disposable;
     }

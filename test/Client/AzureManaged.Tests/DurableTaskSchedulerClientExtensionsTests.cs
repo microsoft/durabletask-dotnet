@@ -295,6 +295,34 @@ public class DurableTaskSchedulerClientExtensionsTests
     }
 
     [Fact]
+    public async Task UseDurableTaskScheduler_UnaryTimeout_IsNamedAndDoesNotChangeChannelCache()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        string connectionString = $"Endpoint=http://localhost;Authentication=None;TaskHub={ValidTaskHub}";
+        services.AddDurableTaskClient("bounded", builder => builder.UseDurableTaskScheduler(
+            connectionString, options => options.GrpcCallTimeout = TimeSpan.FromSeconds(30)));
+        services.AddDurableTaskClient("unbounded", builder => builder.UseDurableTaskScheduler(connectionString));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsFactory<GrpcDurableTaskClientOptions> factory =
+            provider.GetRequiredService<IOptionsFactory<GrpcDurableTaskClientOptions>>();
+        IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerClientOptions>>();
+
+        // Act
+        GrpcDurableTaskClientOptions bounded = factory.Create("bounded");
+        GrpcDurableTaskClientOptions unbounded = factory.Create("unbounded");
+        schedulerOptions.Get("bounded").GrpcCallTimeout = TimeSpan.FromSeconds(10);
+        GrpcDurableTaskClientOptions updated = factory.Create("bounded");
+
+        // Assert
+        bounded.GrpcCallTimeout.Should().Be(TimeSpan.FromSeconds(30));
+        unbounded.GrpcCallTimeout.Should().BeNull();
+        updated.GrpcCallTimeout.Should().Be(TimeSpan.FromSeconds(10));
+        updated.Channel.Should().BeSameAs(bounded.Channel);
+    }
+
+    [Fact]
     public async Task UseDurableTaskScheduler_SameConfiguration_ReusesSameChannel()
     {
         // Arrange
@@ -424,11 +452,11 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act - configure two clients with the same endpoint/taskhub but different ResourceId
-        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.ResourceId = "https://durabletask.io";
         });
-        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.ResourceId = "https://custom.durabletask.io";
         });
@@ -487,11 +515,11 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act - configure two clients with the same endpoint/taskhub but different AllowInsecureCredentials
-        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.AllowInsecureCredentials = false;
         });
-        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.AllowInsecureCredentials = true;
         });
@@ -522,14 +550,14 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act - configure two clients with the same endpoint/taskhub but different RetryOptions
-        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
             {
                 MaxRetries = 3
             };
         });
-        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
             {

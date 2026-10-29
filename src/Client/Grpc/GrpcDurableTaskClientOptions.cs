@@ -16,6 +16,20 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
     public string? Address { get; set; }
 
     /// <summary>
+    /// Gets or sets the default timeout for each unary gRPC call, excluding
+    /// <see cref="DurableTaskClient.WaitForInstanceStartAsync(string, bool, CancellationToken)"/> and
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/>.
+    /// The default is <see langword="null"/>, which adds no deadline.
+    /// </summary>
+    /// <remarks>
+    /// Must be positive when set. An earlier deadline supplied by an interceptor is preserved.
+    /// Streaming calls are not affected. Expiration fails the call with <see cref="StatusCode.DeadlineExceeded"/>;
+    /// it does not retry the operation or guarantee that the server stopped processing it.
+    /// This option is captured when the client is constructed and bounds each RPC, not the whole client operation.
+    /// </remarks>
+    public TimeSpan? GrpcCallTimeout { get; set; }
+
+    /// <summary>
     /// Gets or sets the gRPC channel to use. Will supersede <see cref="CallInvoker" /> when provided.
     /// </summary>
     public GrpcChannel? Channel { get; set; }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Externalize continue-as-new carryover event payloads using the configured UTF-8 size limits, preventing oversized completion responses ([#819](https://github.com/microsoft/durabletask-dotnet/issues/819)).
 
 ## v1.27.1
 - Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))

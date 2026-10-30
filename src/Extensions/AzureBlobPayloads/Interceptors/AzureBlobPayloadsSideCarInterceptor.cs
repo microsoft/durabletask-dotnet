@@ -365,6 +365,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         }
                     });
                 }
+
+                foreach (P.HistoryEvent historyEvent in complete.CarryoverEvents)
+                {
+                    operations.Add(() => this.ExternalizeHistoryEventAsync(historyEvent, cancellation));
+                }
             }
 
             if (a.TerminateOrchestration is { } term)

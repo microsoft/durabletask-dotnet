@@ -20,6 +20,7 @@ using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
+[Collection("ActivitySource listener tests")]
 public class GrpcDurableTaskWorkerTests
 {
     const string Category = "Microsoft.DurableTask.Worker.Grpc";

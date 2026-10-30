@@ -43,10 +43,7 @@ internal static class WorkItemStreamConsumer
     /// <summary>
     /// Consume a work-item stream until shutdown, silent disconnect, or graceful drain.
     /// </summary>
-    /// <param name="openStream">
-    /// Factory that opens the stream with the supplied linked-cancellation token. Production passes
-    /// <c>ct => stream.ResponseStream.ReadAllAsync(ct)</c>; tests pass arbitrary fakes.
-    /// </param>
+    /// <param name="stream">The response reader. Each read receives the linked cancellation token.</param>
     /// <param name="silentDisconnectTimeout">
     /// How long to wait between successive items (or health pings) before treating the stream as
     /// silently disconnected. Non-positive values disable detection entirely.
@@ -68,14 +65,19 @@ internal static class WorkItemStreamConsumer
     /// real elapsed time. Never invoked when <paramref name="silentDisconnectTimeout"/> disables
     /// detection.
     /// </param>
+    /// <param name="onPayloadFailure">
+    /// Optional delivery-local recovery for a payload resolution failure. Exceptions from recovery
+    /// propagate to the caller for connection-level handling.
+    /// </param>
     /// <returns>The classified outcome plus whether any message was observed.</returns>
     public static async Task<WorkItemStreamResult> ConsumeAsync(
-        Func<CancellationToken, IAsyncEnumerable<P.WorkItem>> openStream,
+        IAsyncStreamReader<P.WorkItem> stream,
         TimeSpan silentDisconnectTimeout,
         Action<P.WorkItem> onItem,
         Action? onFirstMessage,
         CancellationToken cancellation,
-        Action? onSilentDisconnectTimerArmed = null)
+        Action? onSilentDisconnectTimerArmed = null,
+        Func<WorkItemPayloadException, CancellationToken, Task>? onPayloadFailure = null)
     {
         bool silentDisconnectEnabled = silentDisconnectTimeout > TimeSpan.Zero;
 
@@ -100,19 +102,38 @@ internal static class WorkItemStreamConsumer
 
         bool firstMessageObserved = false;
 
+        void ObserveMessage()
+        {
+            ArmSilentDisconnectTimer();
+
+            if (!firstMessageObserved)
+            {
+                firstMessageObserved = true;
+                onFirstMessage?.Invoke();
+            }
+        }
+
         try
         {
-            await foreach (P.WorkItem workItem in openStream(tokenSource.Token).ConfigureAwait(false))
+            while (true)
             {
-                ArmSilentDisconnectTimer();
-
-                if (!firstMessageObserved)
+                try
                 {
-                    firstMessageObserved = true;
-                    onFirstMessage?.Invoke();
+                    if (!await stream.MoveNext(tokenSource.Token).ConfigureAwait(false))
+                    {
+                        break;
+                    }
+                }
+                catch (WorkItemPayloadException ex) when (onPayloadFailure is not null)
+                {
+                    ObserveMessage();
+                    await onPayloadFailure(ex, tokenSource.Token).ConfigureAwait(false);
+                    continue;
                 }
 
-                onItem(workItem);
+                ObserveMessage();
+
+                onItem(stream.Current);
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)

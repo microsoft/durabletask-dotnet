@@ -21,4 +21,10 @@
     <Protobuf Include="**/*.proto" GrpcServices="Both" Access="Public"  />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Worker.Grpc" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Extensions.AzureBlobPayloads" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Worker.Grpc.Tests" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
+
 </Project>

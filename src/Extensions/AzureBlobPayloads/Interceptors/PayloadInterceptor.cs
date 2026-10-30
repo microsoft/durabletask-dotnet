@@ -4,6 +4,7 @@
 using System.Text;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
 
@@ -143,7 +144,20 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
         IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(call.ResponseStream, async (msg, ct) =>
         {
-            await this.ResolveResponsePayloadsAsync(msg, ct);
+            try
+            {
+                await this.ResolveResponsePayloadsAsync(msg, ct);
+            }
+            catch (Exception ex) when (msg is P.WorkItem workItem
+                && workItem.RequestCase is P.WorkItem.RequestOneofCase.ActivityRequest
+                    or P.WorkItem.RequestOneofCase.OrchestratorRequest
+                    or P.WorkItem.RequestOneofCase.EntityRequest
+                    or P.WorkItem.RequestOneofCase.EntityRequestV2
+                && !ct.IsCancellationRequested)
+            {
+                throw new WorkItemPayloadException(workItem, ex);
+            }
+
             return msg;
         });
 

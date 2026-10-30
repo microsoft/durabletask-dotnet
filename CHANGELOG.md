@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Isolate incoming payload hydration failures to the failed delivery, preserving the shared work-item stream and unrelated in-flight work ([#825](https://github.com/microsoft/durabletask-dotnet/issues/825)).
 - Externalize continue-as-new carryover event payloads using the configured UTF-8 size limits, preventing oversized completion responses ([#819](https://github.com/microsoft/durabletask-dotnet/issues/819)).
 
 ## v1.27.1

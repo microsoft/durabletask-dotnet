@@ -22,8 +22,10 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 /// </summary>
 public class CompleteOrchestratorTaskWithChunkingTests
 {
-    [Fact]
-    public async Task ResponseFitsExactlyAtLimit_SendsOriginalResponseDirectly_NoChunking()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ResponseFitsExactlyAtLimit_SendsOriginalResponseDirectly_NoChunking(bool largePayloads)
     {
         // Arrange
         P.OrchestratorResponse response = BuildResponse(
@@ -32,7 +34,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
             BuildScheduleTaskAction(1, 16));
         int maxChunkBytes = response.CalculateSize();
 
-        using Fixture fixture = Fixture.Create();
+        using Fixture fixture = Fixture.Create(largePayloads);
 
         // Act
         await fixture.InvokeAsync(response, maxChunkBytes);
@@ -46,8 +48,10 @@ public class CompleteOrchestratorTaskWithChunkingTests
 #pragma warning restore CS0612
     }
 
-    [Fact]
-    public async Task ResponseOneByteOverLimit_ActionsStillFitIndividually_ProducesSingleNonPartialChunk()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ResponseOneByteOverLimit_ActionsStillFitIndividually_ProducesSingleNonPartialChunk(bool largePayloads)
     {
         // Arrange - the whole response is one byte too large, but rebuilding a chunk from the
         // (already fitting) individual actions still yields just one, non-partial chunk. This
@@ -61,7 +65,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
         response.OrchestrationTraceContext = new P.OrchestrationTraceContext { SpanID = "span-1" };
         int exactSize = response.CalculateSize();
 
-        using Fixture fixture = Fixture.Create();
+        using Fixture fixture = Fixture.Create(largePayloads);
 
         // Act
         await fixture.InvokeAsync(response, exactSize - 1);
@@ -82,8 +86,10 @@ public class CompleteOrchestratorTaskWithChunkingTests
 #pragma warning restore CS0612
     }
 
-    [Fact]
-    public async Task ActionExactlyFillsRemainingChunkSpace_IsIncludedInSameChunk()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ActionExactlyFillsRemainingChunkSpace_IsIncludedInSameChunk(bool largePayloads)
     {
         // Arrange - two actions whose combined size exactly equals maxChunkBytes. The boundary
         // condition in TryAddAction (currentSize + actionSize > maxChunkBytes) must treat "equal"
@@ -94,7 +100,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
         int size1 = action1.CalculateSize();
 
         P.OrchestratorResponse response = BuildResponse("instance-3", action0, action1);
-        using Fixture fixture = Fixture.Create();
+        using Fixture fixture = Fixture.Create(largePayloads);
 
         // Act
         await fixture.InvokeAsync(response, size0 + size1);
@@ -109,8 +115,10 @@ public class CompleteOrchestratorTaskWithChunkingTests
 #pragma warning restore CS0612
     }
 
-    [Fact]
-    public async Task ActionExceedsRemainingChunkSpaceByOneByte_IsMovedToNextChunk()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ActionExceedsRemainingChunkSpaceByOneByte_IsMovedToNextChunk(bool largePayloads)
     {
         // Arrange - same two actions, but maxChunkBytes is one byte less than their combined size.
         // The second action must now overflow into its own, second chunk.
@@ -120,7 +128,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
         int size1 = action1.CalculateSize();
 
         P.OrchestratorResponse response = BuildResponse("instance-4", action0, action1);
-        using Fixture fixture = Fixture.Create();
+        using Fixture fixture = Fixture.Create(largePayloads);
 
         // Act
         await fixture.InvokeAsync(response, size0 + size1 - 1);
@@ -174,15 +182,10 @@ public class CompleteOrchestratorTaskWithChunkingTests
     }
 
     [Fact]
-    public async Task NoLargePayloadsCapability_FirstActionOversized_FailsOnFirstOffender_DoesNotEvaluateLaterActions()
+    public async Task NoLargePayloadsCapability_FirstActionOversized_ReportsFirstOffender()
     {
-        // Arrange - regression coverage for a fail-fast ordering bug: without the LargePayloads
-        // capability, validation must stop at the *first* oversized action instead of first sizing
-        // the whole response and/or every action. Action id=0 is oversized, and several later
-        // actions (ids 1-3) are ALSO individually oversized with distinguishable ids. If the
-        // algorithm regresses back to "size everything, then scan for a failure", it could still
-        // produce *a* failure, but this asserts it fails on id=0 specifically - proving iteration
-        // stopped at the very first offender rather than continuing to size/scan later actions.
+        // Arrange - distinguishable oversized actions verify which offender is reported.
+        // This asserts the observable failure, not how many actions CalculateSize visits.
         P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 2048); // oversized - first, must win
         P.OrchestratorAction action1 = BuildScheduleTaskAction(1, 2048); // also oversized
         P.OrchestratorAction action2 = BuildScheduleTaskAction(2, 2048); // also oversized
@@ -233,8 +236,10 @@ public class CompleteOrchestratorTaskWithChunkingTests
         fixture.Sent.SelectMany(r => r.Actions).Should().NotContain(a => a.OrchestratorActionTypeCase == P.OrchestratorAction.OrchestratorActionTypeOneofCase.CompleteOrchestration);
     }
 
-    [Fact]
-    public async Task MultiChunkResponse_PreservesWireCompatibilityFieldsAcrossChunks()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MultiChunkResponse_PreservesWireCompatibilityFieldsAcrossChunks(bool largePayloads)
     {
         // Arrange - three actions that must span three separate chunks, verifying InstanceId,
         // CompletionToken, and CustomStatus repeat every chunk; OrchestrationTraceContext is only
@@ -250,7 +255,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
         response.RequiresHistory = true;
         response.OrchestrationTraceContext = new P.OrchestrationTraceContext { SpanID = "span-7" };
 
-        using Fixture fixture = Fixture.Create();
+        using Fixture fixture = Fixture.Create(largePayloads);
 
         // Act
         await fixture.InvokeAsync(response, maxChunkBytes);
@@ -284,6 +289,31 @@ public class CompleteOrchestratorTaskWithChunkingTests
 
         // All three actions were sent, in order, across the chunks, with none duplicated or dropped.
         fixture.Sent.SelectMany(r => r.Actions).Select(a => a.Id).Should().Equal(0, 1, 2);
+    }
+
+    [Fact]
+    public async Task TransientRpcError_DuringChunkedSend_RetriesWithoutDroppingOrRepeatingActions()
+    {
+        // Arrange
+        P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 16);
+        P.OrchestratorAction action1 = BuildScheduleTaskAction(1, 16);
+        P.OrchestratorAction action2 = BuildScheduleTaskAction(2, 16);
+        P.OrchestratorResponse response = BuildResponse("chunked-retry", action0, action1, action2);
+        int maxChunkBytes = Math.Max(action0.CalculateSize(), Math.Max(action1.CalculateSize(), action2.CalculateSize()));
+        using Fixture fixture = Fixture.Create(transientRetryBackoffBase: TimeSpan.FromMilliseconds(1));
+        fixture.FailNextAttempts(1);
+
+        // Act
+        await fixture.InvokeAsync(response, maxChunkBytes);
+
+        // Assert
+        fixture.AttemptCount.Should().Be(4);
+        fixture.Sent.Should().HaveCount(3);
+        fixture.Sent.SelectMany(chunk => chunk.Actions).Select(action => action.Id).Should().Equal(0, 1, 2);
+#pragma warning disable CS0612
+        fixture.Sent.Select(chunk => chunk.ChunkIndex).Should().Equal(0, 1, 2);
+        fixture.Sent.Select(chunk => chunk.IsPartial).Should().Equal(true, true, false);
+#pragma warning restore CS0612
     }
 
     [Fact]

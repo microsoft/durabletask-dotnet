@@ -66,6 +66,9 @@ Request body (see `Models/CreateExportJobRequest.cs`):
 
 Notes:
 - For `Batch` mode, `completedTimeTo` must be greater than `completedTimeFrom` and cannot be in the future.
+- `Continuous` mode pages through fixed completion-time windows, then resets the instance-key cursor for the next window. Instances that finish out of creation order are picked up in a subsequent window.
+- Completion-time bounds are inclusive, so instances exactly on a window boundary can be exported again. Retries can also repeat exports; deterministic blob names keep these writes idempotent. Progress counters count successful export operations, not distinct blobs.
+- After upgrading the worker, existing continuous jobs adopt completion-time windows at their next continue-as-new (after at most five polling/page cycles). Legacy checkpoints restart from the job's original `completedTimeFrom` to recover previously skipped instances, which can re-export existing blobs. Keep source histories available until reconciliation finishes; already-purged histories cannot be recovered.
 
 ### Get a job
 

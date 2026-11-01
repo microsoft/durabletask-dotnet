@@ -1247,13 +1247,13 @@ sealed partial class GrpcDurableTaskWorker
             // When the LargePayloads capability is not present, validate that no single action
             // exceeds the maximum chunk size *before* doing any whole-response sizing. This must
             // stay fail-fast: as soon as an oversized action is found, we fail the orchestration
-            // immediately without computing the size of any later action. Only when every action
-            // is confirmed to individually fit do we keep the sizes we already computed here, so
-            // they can be reused below instead of being recalculated.
-            int[]? actionSizes = null;
+            // immediately without computing the size of any later action. Grow the size cache only
+            // as actions pass validation, so early rejection does not allocate for the entire response.
+            // After validation succeeds, reuse these sizes for chunk packing.
+            List<int>? actionSizes = null;
             if (!largePayloads)
             {
-                actionSizes = new int[response.Actions.Count];
+                actionSizes = new();
                 for (int i = 0; i < response.Actions.Count; i++)
                 {
                     P.OrchestratorAction action = response.Actions[i];
@@ -1297,7 +1297,7 @@ sealed partial class GrpcDurableTaskWorker
                         return;
                     }
 
-                    actionSizes[i] = actionSize;
+                    actionSizes.Add(actionSize);
                 }
             }
 
@@ -1320,10 +1320,10 @@ sealed partial class GrpcDurableTaskWorker
             // way, the cached sizes are reused for chunk packing below instead of being recalculated.
             if (actionSizes == null)
             {
-                actionSizes = new int[response.Actions.Count];
+                actionSizes = new(response.Actions.Count);
                 for (int i = 0; i < response.Actions.Count; i++)
                 {
-                    actionSizes[i] = response.Actions[i].CalculateSize();
+                    actionSizes.Add(response.Actions[i].CalculateSize());
                 }
             }
 

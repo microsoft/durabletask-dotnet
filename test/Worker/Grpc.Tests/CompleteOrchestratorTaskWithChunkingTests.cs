@@ -213,6 +213,37 @@ public class CompleteOrchestratorTaskWithChunkingTests
     }
 
     [Fact]
+    public async Task NoLargePayloadsCapability_FirstActionOversized_DoesNotAllocateCacheForAllActions()
+    {
+        // Arrange
+        P.OrchestratorAction oversizedAction = BuildScheduleTaskAction(0, 2048);
+        int maxChunkBytes = oversizedAction.CalculateSize() - 1;
+        P.OrchestratorResponse singleAction = BuildResponse("allocation-test", oversizedAction);
+        P.OrchestratorResponse manyActions = BuildResponse(
+            "allocation-test",
+            Enumerable.Repeat(oversizedAction, 10_000).ToArray());
+        using Fixture singleFixture = Fixture.Create();
+        using Fixture manyFixture = Fixture.Create();
+        await singleFixture.InvokeAsync(singleAction, maxChunkBytes);
+        await manyFixture.InvokeAsync(manyActions, maxChunkBytes);
+
+        // Act
+        long beforeSingle = GC.GetAllocatedBytesForCurrentThread();
+        await singleFixture.InvokeAsync(singleAction, maxChunkBytes);
+        long singleBytes = GC.GetAllocatedBytesForCurrentThread() - beforeSingle;
+        long beforeMany = GC.GetAllocatedBytesForCurrentThread();
+        await manyFixture.InvokeAsync(manyActions, maxChunkBytes);
+        long manyBytes = GC.GetAllocatedBytesForCurrentThread() - beforeMany;
+
+        // Assert
+        // Allow incidental overhead, but not a four-byte-per-action cache for the rejected response.
+        manyBytes.Should().BeLessThan(singleBytes + manyActions.Actions.Count);
+        manyFixture.Sent.Should().AllSatisfy(response =>
+            response.Actions.Should().ContainSingle().Which.CompleteOrchestration.FailureDetails
+                .ErrorMessage.Should().Contain("with id 0 "));
+    }
+
+    [Fact]
     public async Task LargePayloadsCapability_SingleOversizedAction_IsSentInsteadOfFailing()
     {
         // Arrange - same oversized action, but with LargePayloads capability announced. The action

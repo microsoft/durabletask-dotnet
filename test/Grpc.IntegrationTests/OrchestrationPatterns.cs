@@ -98,7 +98,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         });
 
 
-        await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+        string parentInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
 
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             subOrchestrationOptions.InstanceId, this.TimeoutToken);
@@ -109,6 +109,12 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(2, metadata.Tags.Count);
         Assert.Equal("value1", metadata.Tags["tag1"]);
         Assert.Equal("value2", metadata.Tags["tag2"]);
+
+        // The shared sidecar still needs this worker to process the child's result in its parent.
+        OrchestrationMetadata parentMetadata = await server.Client.WaitForInstanceCompletionAsync(
+            parentInstanceId, this.TimeoutToken);
+        Assert.NotNull(parentMetadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, parentMetadata.RuntimeStatus);
     }
 
     [Fact]
@@ -155,7 +161,7 @@ public class OrchestrationPatterns : IntegrationTestBase
             }));
         });
 
-        await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+        string parentInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
 
         // Confirm the orchestration eventually succeeded after some delay for the retry to complete
         await Task.Delay(TimeSpan.FromSeconds(3));
@@ -169,6 +175,11 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal("value2", metadata.Tags["tag2"]);
         // 3 invocations - one for the parent orchestration, one for the first suborchestration attempt, one for the final suborchestration attempt
         Assert.Equal(3, invocationCounter);
+
+        OrchestrationMetadata parentMetadata = await server.Client.WaitForInstanceCompletionAsync(
+            parentInstanceId, this.TimeoutToken);
+        Assert.NotNull(parentMetadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, parentMetadata.RuntimeStatus);
     }
 
     [Fact]

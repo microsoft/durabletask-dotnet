@@ -23,6 +23,9 @@ $protoFiles = @(
     },
     @{
         SourcePath = "durable-task-scheduler/sandbox_service.proto"
+    },
+    @{
+        SourcePath = "durable-task-scheduler/large_payload_purge.proto"
     }
 )
 

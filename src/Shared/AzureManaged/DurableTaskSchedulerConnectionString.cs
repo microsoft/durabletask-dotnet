@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 using System.Data.Common;
+using Azure.Identity;
 
 namespace Microsoft.DurableTask;
 
@@ -59,7 +60,38 @@ sealed class DurableTaskSchedulerConnectionString
     /// </summary>
     public string TaskHubName => this.GetRequiredValue("TaskHub");
 
+    /// <summary>
+    /// Gets the optional token audience URI. Normalization is performed by the scheduler options.
+    /// </summary>
+    public string? ResourceId => this.GetValue("ResourceId");
+
     string? AdditionallyAllowedTenantsStr => this.GetValue("AdditionallyAllowedTenants");
+
+    /// <summary>
+    /// Creates credential options, forwarding an explicit authority only when supplied.
+    /// </summary>
+    /// <typeparam name="TOptions">The Azure Identity options type.</typeparam>
+    /// <returns>Options for a credential that supports authority configuration.</returns>
+    public TOptions CreateCredentialOptions<TOptions>()
+        where TOptions : TokenCredentialOptions, new()
+    {
+        TOptions options = new();
+        string? authorityHost = this.GetValue("AuthorityHost");
+        if (!string.IsNullOrEmpty(authorityHost))
+        {
+            if (!Uri.TryCreate(authorityHost, UriKind.Absolute, out Uri? authority)
+                || authority.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new ArgumentException(
+                    "The connection string AuthorityHost must be an absolute HTTPS URI, such as https://login.microsoftonline.us/.",
+                    "connectionString");
+            }
+
+            options.AuthorityHost = authority;
+        }
+
+        return options;
+    }
 
     string? GetValue(string name) =>
         this.builder.TryGetValue(name, out object? value)

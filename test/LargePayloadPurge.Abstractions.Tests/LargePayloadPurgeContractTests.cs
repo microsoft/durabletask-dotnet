@@ -1,0 +1,179 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using System.Reflection;
+using Microsoft.DurableTask.AzureBlobPayloads;
+using Microsoft.DurableTask.Client;
+using Xunit;
+
+namespace Microsoft.DurableTask.LargePayloadPurge.Abstractions.Tests;
+
+public class LargePayloadPurgeContractTests
+{
+    [Fact]
+    public void PackageOwnsBothInterfacesWithoutBlobDefinitionsOrForwarders()
+    {
+        // Arrange
+        Type contract = typeof(IOrchestrationServiceLargePayloadPurgeClient);
+        Type transport = typeof(ILargePayloadPurgeClient);
+        Assembly blob = typeof(GetLargePayloadTombstonesActivity).Assembly;
+
+        // Act
+        Type[] exported = contract.Assembly.GetExportedTypes();
+
+        // Assert
+        Assert.True(contract.IsInterface);
+        Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions", contract.Namespace);
+        Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions.IOrchestrationServiceLargePayloadPurgeClient", contract.FullName);
+        Assert.Equal("Microsoft.DurableTask.LargePayloadPurge.Abstractions", contract.Assembly.GetName().Name);
+        Assert.Equal(new[] { contract, transport }.OrderBy(type => type.FullName), exported.OrderBy(type => type.FullName));
+        Assert.Same(contract.Assembly, transport.Assembly);
+        Assert.True(transport.IsInterface);
+        Assert.Equal(contract.Namespace, transport.Namespace);
+        Assert.Equal([transport], contract.GetInterfaces());
+        Assert.Empty(transport.GetInterfaces());
+        Assert.Equal(nameof(IOrchestrationServiceLargePayloadPurgeClient.SetLargePayloadAutoPurgeAsync),
+            Assert.Single(contract.GetMethods()).Name);
+        Assert.Equal(2, transport.GetMethods().Length);
+        Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == transport.FullName);
+        Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == transport.FullName);
+
+        // The contracts package has moved namespace twice: once out of its Core-prototype namespace for the
+        // service interface, and once more for both interfaces out of the Blob extension's own implementation
+        // namespace. Neither prior location should resurface anywhere in this assembly.
+        string[] priorFullNames =
+        [
+            "DurableTask.LargePayloadPurge.IOrchestrationServiceLargePayloadPurgeClient",
+            "Microsoft.DurableTask.AzureBlobPayloads.IOrchestrationServiceLargePayloadPurgeClient",
+            "Microsoft.DurableTask.AzureBlobPayloads.ILargePayloadPurgeClient",
+        ];
+        foreach (string priorFullName in priorFullNames)
+        {
+            Assert.DoesNotContain(exported, type => type.FullName == priorFullName);
+            Assert.DoesNotContain(blob.GetTypes(), type => type.FullName == priorFullName);
+            Assert.DoesNotContain(blob.GetForwardedTypes(), type => type.FullName == priorFullName);
+        }
+    }
+
+    [Fact]
+    public void SetAcceptsExplicitChoiceAndCallerDeadlineAndCancellation()
+    {
+        // Arrange / Act / Assert
+        AssertSignature(
+            nameof(IOrchestrationServiceLargePayloadPurgeClient.SetLargePayloadAutoPurgeAsync),
+            typeof(Task),
+            [typeof(bool), typeof(DateTime), typeof(CancellationToken)],
+            ["enabled", "deadlineUtc", "cancellationToken"]);
+    }
+
+    [Fact]
+    public void GetReturnsCanonicalSdkTombstones()
+    {
+        // Arrange / Act / Assert
+        AssertTransportSignature(
+            nameof(ILargePayloadPurgeClient.GetLargePayloadTombstonesAsync),
+            typeof(Task<List<LargePayloadTombstone>>),
+            [typeof(int), typeof(DateTime), typeof(CancellationToken)],
+            ["limit", "deadline", "cancellationToken"]);
+    }
+
+    [Fact]
+    public void ReportAcceptsCanonicalSdkResults()
+    {
+        // Arrange / Act / Assert
+        AssertTransportSignature(
+            nameof(ILargePayloadPurgeClient.ReportLargePayloadPurgeResultsAsync),
+            typeof(Task),
+            [typeof(IReadOnlyList<LargePayloadPurgeResult>), typeof(DateTime), typeof(CancellationToken)],
+            ["results", "deadline", "cancellationToken"]);
+    }
+
+    [Fact]
+    public void ModelsComeFromSdkClientNotTheInterfacePackage()
+    {
+        // Arrange
+        Assembly client = typeof(DurableTaskClient).Assembly;
+
+        // Act
+        Assembly[] modelAssemblies =
+        [
+            typeof(LargePayloadTombstone).Assembly,
+            typeof(LargePayloadPurgeResult).Assembly,
+            typeof(LargePayloadPurgeDisposition).Assembly,
+        ];
+
+        // Assert
+        Assert.All(modelAssemblies, assembly => Assert.Same(client, assembly));
+        Assert.NotSame(client, typeof(IOrchestrationServiceLargePayloadPurgeClient).Assembly);
+    }
+
+    [Fact]
+    public void ContractUsesSdkSigningAndSharedAssemblyVersion()
+    {
+        // Arrange
+        AssemblyName sdk = typeof(DurableTaskClient).Assembly.GetName();
+
+        // Act
+        AssemblyName contract = typeof(IOrchestrationServiceLargePayloadPurgeClient).Assembly.GetName();
+
+        // Assert - matches Client's shared SDK release assembly version; no package-local version override.
+        // It is not pinned to a specific value here: that value is expected to change every time the shared
+        // release version changes, exactly like Client's own assembly version does.
+        Assert.Equal(sdk.Version, contract.Version);
+        Assert.Equal("6A4C0315C2D1D937", Convert.ToHexString(contract.GetPublicKeyToken()!));
+        Assert.Equal(sdk.GetPublicKeyToken(), contract.GetPublicKeyToken());
+    }
+
+    [Fact]
+    public void ContractDependsOnSdkModelsWithoutAddingACoreReverseDependency()
+    {
+        // Arrange
+        Assembly contract = typeof(IOrchestrationServiceLargePayloadPurgeClient).Assembly;
+        Assembly core = typeof(global::DurableTask.Core.TaskHubClient).Assembly;
+        Assembly blob = typeof(GetLargePayloadTombstonesActivity).Assembly;
+
+        // Act
+        string?[] contractReferences = contract.GetReferencedAssemblies().Select(name => name.Name).ToArray();
+        string?[] coreReferences = core.GetReferencedAssemblies().Select(name => name.Name).ToArray();
+
+        // Assert
+        Assert.Contains("Microsoft.DurableTask.Client", contractReferences);
+        Assert.DoesNotContain("DurableTask.Core", contractReferences);
+        Assert.DoesNotContain("Microsoft.DurableTask.Worker", contractReferences);
+        Assert.DoesNotContain("Microsoft.DurableTask.Grpc", contractReferences);
+        Assert.DoesNotContain("Microsoft.DurableTask.Extensions.AzureBlobPayloads", contractReferences);
+        Assert.DoesNotContain(contractReferences, name => name!.StartsWith("Azure.", StringComparison.Ordinal));
+        Assert.DoesNotContain(contractReferences, name => name!.StartsWith("Grpc.", StringComparison.Ordinal));
+        Assert.DoesNotContain(contractReferences, name => name!.StartsWith("Microsoft.DurableTask.Worker", StringComparison.Ordinal));
+        Assert.Contains(blob.GetReferencedAssemblies(), name => name.Name == contract.GetName().Name);
+        Assert.DoesNotContain(contract.GetName().Name, coreReferences);
+        Assert.DoesNotContain("Microsoft.DurableTask.Client", coreReferences);
+    }
+
+    static void AssertSignature(string methodName, Type returnType, Type[] parameterTypes, string[] parameterNames)
+    {
+        MethodInfo method = typeof(IOrchestrationServiceLargePayloadPurgeClient).GetMethod(methodName)!;
+        Assert.NotNull(method);
+        Assert.Equal(returnType, method.ReturnType);
+        ParameterInfo[] parameters = method.GetParameters();
+        Assert.Equal(parameterTypes, parameters.Select(parameter => parameter.ParameterType));
+        Assert.Equal(parameterNames, parameters.Select(parameter => parameter.Name));
+        Assert.All(parameters, parameter => Assert.False(parameter.IsOptional));
+    }
+
+    static void AssertTransportSignature(string methodName, Type returnType, Type[] parameterTypes, string[] parameterNames)
+    {
+        MethodInfo method = typeof(ILargePayloadPurgeClient).GetMethod(methodName)!;
+        Assert.NotNull(method);
+        Type inheritedContract = Assert.Single(typeof(IOrchestrationServiceLargePayloadPurgeClient).GetInterfaces());
+        Assert.Equal(method, inheritedContract.GetMethod(methodName));
+        Assert.Equal(returnType, method.ReturnType);
+        ParameterInfo[] parameters = method.GetParameters();
+        Assert.Equal(parameterTypes, parameters.Select(parameter => parameter.ParameterType));
+        Assert.Equal(parameterNames, parameters.Select(parameter => parameter.Name));
+        Assert.All(parameters.Take(2), parameter => Assert.False(parameter.IsOptional));
+        Assert.True(parameters[2].IsOptional);
+        Assert.True(parameters[2].HasDefaultValue);
+        Assert.Null(parameters[2].DefaultValue);
+    }
+}

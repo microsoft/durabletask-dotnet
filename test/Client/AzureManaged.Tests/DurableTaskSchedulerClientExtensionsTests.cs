@@ -6,6 +6,7 @@ using Azure.Identity;
 using FluentAssertions;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.DurableTask.AzureManaged.Tests;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ using Xunit;
 
 namespace Microsoft.DurableTask.Client.AzureManaged.Tests;
 
+[Collection("Scheduler authentication environment")]
 public class DurableTaskSchedulerClientExtensionsTests
 {
     const string ValidEndpoint = "myaccount.westus3.durabletask.io";
@@ -67,10 +69,15 @@ public class DurableTaskSchedulerClientExtensionsTests
         clientOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
     }
 
-    [Fact]
-    public void UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public void UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new();
         Mock<IDurableTaskClientBuilder> mockBuilder = new();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -89,7 +96,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         workerOptions.EndpointAddress.Should().Be("http://localhost");
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
         workerOptions.Credential.Should().BeNull();
-        workerOptions.ResourceId.Should().Be("https://durabletask.io");
+        workerOptions.ResourceId.Should().Be(expectedResourceId);
         workerOptions.AllowInsecureCredentials.Should().BeTrue();
     }
 
@@ -170,10 +177,15 @@ public class DurableTaskSchedulerClientExtensionsTests
         action.Should().Throw<ArgumentNullException>();
     }
 
-    [Fact]
-    public void UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly()
+    [Theory]
+    [InlineData(null, "https://durabletask.io")]
+    [InlineData("westus2", "https://durabletask.io")]
+    [InlineData("UsGovVirginia", "https://durabletask.azure.us")]
+    [InlineData("UsDodCentral", "https://durabletask.azure.us")]
+    public void UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly(string? region, string expectedResourceId)
     {
         // Arrange
+        using SchedulerEnvironmentVariable regionVariable = new("REGION_NAME", region);
         ServiceCollection services = new ServiceCollection();
         Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
@@ -192,7 +204,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         options.EndpointAddress.Should().Be(ValidEndpoint); // The https:// prefix is added by CreateChannel, not in the extension method
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<DefaultAzureCredential>();
-        options.ResourceId.Should().Be("https://durabletask.io");
+        options.ResourceId.Should().Be(expectedResourceId);
         options.AllowInsecureCredentials.Should().BeFalse();
     }
 
@@ -280,6 +292,34 @@ public class DurableTaskSchedulerClientExtensionsTests
             clientOptions.RetryOptions.BackoffMultiplier.Should().Be(2.0);
             clientOptions.RetryOptions.RetryableStatusCodes.Should().Contain(StatusCode.Unknown);
         }
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_UnaryTimeout_IsNamedAndDoesNotChangeChannelCache()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        string connectionString = $"Endpoint=http://localhost;Authentication=None;TaskHub={ValidTaskHub}";
+        services.AddDurableTaskClient("bounded", builder => builder.UseDurableTaskScheduler(
+            connectionString, options => options.GrpcCallTimeout = TimeSpan.FromSeconds(30)));
+        services.AddDurableTaskClient("unbounded", builder => builder.UseDurableTaskScheduler(connectionString));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsFactory<GrpcDurableTaskClientOptions> factory =
+            provider.GetRequiredService<IOptionsFactory<GrpcDurableTaskClientOptions>>();
+        IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerClientOptions>>();
+
+        // Act
+        GrpcDurableTaskClientOptions bounded = factory.Create("bounded");
+        GrpcDurableTaskClientOptions unbounded = factory.Create("unbounded");
+        schedulerOptions.Get("bounded").GrpcCallTimeout = TimeSpan.FromSeconds(10);
+        GrpcDurableTaskClientOptions updated = factory.Create("bounded");
+
+        // Assert
+        bounded.GrpcCallTimeout.Should().Be(TimeSpan.FromSeconds(30));
+        unbounded.GrpcCallTimeout.Should().BeNull();
+        updated.GrpcCallTimeout.Should().Be(TimeSpan.FromSeconds(10));
+        updated.Channel.Should().BeSameAs(bounded.Channel);
     }
 
     [Fact]
@@ -412,11 +452,11 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act - configure two clients with the same endpoint/taskhub but different ResourceId
-        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.ResourceId = "https://durabletask.io";
         });
-        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.ResourceId = "https://custom.durabletask.io";
         });
@@ -475,11 +515,11 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act - configure two clients with the same endpoint/taskhub but different AllowInsecureCredentials
-        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.AllowInsecureCredentials = false;
         });
-        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.AllowInsecureCredentials = true;
         });
@@ -510,14 +550,14 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act - configure two clients with the same endpoint/taskhub but different RetryOptions
-        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
             {
                 MaxRetries = 3
             };
         });
-        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
         {
             options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
             {

@@ -91,14 +91,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     public override async Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
-        cancellation.ThrowIfCancellationRequested();
-        IList<Core.OrchestrationState> states = await this.Client.GetOrchestrationStateAsync(instanceId, false);
-        if (states is null or { Count: 0 })
-        {
-            return null;
-        }
-
-        return this.ToMetadata(states.First(), getInputsAndOutputs);
+        Core.OrchestrationState? state = await this.GetOrchestrationStateAsync(instanceId, cancellation);
+        return this.ToMetadata(state, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
@@ -323,13 +317,15 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         Check.NotNullOrEmpty(instanceId);
         cancellation.ThrowIfCancellationRequested();
 
-        // Get the current orchestration status to retrieve the name and input
-        OrchestrationMetadata? status = await this.GetInstanceAsync(instanceId, getInputsAndOutputs: true, cancellation);
-
-        if (status == null)
+        Core.OrchestrationState? state = await this.GetOrchestrationStateAsync(instanceId, cancellation);
+        if (state is null)
         {
             throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
         }
+
+        // Preserve the original version before projecting to public metadata.
+        string? version = state.Version;
+        OrchestrationMetadata status = this.ToMetadata(state, getInputsAndOutputs: true);
 
         if (!restartWithNewInstanceId)
         {
@@ -350,14 +346,13 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         // Use the original serialized input directly to avoid double serialization
-        // TODO: OrchestrationMetada doesn't have version property so we don't support version here.
-        // Issue link: https://github.com/microsoft/durabletask-dotnet/issues/463
         TaskMessage message = new()
         {
             OrchestrationInstance = instance,
             Event = new ExecutionStartedEvent(-1, status.SerializedInput)
             {
                 Name = status.Name,
+                Version = version,
                 OrchestrationInstance = instance,
             },
         };
@@ -405,6 +400,19 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     /// <param name="cancellation">The cancellation token to honor while awaiting the delay.</param>
     /// <returns>A task that completes after the delay elapses, or is cancelled via <paramref name="cancellation"/>.</returns>
     internal virtual Task DelayAsync(TimeSpan delay, CancellationToken cancellation) => Task.Delay(delay, cancellation);
+
+    async Task<Core.OrchestrationState?> GetOrchestrationStateAsync(
+        string instanceId, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        IList<Core.OrchestrationState> states = await this.Client.GetOrchestrationStateAsync(instanceId, false);
+        if (states is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        return states.First();
+    }
 
     [return: NotNullIfNotNull("state")]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)

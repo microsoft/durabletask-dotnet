@@ -41,6 +41,10 @@ public abstract class TaskEntityContext
     /// <param name="name">The name of the orchestration to start.</param>
     /// <param name="options">The options for starting the orchestration.</param>
     /// <returns>The instance id for the new orchestration.</returns>
+    /// <remarks>
+    /// Tags are copied when the orchestration is scheduled. Later changes to the tags dictionary do not affect it.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">A supplied tag key or value is <c>null</c>.</exception>
     public virtual string ScheduleNewOrchestration(TaskName name, StartOrchestrationOptions options)
         => this.ScheduleNewOrchestration(name, null, options);
 
@@ -51,6 +55,10 @@ public abstract class TaskEntityContext
     /// <param name="input">The input for the orchestration.</param>
     /// <param name="options">The options for starting the orchestration.</param>
     /// <returns>The instance id for the new orchestration.</returns>
+    /// <remarks>
+    /// Tags are copied when the orchestration is scheduled. Later changes to the tags dictionary do not affect it.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">A supplied tag key or value is <c>null</c>.</exception>
     public abstract string ScheduleNewOrchestration(
         TaskName name, object? input = null, StartOrchestrationOptions? options = null);
 }

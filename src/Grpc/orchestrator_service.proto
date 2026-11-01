@@ -706,6 +706,7 @@ message StartNewOrchestrationAction {
     google.protobuf.Timestamp scheduledTime = 5;
     google.protobuf.Timestamp requestTime = 6;
     TraceContext parentTraceContext = 7;
+    map<string, string> tags = 8;
 }
 
 message AbandonActivityTaskRequest {

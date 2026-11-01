@@ -83,18 +83,38 @@ public class TracingIntegrationTests : IntegrationTestBase
 
         // Assert
         metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
-        activities.Should().ContainSingle(
-            activity => activity.Kind == ActivityKind.Client
+        Activity orchestrationActivity = activities.First(
+            activity => activity.Kind == ActivityKind.Server
                 && activity.Source.Name == CoreActivitySourceName
-                && activity.OperationName == $"activity:{firstActivityName}");
-        activities.Should().ContainSingle(
-            activity => activity.Kind == ActivityKind.Client
-                && activity.Source.Name == CoreActivitySourceName
-                && activity.OperationName == $"activity:{secondActivityName}");
-        activities.Should().ContainSingle(
-            activity => activity.Kind == ActivityKind.Client
-                && activity.Source.Name == CoreActivitySourceName
-                && activity.OperationName == $"orchestration:{subOrchestratorName}");
+                && activity.OperationName == $"orchestration:{orchestratorName}");
+        List<Activity> scheduledActivities = [];
+        foreach (string operationName in new[]
+        {
+            $"activity:{firstActivityName}",
+            $"activity:{secondActivityName}",
+            $"orchestration:{subOrchestratorName}",
+        })
+        {
+            Activity scheduledActivity = activities.Should().ContainSingle(
+                activity => activity.Kind == ActivityKind.Client
+                    && activity.Source.Name == CoreActivitySourceName
+                    && activity.OperationName == operationName).Subject;
+            scheduledActivities.Add(scheduledActivity);
+            scheduledActivity.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
+            scheduledActivity.TraceId.Should().Be(orchestrationActivity.TraceId);
+
+            activities.Where(
+                activity => activity.Kind == ActivityKind.Server
+                    && activity.Source.Name == CoreActivitySourceName
+                    && activity.OperationName == operationName)
+                .Should().NotBeEmpty().And.AllSatisfy(activity =>
+                {
+                    activity.ParentSpanId.Should().Be(scheduledActivity.SpanId);
+                    activity.TraceId.Should().Be(scheduledActivity.TraceId);
+                });
+        }
+
+        scheduledActivities.Select(activity => activity.SpanId).Distinct().Should().HaveCount(3);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -37,6 +38,31 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// Gets or sets the gRPC call invoker to use. Will supersede <see cref="Address" /> when provided.
     /// </summary>
     public CallInvoker? CallInvoker { get; set; }
+
+    /// <summary>
+    /// Gets the gRPC interceptors applied to every <see cref="CallInvoker"/> the worker builds from its
+    /// configured transport, including invokers rebuilt after the underlying channel is recreated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the supported way to attach cross-cutting gRPC behavior — authentication headers, tracing,
+    /// logging, payload externalization — to the Durable Task gRPC worker. Prefer it over supplying a
+    /// pre-built, already-intercepted <see cref="CallInvoker"/> in place of <see cref="Channel"/>: an
+    /// externally-supplied invoker opts the worker out of gRPC channel recreation, so a wedged connection
+    /// can never be replaced.
+    /// </para>
+    /// <para>
+    /// Interceptors run in list order — the first interceptor added is the outermost, so it observes each
+    /// outgoing call first and each response last. Registration is purely additive: while this collection
+    /// is empty, the worker uses exactly the invoker its configured transport produces.
+    /// </para>
+    /// <para>
+    /// This collection is captured when the worker is constructed, so it must be populated while options are
+    /// being configured (for example from <c>Configure</c> or <c>PostConfigure</c>). Mutating it afterwards
+    /// has no effect on a worker that has already been built, including across channel recreation.
+    /// </para>
+    /// </remarks>
+    public IList<Interceptor> Interceptors { get; } = new List<Interceptor>();
 
     /// <summary>
     /// Gets the collection of capabilities enabled on this worker.
@@ -87,6 +113,16 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     internal class InternalOptions
     {
         /// <summary>
+        /// Gets infrastructure orchestration names exempt from customer worker version checks.
+        /// </summary>
+        public HashSet<string> VersioningExemptOrchestrations { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Gets infrastructure activity names exempt from customer worker version checks.
+        /// </summary>
+        public HashSet<string> VersioningExemptActivities { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Gets or sets a value indicating whether entity-related events appearing in orchestration histories should be
         /// automatically converted back and forth between the old DT Core representation (JSON-encoded external events)
         /// and the new protobuf representation (explicit history events), which is used by the DTS scheduler backend.
@@ -100,10 +136,11 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public bool InsertEntityUnlocksOnCompletion { get; set; }
 
         /// <summary>
-        /// Gets or sets the maximum amount of time to wait for the initial Hello handshake against the
-        /// backend before treating the connect attempt as failed and retrying. A non-positive value disables
-        /// the deadline. Defaults to 30 seconds. This guards against half-open HTTP/2 connections that can
-        /// otherwise cause reconnect to hang indefinitely.
+        /// Gets or sets the maximum amount of time to wait for the Hello handshake with the backend before
+        /// treating the connect attempt as failed and retrying. A non-positive value disables the deadline.
+        /// Defaults to 30 seconds. The absolute deadline is clamped to UTC <see cref="DateTime.MaxValue"/>
+        /// if the interval would exceed it. This guards against half-open HTTP/2 connections that can
+        /// otherwise cause reconnect to hang indefinitely; it does not apply to the work-item stream.
         /// </summary>
         public TimeSpan HelloDeadline { get; set; } = TimeSpan.FromSeconds(30);
 
@@ -117,9 +154,9 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public TimeSpan SilentDisconnectTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
         /// <summary>
-        /// Gets or sets the number of consecutive connect failures (Hello timeouts, Unavailable responses, or
-        /// silent stream disconnects) after which the underlying gRPC channel will be recreated to clear
-        /// stale DNS, sub-channel state, or routing-affinity bindings. Setting to 0 or a negative value
+        /// Gets or sets the number of consecutive connect failures (connection-setup timeouts, Unavailable
+        /// responses, or silent stream disconnects) after which the underlying gRPC channel will be recreated
+        /// to clear stale DNS, sub-channel state, or routing-affinity bindings. Setting to 0 or a negative value
         /// disables channel recreation. Defaults to 5.
         /// </summary>
         public int ChannelRecreateFailureThreshold { get; set; } = 5;
@@ -171,5 +208,14 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         /// Gets or sets a callback that is invoked when activity work items are received or finished.
         /// </summary>
         public Action<ActivityNotificationPhase>? NotifyActivity { get; set; }
+
+        /// <summary>
+        /// Gets or sets a callback invoked with the worker's current effective <see cref="CallInvoker"/> - the
+        /// one produced after <see cref="Interceptors"/> have been applied. It is invoked once when the worker
+        /// starts and again after every successful channel recreate, so a component that shares the worker's
+        /// transport can follow it instead of capturing an invoker that later points at a disposed channel.
+        /// Implementations must not throw and must not block.
+        /// </summary>
+        public Action<CallInvoker>? CallInvokerPublisher { get; set; }
     }
 }

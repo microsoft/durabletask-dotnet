@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
@@ -16,6 +18,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     static readonly TimeSpan DeferredDisposeGracePeriod = TimeSpan.FromSeconds(30);
 
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
+    readonly Interceptor[] interceptors;
+    readonly HashSet<string> versioningExemptOrchestrations;
+    readonly HashSet<string> versioningExemptActivities;
     readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
@@ -48,6 +53,16 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
+
+        // Snapshot the interceptors once so the chain is fixed for the worker's lifetime. Options instances
+        // are cached per name, so the configured collection stays reachable and mutable after construction;
+        // re-reading it when a channel is recreated would let a late mutation silently take effect at an
+        // externally-triggered recreate, long after the change was made.
+        this.interceptors = this.grpcOptions.Interceptors.ToArray();
+
+        // Infrastructure exemptions, like interceptors, are fixed for this worker's lifetime.
+        this.versioningExemptOrchestrations = new(this.grpcOptions.Internal.VersioningExemptOrchestrations, StringComparer.OrdinalIgnoreCase);
+        this.versioningExemptActivities = new(this.grpcOptions.Internal.VersioningExemptActivities, StringComparer.OrdinalIgnoreCase);
         this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
@@ -61,6 +76,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         AsyncDisposable workerOwnedChannelDisposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
+        this.PublishCallInvoker(callInvoker);
 
         // Seed the tracker from the configured channel once, then update latestObservedChannel after
         // each successful recreate. Do not re-read this.grpcOptions.Channel inside the loop: the options
@@ -73,7 +89,15 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                Processor processor = new(this, new(callInvoker), this.orchestrationFilter, this.ExceptionPropertiesProvider);
+                // Built on the SAME CallInvoker as the sidecar client so the DTS-only purge service the
+                // activities use rides the worker's existing channel and interceptors rather than opening a
+                // second connection. The worker itself never calls SetLargePayloadAutoPurge; that setting is
+                // owned by the explicit client API.
+                Processor processor = new(
+                    this,
+                    new TaskHubSidecarServiceClient(callInvoker),
+                    this.orchestrationFilter,
+                    this.ExceptionPropertiesProvider);
                 ProcessorExitReason reason = await processor.ExecuteAsync(stoppingToken);
 
                 if (reason == ProcessorExitReason.Shutdown || stoppingToken.IsCancellationRequested)
@@ -126,7 +150,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                     // The recreator owns the replacement channel lifetime. Return a default disposable
                     // so the caller disposes the previous worker-owned channel exactly once without
                     // carrying that ownership forward to the recreated state.
-                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, default, newChannel);
+                    return new ChannelRecreateResult(
+                        true,
+                        ApplyInterceptors(this.interceptors, newChannel.CreateCallInvoker()),
+                        newChannel.Target,
+                        default,
+                        newChannel);
                 }
 
                 // Recreator returned the same instance — nothing to swap.
@@ -154,7 +183,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 // This new channel is worker-owned, so hand back a disposable that will shut it down
                 // (and dispose it on frameworks where GrpcChannel implements IDisposable).
                 AsyncDisposable newDisposable = CreateOwnedChannelDisposable(newChannel);
-                return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable, newChannel);
+                return new ChannelRecreateResult(
+                    true,
+                    ApplyInterceptors(this.interceptors, newChannel.CreateCallInvoker()),
+                    newChannel.Target,
+                    newDisposable,
+                    newChannel);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -254,6 +288,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         TimeSpan deferredDisposeGracePeriod)
     {
         callInvoker = result.NewCallInvoker!;
+        this.PublishCallInvoker(callInvoker);
         address = result.NewAddress!;
         latestObservedChannel = result.NewChannel;
         AsyncDisposable previousDisposable = workerOwnedChannelDisposable;
@@ -294,6 +329,23 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
     {
+        AsyncDisposable disposable = this.GetCallInvokerCore(out CallInvoker core, out address);
+        callInvoker = ApplyInterceptors(this.interceptors, core);
+        return disposable;
+    }
+
+    // Called with the post-interceptor invoker only, at startup and after each successful recreate, so a
+    // subscriber shares the worker's transport (and its auth chain) instead of holding an invoker that goes
+    // stale the moment the channel is replaced. Deliberately not wrapped in a catch: the hook is documented as
+    // non-throwing, and swallowing a failure here would leave subscribers silently pinned to a dead channel
+    // with nothing to indicate it.
+    void PublishCallInvoker(CallInvoker callInvoker)
+    {
+        this.grpcOptions.Internal.CallInvokerPublisher?.Invoke(callInvoker);
+    }
+
+    AsyncDisposable GetCallInvokerCore(out CallInvoker callInvoker, out string address)
+    {
         if (this.grpcOptions.Channel is GrpcChannel c)
         {
             callInvoker = c.CreateCallInvoker();
@@ -313,6 +365,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         address = c.Target;
         return CreateOwnedChannelDisposable(c);
     }
+
+    static CallInvoker ApplyInterceptors(Interceptor[] interceptors, CallInvoker invoker)
+        => interceptors.Length == 0 ? invoker : invoker.Intercept(interceptors);
 
     static ILogger CreateLogger(ILoggerFactory loggerFactory, DurableTaskWorkerOptions options)
     {

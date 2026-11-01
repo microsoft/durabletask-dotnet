@@ -473,7 +473,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <param name="rawEventPayload">The serialized event payload.</param>
     internal void CompleteExternalEvent(string eventName, string rawEventPayload)
     {
-        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
+        Dictionary<Type, object?>? deserializedValues = null;
+        while (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
         {
             // Get the waiter at the top of the stack (most recent waiter)
             // If we're going to raise an event we should remove it from the pending collection
@@ -489,35 +490,47 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 this.externalEventSources[eventName] = next;
             }
 
-            object? value;
-            if (waiter.EventType == typeof(OperationResult))
+            deserializedValues ??= new Dictionary<Type, object?>();
+            if (!deserializedValues.TryGetValue(waiter.EventType, out object? value))
             {
-                // use the framework-defined deserialization for entity responses, not the application-defined data converter,
-                // because we are just unwrapping the entity response without yet deserializing any application-defined data.
-                value = this.entityFeature!.EntityContext.DeserializeEntityResponseEvent(rawEventPayload);
-            }
-            else
-            {
-                value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+                if (waiter.EventType == typeof(OperationResult))
+                {
+                    // use the framework-defined deserialization for entity responses, not the application-defined data converter,
+                    // because we are just unwrapping the entity response without yet deserializing any application-defined data.
+                    value = this.entityFeature!.EntityContext.DeserializeEntityResponseEvent(rawEventPayload);
+                }
+                else
+                {
+                    value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+                }
+
+                deserializedValues[waiter.EventType] = value;
             }
 
-            waiter.TrySetResult(value);
+            if (waiter.TrySetResult(value))
+            {
+                // The event was delivered to a live waiter. We're done.
+                return;
+            }
+
+            // This waiter was already completed, canceled, or abandoned (e.g. the losing side of a
+            // Task.WhenAny) and cannot accept the event. It has already been popped off the stack above,
+            // so continue the loop to try the next waiter underneath it, if any. If there are no more
+            // waiters, fall through to the buffering/forwarding logic below as if no one was listening.
+        }
+
+        if (this.preserveUnprocessedEventsOnContinueAsNew)
+        {
+            // ContinueAsNew has already been scheduled with event preservation enabled.
+            // Forward late-arriving events directly to the next execution instead of buffering
+            // them on the current wrapper instance, which is about to be discarded.
+            this.ForwardRawExternalEvent(eventName, rawEventPayload);
         }
         else
         {
-            if (this.preserveUnprocessedEventsOnContinueAsNew)
-            {
-                // ContinueAsNew has already been scheduled with event preservation enabled.
-                // Forward late-arriving events directly to the next execution instead of buffering
-                // them on the current wrapper instance, which is about to be discarded.
-                this.ForwardRawExternalEvent(eventName, rawEventPayload);
-            }
-            else
-            {
-                // The orchestrator isn't waiting for this event (yet?). Save it in case
-                // the orchestrator wants it later.
-                this.externalEventBuffer.Add(eventName, rawEventPayload);
-            }
+            // The orchestrator isn't waiting for this event (yet?). Save it in case
+            // the orchestrator wants it later.
+            this.externalEventBuffer.Add(eventName, rawEventPayload);
         }
     }
 

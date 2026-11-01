@@ -114,7 +114,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     {
                         CompletedTimeFrom = checkpoint?.CompletedTimeFrom ?? listRequest.CompletedTimeFrom,
                         CompletedTimeTo = checkpoint?.CompletedTimeTo ?? new DateTimeOffset(context.CurrentUtcDateTime),
-                        LastInstanceKey = checkpoint?.CompletedTimeTo.HasValue == true ? checkpoint.LastInstanceKey : null,
+                        LastInstanceKey = checkpoint?.CompletedTimeTo.HasValue == true ? checkpoint?.LastInstanceKey : null,
                     };
 
                     if (listRequest.CompletedTimeFrom > listRequest.CompletedTimeTo)

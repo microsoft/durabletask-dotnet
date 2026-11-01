@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Externalize continue-as-new carryover event payloads using the configured UTF-8 size limits, preventing oversized completion responses ([#819](https://github.com/microsoft/durabletask-dotnet/issues/819)).
+
+## v1.27.1
+- Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))
+
+## v1.27.0
+
+- Add `Microsoft.DurableTask.LargePayloadPurge.Abstractions` with shared fetch/report and service-setting interfaces, and expose the existing blob purge tasks for host integration ([#805](https://github.com/microsoft/durabletask-dotnet/pull/805)).
+- Isolate in-process test-host work-item completion by delivery token ([#815](https://github.com/microsoft/durabletask-dotnet/pull/815)).
+- Await backend operations for in-process test-host task-hub lifecycle changes ([#813](https://github.com/microsoft/durabletask-dotnet/pull/813)).
+- Release streamed history snapshots after in-process test-host work items complete ([#811](https://github.com/microsoft/durabletask-dotnet/pull/811)).
+- Treat omitted purge start times as unbounded in the in-process test host ([#810](https://github.com/microsoft/durabletask-dotnet/pull/810)).
+- Fix orchestration history retrieval in the in-process test host ([#809](https://github.com/microsoft/durabletask-dotnet/pull/809)).
+- Preserve the original orchestration version when restarting through the orchestration-service client shim ([#808](https://github.com/microsoft/durabletask-dotnet/pull/808), [#463](https://github.com/microsoft/durabletask-dotnet/issues/463)).
+- Support configurable scheduler token audiences and government defaults ([#806](https://github.com/microsoft/durabletask-dotnet/pull/806))
+- Add opt-in large-payload blob auto-purge with a persistent orchestration and shared Client purge models ([#758](https://github.com/microsoft/durabletask-dotnet/pull/758)).
+- Update `Microsoft.Azure.DurableTask.Core` from `3.9.0` to the published `3.11.1` release.
+
+## v1.26.0
+- Adding rewind to the sidecar by sophiatev ([#802](https://github.com/microsoft/durabletask-dotnet/pull/802))
+- Prevent external-event loss after canceled waits in isolated worker by wangbill ([#801](https://github.com/microsoft/durabletask-dotnet/pull/801))
+- Preserve grpc channel recreation when externalized payloads are enabled by wangbill ([#797](https://github.com/microsoft/durabletask-dotnet/pull/797))
+- Perf: bound azure blob payload operation concurrency for fan-out messages by Bernd Verst ([#786](https://github.com/microsoft/durabletask-dotnet/pull/786))
 
 ## v1.25.0
 - Route NuGet restores through Central Feed Service ([#789](https://github.com/microsoft/durabletask-dotnet/pull/789))

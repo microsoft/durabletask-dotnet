@@ -26,6 +26,42 @@ public class GrpcDurableTaskWorkerOptionsInternalTests
         internalOptions.TransientRetryMaxAttempts.Should().Be(10);
         internalOptions.SilentDisconnectTimeout.Should().Be(TimeSpan.FromSeconds(120));
         internalOptions.ChannelRecreator.Should().BeNull();
+        internalOptions.VersioningExemptOrchestrations.Should().BeEmpty();
+        internalOptions.VersioningExemptActivities.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, null)]
+    [InlineData(true, "")]
+    [InlineData(false, "")]
+    public void ConfigureVersioningExemptions_InvalidName_Throws(bool orchestration, string? name)
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+
+        // Act
+        Action act = () => options.ConfigureVersioningExemptions(orchestration ? [name!] : [], orchestration ? [] : [name!]);
+
+        // Assert
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ConfigureVersioningExemptions_NullArgument_Throws(int argument)
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions options = new();
+
+        // Act
+        Action act = () => (argument == 0 ? null! : options)
+            .ConfigureVersioningExemptions(argument == 1 ? null! : [], argument == 2 ? null! : []);
+
+        // Assert
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

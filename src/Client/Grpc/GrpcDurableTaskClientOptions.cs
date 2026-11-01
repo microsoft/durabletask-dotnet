@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core.Interceptors;
+
 namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>
@@ -14,6 +16,20 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
     public string? Address { get; set; }
 
     /// <summary>
+    /// Gets or sets the default timeout for each unary gRPC call, excluding
+    /// <see cref="DurableTaskClient.WaitForInstanceStartAsync(string, bool, CancellationToken)"/> and
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/>.
+    /// The default is <see langword="null"/>, which adds no deadline.
+    /// </summary>
+    /// <remarks>
+    /// Must be positive when set. An earlier deadline supplied by an interceptor is preserved.
+    /// Streaming calls are not affected. Expiration fails the call with <see cref="StatusCode.DeadlineExceeded"/>;
+    /// it does not retry the operation or guarantee that the server stopped processing it.
+    /// This option is captured when the client is constructed and bounds each RPC, not the whole client operation.
+    /// </remarks>
+    public TimeSpan? GrpcCallTimeout { get; set; }
+
+    /// <summary>
     /// Gets or sets the gRPC channel to use. Will supersede <see cref="CallInvoker" /> when provided.
     /// </summary>
     public GrpcChannel? Channel { get; set; }
@@ -22,6 +38,31 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
     /// Gets or sets the gRPC call invoker to use. Will supersede <see cref="Address" /> when provided.
     /// </summary>
     public CallInvoker? CallInvoker { get; set; }
+
+    /// <summary>
+    /// Gets the gRPC interceptors applied to every <see cref="CallInvoker"/> the client builds from its
+    /// configured transport, including invokers rebuilt after the underlying channel is recreated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the supported way to attach cross-cutting gRPC behavior — authentication headers, tracing,
+    /// logging, payload externalization — to the Durable Task gRPC client. Prefer it over supplying a
+    /// pre-built, already-intercepted <see cref="CallInvoker"/> in place of <see cref="Channel"/>: an
+    /// externally-supplied invoker opts the client out of gRPC channel recreation, so a wedged connection
+    /// can never be replaced.
+    /// </para>
+    /// <para>
+    /// Interceptors run in list order — the first interceptor added is the outermost, so it observes each
+    /// outgoing call first and each response last. Registration is purely additive: while this collection
+    /// is empty, the client uses exactly the invoker its configured transport produces.
+    /// </para>
+    /// <para>
+    /// This collection is captured when the client is constructed, so it must be populated while options are
+    /// being configured (for example from <c>Configure</c> or <c>PostConfigure</c>). Mutating it afterwards
+    /// has no effect on a client that has already been built, including across channel recreation.
+    /// </para>
+    /// </remarks>
+    public IList<Interceptor> Interceptors { get; } = new List<Interceptor>();
 
     /// <summary>
     /// Gets the internal options. These are not exposed directly, but configurable via

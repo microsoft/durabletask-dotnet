@@ -335,11 +335,7 @@ static class ProtoUtils
                 ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
                 ActivityContext clientActivityContext = new(orchestrationActivity.TraceId, clientSpanId, orchestrationActivity.ActivityTraceFlags, orchestrationActivity.TraceStateString);
 
-                return new P.TraceContext
-                {
-                    TraceParent = $"00-{clientActivityContext.TraceId}-{clientActivityContext.SpanId}-0{clientActivityContext.TraceFlags:d}",
-                    TraceState = clientActivityContext.TraceState,
-                };
+                return ProtoUtils.CreateTraceContext(clientActivityContext);
             }
 
             switch (action.OrchestratorActionType)
@@ -498,6 +494,21 @@ static class ProtoUtils
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Creates a protobuf trace context from an activity context.
+    /// </summary>
+    /// <param name="activityContext">The activity context to convert.</param>
+    /// <returns>The corresponding protobuf trace context.</returns>
+    internal static P.TraceContext CreateTraceContext(ActivityContext activityContext)
+    {
+        return new()
+        {
+            TraceParent =
+                $"00-{activityContext.TraceId}-{activityContext.SpanId}-0{activityContext.TraceFlags:d}",
+            TraceState = activityContext.TraceState,
+        };
     }
 
     /// <summary>
@@ -802,6 +813,9 @@ static class ProtoUtils
                     Input = operationAction.StartNewOrchestration.Input,
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
+                    Tags = operationAction.StartNewOrchestration.Tags.Count > 0
+                        ? new Dictionary<string, string>(operationAction.StartNewOrchestration.Tags, StringComparer.Ordinal)
+                        : null,
                     ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
                     RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTimeOffset(),
                     ParentTraceContext = operationAction.StartNewOrchestration.ParentTraceContext != null ?
@@ -868,6 +882,14 @@ static class ProtoUtils
                         }
                     : null,
                 };
+                if (startNewOrchestrationAction.Tags != null)
+                {
+                    foreach (KeyValuePair<string, string> tag in startNewOrchestrationAction.Tags)
+                    {
+                        action.StartNewOrchestration.Tags[tag.Key] = tag.Value;
+                    }
+                }
+
                 break;
         }
 

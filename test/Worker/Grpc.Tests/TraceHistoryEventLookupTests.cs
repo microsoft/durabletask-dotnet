@@ -23,8 +23,7 @@ public class TraceHistoryEventLookupTests
         Action act = () => lookup.GetTaskScheduledEvent(1);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*'TaskScheduled'*event ID '1'*");
+        act.Should().Throw<ArgumentException>().WithMessage("*1*");
     }
 
     [Fact]
@@ -43,8 +42,7 @@ public class TraceHistoryEventLookupTests
         Action act = () => lookup.GetSubOrchestrationInstanceCreatedEvent(2);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*'SubOrchestrationInstanceCreated'*event ID '2'*");
+        act.Should().Throw<ArgumentException>().WithMessage("*2*");
     }
 
     [Fact]
@@ -116,15 +114,13 @@ public class TraceHistoryEventLookupTests
     }
 
     [Fact]
-    public void GetEvents_IndexesOnlyIdsReferencedByNewEvents()
+    public void GetEvents_IndexesAllSchedulingEventsOfNeededTypes()
     {
         // Arrange
         List<P.HistoryEvent> pastEvents =
         [
-            CreateTaskScheduled(eventId: 1, name: "UnreferencedTask1"),
-            CreateTaskScheduled(eventId: 1, name: "UnreferencedTask2"),
-            CreateSubOrchestrationInstanceCreated(eventId: 2, name: "UnreferencedSub1"),
-            CreateSubOrchestrationInstanceCreated(eventId: 2, name: "UnreferencedSub2"),
+            CreateTaskScheduled(eventId: 1, name: "UnreferencedTask"),
+            CreateSubOrchestrationInstanceCreated(eventId: 2, name: "UnreferencedSub"),
             CreateTaskScheduled(eventId: 3, name: "ReferencedTask"),
             CreateSubOrchestrationInstanceCreated(eventId: 4, name: "ReferencedSub"),
         ];
@@ -134,12 +130,16 @@ public class TraceHistoryEventLookupTests
             subOrchestrationInstanceCreatedEventIds: [4]);
 
         // Act
-        P.HistoryEvent? taskScheduled = lookup.GetTaskScheduledEvent(3);
-        P.HistoryEvent? subOrchestrationCreated = lookup.GetSubOrchestrationInstanceCreatedEvent(4);
+        P.HistoryEvent? unreferencedTask = lookup.GetTaskScheduledEvent(1);
+        P.HistoryEvent? unreferencedSub = lookup.GetSubOrchestrationInstanceCreatedEvent(2);
+        P.HistoryEvent? referencedTask = lookup.GetTaskScheduledEvent(3);
+        P.HistoryEvent? referencedSub = lookup.GetSubOrchestrationInstanceCreatedEvent(4);
 
         // Assert
-        taskScheduled!.TaskScheduled.Name.Should().Be("ReferencedTask");
-        subOrchestrationCreated!.SubOrchestrationInstanceCreated.Name.Should().Be("ReferencedSub");
+        unreferencedTask.Should().BeSameAs(pastEvents[0]);
+        unreferencedSub.Should().BeSameAs(pastEvents[1]);
+        referencedTask.Should().BeSameAs(pastEvents[2]);
+        referencedSub.Should().BeSameAs(pastEvents[3]);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class TraceHistoryEventLookupTests
     }
 
     [Fact]
-    public void GetEvents_RegistersFailureCorrelationIds()
+    public void GetEvents_FailureCompletions_EnableBothIndexes()
     {
         // Arrange
         List<P.HistoryEvent> pastEvents =
@@ -214,37 +214,71 @@ public class TraceHistoryEventLookupTests
         subOrchestrationCreated!.SubOrchestrationInstanceCreated.Name.Should().Be("Sub");
     }
 
-    [Fact]
-    public void GetEvents_DuplicateRequestedId_ThrowsOnlyForThatIdAndType()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GetEvents_DuplicateUnrequestedIdInNeededIndex_Throws(bool indexTaskEvents)
     {
         // Arrange
         List<P.HistoryEvent> pastEvents =
         [
-            CreateTaskScheduled(eventId: 1, name: "DuplicateTask1"),
-            CreateTaskScheduled(eventId: 1, name: "DuplicateTask2"),
-            CreateTaskScheduled(eventId: 3, name: "ValidTask"),
-            CreateSubOrchestrationInstanceCreated(eventId: 2, name: "DuplicateSub1"),
-            CreateSubOrchestrationInstanceCreated(eventId: 2, name: "DuplicateSub2"),
-            CreateSubOrchestrationInstanceCreated(eventId: 4, name: "ValidSub"),
+            indexTaskEvents
+                ? CreateTaskScheduled(eventId: 1, name: "First")
+                : CreateSubOrchestrationInstanceCreated(eventId: 1, name: "First"),
+            indexTaskEvents
+                ? CreateTaskScheduled(eventId: 1, name: "Duplicate")
+                : CreateSubOrchestrationInstanceCreated(eventId: 1, name: "Duplicate"),
+            indexTaskEvents
+                ? CreateTaskScheduled(eventId: 2, name: "Requested")
+                : CreateSubOrchestrationInstanceCreated(eventId: 2, name: "Requested"),
         ];
         TraceHistoryEventLookup lookup = CreateLookup(
             pastEvents,
-            taskScheduledEventIds: [1, 3],
-            subOrchestrationInstanceCreatedEventIds: [2, 4]);
+            taskScheduledEventIds: indexTaskEvents ? [2] : null,
+            subOrchestrationInstanceCreatedEventIds: indexTaskEvents ? null : [2]);
 
         // Act
-        P.HistoryEvent? validTask = lookup.GetTaskScheduledEvent(3);
-        P.HistoryEvent? validSub = lookup.GetSubOrchestrationInstanceCreatedEvent(4);
-        Action getDuplicateTask = () => lookup.GetTaskScheduledEvent(1);
-        Action getDuplicateSub = () => lookup.GetSubOrchestrationInstanceCreatedEvent(2);
+        Action act = () =>
+        {
+            _ = indexTaskEvents
+                ? lookup.GetTaskScheduledEvent(2)
+                : lookup.GetSubOrchestrationInstanceCreatedEvent(2);
+        };
 
         // Assert
-        validTask!.TaskScheduled.Name.Should().Be("ValidTask");
-        validSub!.SubOrchestrationInstanceCreated.Name.Should().Be("ValidSub");
-        getDuplicateTask.Should().Throw<InvalidOperationException>()
-            .WithMessage("*'TaskScheduled'*event ID '1'*");
-        getDuplicateSub.Should().Throw<InvalidOperationException>()
-            .WithMessage("*'SubOrchestrationInstanceCreated'*event ID '2'*");
+        act.Should().Throw<ArgumentException>().WithMessage("*1*");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GetEvents_IgnoresUnneededSchedulingEventTypes(bool indexTaskEvents)
+    {
+        // Arrange
+        List<P.HistoryEvent> pastEvents =
+        [
+            indexTaskEvents
+                ? CreateTaskScheduled(eventId: 1, name: "Requested")
+                : CreateSubOrchestrationInstanceCreated(eventId: 1, name: "Requested"),
+            indexTaskEvents
+                ? CreateSubOrchestrationInstanceCreated(eventId: 2, name: "First")
+                : CreateTaskScheduled(eventId: 2, name: "First"),
+            indexTaskEvents
+                ? CreateSubOrchestrationInstanceCreated(eventId: 2, name: "Duplicate")
+                : CreateTaskScheduled(eventId: 2, name: "Duplicate"),
+        ];
+        TraceHistoryEventLookup lookup = CreateLookup(
+            pastEvents,
+            taskScheduledEventIds: indexTaskEvents ? [1] : null,
+            subOrchestrationInstanceCreatedEventIds: indexTaskEvents ? null : [1]);
+
+        // Act
+        P.HistoryEvent? result = indexTaskEvents
+            ? lookup.GetTaskScheduledEvent(1)
+            : lookup.GetSubOrchestrationInstanceCreatedEvent(1);
+
+        // Assert
+        result.Should().BeSameAs(pastEvents[0]);
     }
 
     static TraceHistoryEventLookup CreateLookup(

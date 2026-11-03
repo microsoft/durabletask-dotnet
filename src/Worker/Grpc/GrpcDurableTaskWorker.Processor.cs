@@ -706,7 +706,6 @@ sealed partial class GrpcDurableTaskWorker
             {
                 if (hasTraceListeners && executionStartedEvent is not null)
                 {
-                    // Index only correlation IDs referenced by this work item's new events in one lazy history pass.
                     TraceHistoryEventLookup historyLookup = new(pastEvents, request.NewEvents);
 
                     foreach (var newEvent in request.NewEvents)

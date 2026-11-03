@@ -961,6 +961,7 @@ public class BlobPayloadStoreRoutingTests
             requestLine = await reader.ReadLineAsync(timeout.Token);
             while (await reader.ReadLineAsync(timeout.Token) is string line && line.Length != 0)
             {
+                // Consume and ignore the remaining HTTP headers.
             }
 
             byte[] response = Encoding.ASCII.GetBytes(

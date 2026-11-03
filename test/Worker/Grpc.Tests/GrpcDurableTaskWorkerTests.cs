@@ -48,6 +48,72 @@ public class GrpcDurableTaskWorkerTests
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("OnRunOrchestratorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("original-instance")]
+    [InlineData("previous-clone")]
+    public async Task OnRunOrchestratorAsync_Properties_ExposeImmediateSource(string? source)
+    {
+        // Arrange
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "clone",
+            ExecutionId = "clone-execution",
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+                    ExecutionStarted = new P.ExecutionStartedEvent
+                    {
+                        Name = "CloneOrchestration",
+                        OrchestrationInstance = new P.OrchestrationInstance
+                        {
+                            InstanceId = "clone",
+                            ExecutionId = "clone-execution",
+                        },
+                    },
+                },
+            },
+        };
+        if (source is not null)
+        {
+            request.Properties.Add("sourceInstanceId", Value.ForString(source));
+        }
+
+        P.OrchestratorResponse? completed = null;
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict, new object[] { Mock.Of<CallInvoker>() });
+        clientMock.Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(), It.IsAny<Metadata>(), It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<P.OrchestratorResponse, Metadata, DateTime?, CancellationToken>(
+                (response, _, _, _) => completed = response)
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        ITaskOrchestrator? orchestrator = FuncTaskOrchestrator.Create<object?, string?>(
+            (context, _) => Task.FromResult(context.SourceInstanceId));
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        factoryMock.Setup(factory => factory.TryCreateOrchestrator(
+                new TaskName("CloneOrchestration"), It.IsAny<IServiceProvider>(), out orchestrator))
+            .Returns(true);
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(), new DurableTaskWorkerOptions(), NullLoggerFactory.Instance,
+            factoryMock.Object, services);
+
+        // Act
+        await InvokeOnRunOrchestratorAsync(
+            CreateProcessor(worker, clientMock.Object), request, "completion-token", CancellationToken.None);
+
+        // Assert
+        completed.Should().NotBeNull();
+        completed!.Actions.Should().ContainSingle();
+        completed.Actions[0].CompleteOrchestration.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Completed);
+        completed.Actions[0].CompleteOrchestration.Result.Should().Be(source is null ? null : $"\"{source}\"");
+        clientMock.VerifyAll();
+        factoryMock.VerifyAll();
+    }
+
     [Fact]
     public async Task ExecuteAsync_ConnectFailureThreshold_RecreatesConfiguredChannel()
     {

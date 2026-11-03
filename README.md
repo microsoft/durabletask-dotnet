@@ -88,6 +88,32 @@ static class HelloSequenceUntyped
 
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesUntyped.cs](samples/AzureFunctionsApp/HelloCitiesUntyped.cs).
 
+### Restarting as a clone
+
+With a backend that supports explicit restart IDs, restart an orchestration from the beginning with its original
+name and input, a chosen target instance ID, and an optional version:
+
+```csharp
+string cloneId = await client.RestartAsync(
+    "source-instance",
+    new RestartOrchestrationOptions { NewInstanceId = "clone-instance", Version = "v2" });
+```
+
+Execution history is not copied. Inside the cloned orchestrator, `context.SourceInstanceId` identifies the immediate
+source (`"source-instance"` above). Cloning that clone identifies `"clone-instance"` as the next clone's source.
+Lineage is separate from `context.Parent` and is not inherited by sub-orchestrations. Without backend-supplied lineage,
+`SourceInstanceId` is `null`.
+
+Omit `Version` (or use `null`) to use the backend's restart default, which is not necessarily the source version.
+For example, Durable Functions uses its configured default version. Use `Version = ""` to explicitly request an
+unversioned orchestration. The existing `RestartAsync(instanceId, restartWithNewInstanceId)` overload is unchanged.
+
+**Server compatibility:** Upgrade the Durable Functions extension or other backend to a version supporting these
+options before calling this overload. Older gRPC servers may ignore the added fields and create an unintended
+legacy restart with a generated instance ID. The client rejects a returned ID that differs from the requested target, but cannot undo that restart
+or detect an ignored version override. Backends and clients without support can reject the operation; the
+orchestration-service client shim does not implement this overload.
+
 ### Class-based syntax
 
 **IMPORTANT**: class based syntax in Durable Functions relies on a package reference to `Microsoft.DurableTask.Generators`. This is still in "preview" and may be subject to significant change before 1.0 or even post-1.0. It is recommended to stick with function-syntax for now.

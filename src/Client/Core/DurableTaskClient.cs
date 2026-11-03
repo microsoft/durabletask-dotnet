@@ -466,6 +466,36 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart.");
 
     /// <summary>
+    /// Restarts an orchestration from the beginning using its original name and input and a caller-selected instance ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This operation does not copy execution history. A supporting backend makes the immediate source instance ID
+    /// available through <see cref="TaskOrchestrationContext.SourceInstanceId"/> on the restarted orchestration.
+    /// The version is selected using <see cref="RestartOrchestrationOptions.Version"/>, including backend-specific
+    /// defaults when no override is provided.
+    /// </para>
+    /// <para>
+    /// This overload requires a backend that supports explicit restart IDs and version overrides. Older gRPC servers
+    /// may ignore these options and perform a legacy restart with a generated instance ID instead.
+    /// Upgrade the server before using this overload; a returned instance ID cannot verify whether a version override
+    /// was honored.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the source orchestration.</param>
+    /// <param name="options">The restart options, including the required, nonblank target instance ID.</param>
+    /// <param name="cancellation">Cancels enqueueing the request, not execution once enqueued.</param>
+    /// <returns>The instance ID of the restarted orchestration.</returns>
+    /// <exception cref="ArgumentException">The source was not found or an instance ID is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
+    /// <exception cref="NotSupportedException">The client or backend does not support these restart options.</exception>
+    public virtual Task<string> RestartAsync(
+        string instanceId,
+        RestartOrchestrationOptions options,
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart options.");
+
+    /// <summary>
     /// Rewinds the specified orchestration instance by re-executing any failed Activities, and recursively rewinding
     /// any failed suborchestrations with failed Activities.
     /// </summary>

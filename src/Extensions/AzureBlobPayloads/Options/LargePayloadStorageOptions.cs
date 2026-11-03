@@ -108,6 +108,12 @@ public sealed class LargePayloadStorageOptions
     /// <summary>
     /// Gets or sets the blob container name to use for payloads. Defaults to "durabletask-payloads".
     /// </summary>
+    /// <remarks>
+    /// Payload downloads and deletion must refer to this container at the configured storage endpoint.
+    /// Before changing the container or endpoint, complete or explicitly migrate existing instances
+    /// and clean up their payloads. Payloads left at the original location require a store configured
+    /// for that location.
+    /// </remarks>
     public string ContainerName { get; set; } = "durabletask-payloads";
 
     /// <summary>

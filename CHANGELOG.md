@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Restrict Azure Blob payload downloads and deletion to the configured container and storage endpoint while retaining self-describing v2 URLs. Before changing the storage location, complete or explicitly migrate existing instances and clean up their payloads; accessing payloads left at the original location requires a store configured for it.
 - Externalize continue-as-new carryover event payloads using the configured UTF-8 size limits, preventing oversized completion responses ([#819](https://github.com/microsoft/durabletask-dotnet/issues/819)).
 
 ## v1.27.1

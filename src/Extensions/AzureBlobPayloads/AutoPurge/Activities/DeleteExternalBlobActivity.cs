@@ -202,10 +202,10 @@ public class DeleteExternalBlobActivity(
         }
         catch (PayloadStorageException)
         {
-            // The token is well formed but points at a storage account this worker's credential cannot reach
-            // (account-key auth is account-specific). Recoverable after a configuration or credential change,
-            // so it is deferred rather than discarded.
-            this.logger.BlobPurgeDeleteRetryable("StorageAccountUnreachable", null);
+            // The payload cannot be accessed through the configured store, for example because its location
+            // is outside that store's container. Keep its tombstone recoverable for a store configured for
+            // the original location instead of reporting deletion or discarding it.
+            this.logger.BlobPurgeDeleteRetryable("PayloadStoreUnavailable", null);
             return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
         catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.BadRequest)

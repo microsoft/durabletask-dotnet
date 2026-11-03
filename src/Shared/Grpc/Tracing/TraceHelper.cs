@@ -32,6 +32,73 @@ static class TraceHelper
     public static bool HasListeners => ActivityTraceSource.HasListeners();
 
     /// <summary>
+    /// Correlates new completion events with past scheduling events and emits their trace activities.
+    /// </summary>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="orchestrationName">The orchestration name used for timer activities.</param>
+    /// <param name="pastEvents">The past history events containing scheduling events.</param>
+    /// <param name="newEvents">The new history events to trace.</param>
+    public static void EmitTraceActivitiesForNewEvents(
+        string instanceId,
+        string orchestrationName,
+        IEnumerable<P.HistoryEvent> pastEvents,
+        IEnumerable<P.HistoryEvent> newEvents)
+    {
+        if (!HasListeners)
+        {
+            return;
+        }
+
+        TraceHistoryEventLookup historyLookup = new(pastEvents);
+        foreach (P.HistoryEvent newEvent in newEvents)
+        {
+            switch (newEvent.EventTypeCase)
+            {
+                case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
+                    {
+                        P.HistoryEvent? scheduledEvent = historyLookup.GetSubOrchestrationInstanceCreatedEvent(
+                            newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
+                        EmitTraceActivityForSubOrchestrationCompleted(
+                            instanceId, scheduledEvent, scheduledEvent?.SubOrchestrationInstanceCreated);
+                        break;
+                    }
+
+                case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
+                    {
+                        P.HistoryEvent? scheduledEvent = historyLookup.GetSubOrchestrationInstanceCreatedEvent(
+                            newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
+                        EmitTraceActivityForSubOrchestrationFailed(
+                            instanceId, scheduledEvent, scheduledEvent?.SubOrchestrationInstanceCreated,
+                            newEvent.SubOrchestrationInstanceFailed);
+                        break;
+                    }
+
+                case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
+                    {
+                        P.HistoryEvent? scheduledEvent = historyLookup.GetTaskScheduledEvent(
+                            newEvent.TaskCompleted.TaskScheduledId);
+                        EmitTraceActivityForTaskCompleted(instanceId, scheduledEvent, scheduledEvent?.TaskScheduled);
+                        break;
+                    }
+
+                case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
+                    {
+                        P.HistoryEvent? scheduledEvent = historyLookup.GetTaskScheduledEvent(
+                            newEvent.TaskFailed.TaskScheduledId);
+                        EmitTraceActivityForTaskFailed(
+                            instanceId, scheduledEvent, scheduledEvent?.TaskScheduled, newEvent.TaskFailed);
+                        break;
+                    }
+
+                case P.HistoryEvent.EventTypeOneofCase.TimerFired:
+                    EmitTraceActivityForTimer(
+                        instanceId, orchestrationName, newEvent.Timestamp.ToDateTime(), newEvent.TimerFired);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
     /// Starts a new trace activity for scheduling an orchestration from the client.
     /// </summary>
     /// <param name="createInstanceRequest">The orchestration's creation request.</param>

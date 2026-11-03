@@ -706,73 +706,8 @@ sealed partial class GrpcDurableTaskWorker
             {
                 if (hasTraceListeners && executionStartedEvent is not null)
                 {
-                    TraceHistoryEventLookup historyLookup = new(pastEvents, request.NewEvents);
-
-                    foreach (var newEvent in request.NewEvents)
-                    {
-                        switch (newEvent.EventTypeCase)
-                        {
-                            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
-                                {
-                                    P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                        historyLookup.GetSubOrchestrationInstanceCreatedEvent(
-                                            newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
-
-                                    TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
-                                        request.InstanceId,
-                                        subOrchestrationInstanceCreatedEvent,
-                                        subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated);
-                                    break;
-                                }
-
-                            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
-                                {
-                                    P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                        historyLookup.GetSubOrchestrationInstanceCreatedEvent(
-                                            newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
-
-                                    TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
-                                        request.InstanceId,
-                                        subOrchestrationInstanceCreatedEvent,
-                                        subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated,
-                                        newEvent.SubOrchestrationInstanceFailed);
-                                    break;
-                                }
-
-                            case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
-                                {
-                                    P.HistoryEvent? taskScheduledEvent =
-                                        historyLookup.GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
-
-                                    TraceHelper.EmitTraceActivityForTaskCompleted(
-                                        request.InstanceId,
-                                        taskScheduledEvent,
-                                        taskScheduledEvent?.TaskScheduled);
-                                    break;
-                                }
-
-                            case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
-                                {
-                                    P.HistoryEvent? taskScheduledEvent =
-                                        historyLookup.GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
-
-                                    TraceHelper.EmitTraceActivityForTaskFailed(
-                                        request.InstanceId,
-                                        taskScheduledEvent,
-                                        taskScheduledEvent?.TaskScheduled,
-                                        newEvent.TaskFailed);
-                                    break;
-                                }
-
-                            case P.HistoryEvent.EventTypeOneofCase.TimerFired:
-                                TraceHelper.EmitTraceActivityForTimer(
-                                    request.InstanceId,
-                                    executionStartedEvent.Name,
-                                    newEvent.Timestamp.ToDateTime(),
-                                    newEvent.TimerFired);
-                                break;
-                        }
-                    }
+                    TraceHelper.EmitTraceActivitiesForNewEvents(
+                        request.InstanceId, executionStartedEvent.Name, pastEvents, request.NewEvents);
                 }
             }
             catch

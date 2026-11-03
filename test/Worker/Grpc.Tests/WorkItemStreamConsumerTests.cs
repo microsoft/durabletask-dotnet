@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Runtime.CompilerServices;
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Grpc;
 using P = Microsoft.DurableTask.Protobuf;
@@ -16,7 +15,7 @@ public class WorkItemStreamConsumerTests
     public async Task EmptyStream_ReturnsGracefulDrain()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => EmptyStream(),
+            stream: EmptyStream(),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
             onFirstMessage: () => throw new InvalidOperationException("onFirstMessage should not be invoked"),
@@ -35,7 +34,7 @@ public class WorkItemStreamConsumerTests
         int firstMessageCount = 0;
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => StreamOf(item1, item2),
+            stream: StreamOf(item1, item2),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: received.Add,
             onFirstMessage: () => firstMessageCount++,
@@ -51,7 +50,7 @@ public class WorkItemStreamConsumerTests
     public async Task VeryLargeSilentDisconnectTimeout_IsClamped_AndStreamCanStillComplete()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => EmptyStream(),
+            stream: EmptyStream(),
             silentDisconnectTimeout: TimeSpan.FromDays(365),
             onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
             onFirstMessage: null,
@@ -65,7 +64,7 @@ public class WorkItemStreamConsumerTests
     public async Task HangingStream_SurfacingOce_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: false),
+            stream: new HangingStreamReader(throwAsRpc: false),
             silentDisconnectTimeout: ShortTimeout,
             onItem: _ => { },
             onFirstMessage: null,
@@ -85,7 +84,7 @@ public class WorkItemStreamConsumerTests
     public async Task HangingStream_SurfacingRpcCancelled_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: true),
+            stream: new HangingStreamReader(throwAsRpc: true),
             silentDisconnectTimeout: ShortTimeout,
             onItem: _ => { },
             onFirstMessage: null,
@@ -104,7 +103,7 @@ public class WorkItemStreamConsumerTests
         outer.CancelAfter(ShortTimeout);
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: false),
+            stream: new HangingStreamReader(throwAsRpc: false),
             silentDisconnectTimeout: TimeSpan.FromSeconds(30),
             onItem: _ => { },
             onFirstMessage: null,
@@ -126,7 +125,7 @@ public class WorkItemStreamConsumerTests
         outer.CancelAfter(ShortTimeout);
 
         Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: true),
+            stream: new HangingStreamReader(throwAsRpc: true),
             silentDisconnectTimeout: TimeSpan.FromSeconds(30),
             onItem: _ => { },
             onFirstMessage: null,
@@ -165,7 +164,7 @@ public class WorkItemStreamConsumerTests
         }
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => StreamOf(items),
+            stream: StreamOf(items),
             silentDisconnectTimeout: TimeSpan.FromMilliseconds(500),
             onItem: _ => events.Add($"item{itemIndex++}"),
             onFirstMessage: null,
@@ -193,7 +192,7 @@ public class WorkItemStreamConsumerTests
     public async Task UnrelatedRpcException_Propagates()
     {
         Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => ThrowingStream(new RpcException(new Status(StatusCode.Unavailable, "boom"))),
+            stream: ThrowingStream(new RpcException(new Status(StatusCode.Unavailable, "boom"))),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: _ => { },
             onFirstMessage: null,
@@ -213,7 +212,7 @@ public class WorkItemStreamConsumerTests
 
         // Act
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: false),
+            stream: new HangingStreamReader(throwAsRpc: false),
             silentDisconnectTimeout: TimeSpan.FromMilliseconds(timeoutMilliseconds),
             onItem: _ => { },
             onFirstMessage: null,
@@ -223,55 +222,138 @@ public class WorkItemStreamConsumerTests
         result.Outcome.Should().Be(WorkItemStreamOutcome.Shutdown);
     }
 
-#pragma warning disable CS1998 // Async method lacks 'await' operators
-    static async IAsyncEnumerable<P.WorkItem> EmptyStream()
+    [Fact]
+    public async Task HydrationFailure_RearmsTimerAndRecoversBeforeReadingNextItemAsync()
     {
-        yield break;
+        // Arrange
+        P.WorkItem failed = new()
+        {
+            CompletionToken = "failed-token",
+            OrchestratorRequest = new P.OrchestratorRequest
+            {
+                NewEvents = { new P.HistoryEvent { EventRaised = new P.EventRaisedEvent { Input = "partially resolved" } } },
+            },
+        };
+        WorkItemPayloadException failure = new(failed, new InvalidOperationException("Download failed."));
+        P.WorkItem healthy = new() { HealthPing = new P.HealthPing() };
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new(MockBehavior.Strict);
+        reader.SetupSequence(r => r.MoveNext(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure)
+            .ReturnsAsync(true)
+            .ReturnsAsync(false);
+        reader.SetupGet(r => r.Current).Returns(healthy);
+        List<string> events = new();
+        List<P.WorkItem> dispatched = new();
+
+        // Act
+        WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+            stream: reader.Object,
+            silentDisconnectTimeout: TimeSpan.FromSeconds(5),
+            onItem: item =>
+            {
+                events.Add("dispatch");
+                dispatched.Add(item);
+            },
+            onFirstMessage: () => events.Add("first"),
+            cancellation: CancellationToken.None,
+            onSilentDisconnectTimerArmed: () => events.Add("armed"),
+            onPayloadFailure: (exception, cancellation) =>
+            {
+                Assert.Same(failure, exception);
+                Assert.Same(failed, exception.WorkItem);
+                Assert.True(cancellation.CanBeCanceled);
+                events.Add("abandon");
+                return Task.CompletedTask;
+            });
+
+        // Assert
+        Assert.Equal(WorkItemStreamOutcome.GracefulDrain, result.Outcome);
+        Assert.True(result.FirstMessageObserved);
+        Assert.Equal(new[] { "armed", "armed", "first", "abandon", "armed", "dispatch" }, events);
+        Assert.Same(healthy, Assert.Single(dispatched));
+        reader.VerifyGet(r => r.Current, Times.Once);
+        reader.Verify(r => r.MoveNext(It.IsAny<CancellationToken>()), Times.Exactly(3));
     }
 
-    static async IAsyncEnumerable<P.WorkItem> StreamOf(params P.WorkItem[] items)
+    [Theory]
+    [InlineData(StatusCode.Unavailable)]
+    [InlineData(StatusCode.PermissionDenied)]
+    public async Task HydrationRecoveryFailure_PropagatesForConnectionRecoveryAsync(StatusCode status)
     {
-        foreach (P.WorkItem item in items)
+        // Arrange
+        WorkItemPayloadException failure = new(new P.WorkItem(), new InvalidOperationException("Download failed."));
+        RpcException abandonFailure = new(new Status(status, "Abandon failed."));
+
+        // Act
+        Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
+            stream: ThrowingStream(failure),
+            silentDisconnectTimeout: TimeSpan.FromSeconds(5),
+            onItem: _ => throw new InvalidOperationException("Failed delivery must not be dispatched."),
+            onFirstMessage: null,
+            cancellation: CancellationToken.None,
+            onPayloadFailure: (_, _) => Task.FromException(abandonFailure));
+
+        // Assert
+        (await act.Should().ThrowAsync<RpcException>()).Which.Should().BeSameAs(abandonFailure);
+    }
+
+    [Fact]
+    public async Task HydrationFailure_WithoutRecoveryHandler_PropagatesAsync()
+    {
+        // Arrange
+        WorkItemPayloadException failure = new(new P.WorkItem(), new InvalidOperationException("Download failed."));
+
+        // Act
+        Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
+            stream: ThrowingStream(failure),
+            silentDisconnectTimeout: TimeSpan.FromSeconds(5),
+            onItem: _ => throw new InvalidOperationException("Failed delivery must not be dispatched."),
+            onFirstMessage: null,
+            cancellation: CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<WorkItemPayloadException>()).Which.Should().BeSameAs(failure);
+    }
+
+    static IAsyncStreamReader<P.WorkItem> EmptyStream() => StreamOf();
+
+    static IAsyncStreamReader<P.WorkItem> StreamOf(params P.WorkItem[] items) => new SequenceStreamReader(items);
+
+    static IAsyncStreamReader<P.WorkItem> ThrowingStream(Exception ex) => new ThrowingStreamReader(ex);
+
+    sealed class SequenceStreamReader(P.WorkItem[] items) : IAsyncStreamReader<P.WorkItem>
+    {
+        int index = -1;
+
+        public P.WorkItem Current => items[this.index];
+
+        public Task<bool> MoveNext(CancellationToken cancellationToken) => Task.FromResult(++this.index < items.Length);
+    }
+
+    sealed class HangingStreamReader(bool throwAsRpc) : IAsyncStreamReader<P.WorkItem>
+    {
+        public P.WorkItem Current => throw new InvalidOperationException("No item is available for a hanging stream.");
+
+        public async Task<bool> MoveNext(CancellationToken cancellationToken)
         {
-            yield return item;
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException) when (throwAsRpc)
+            {
+                // Mimic grpc-dotnet's default surface shape for linked-token cancellation.
+                throw new RpcException(new Status(StatusCode.Cancelled, "stream cancelled"));
+            }
+
+            return false;
         }
     }
 
-    static IAsyncEnumerable<P.WorkItem> ThrowingStream(Exception ex) => new ThrowingAsyncEnumerable(ex);
-#pragma warning restore CS1998
-
-    static async IAsyncEnumerable<P.WorkItem> HangingStream(
-        [EnumeratorCancellation] CancellationToken ct,
-        bool throwAsRpc)
+    sealed class ThrowingStreamReader(Exception exception) : IAsyncStreamReader<P.WorkItem>
     {
-        try
-        {
-            await Task.Delay(Timeout.Infinite, ct);
-        }
-        catch (OperationCanceledException) when (throwAsRpc)
-        {
-            // Mimic grpc-dotnet's default surface shape for linked-token cancellation.
-            throw new RpcException(new Status(StatusCode.Cancelled, "stream cancelled"));
-        }
-
-        yield break;
-    }
-
-    sealed class ThrowingAsyncEnumerable : IAsyncEnumerable<P.WorkItem>, IAsyncEnumerator<P.WorkItem>
-    {
-        readonly Exception exception;
-
-        public ThrowingAsyncEnumerable(Exception exception)
-        {
-            this.exception = exception;
-        }
-
         public P.WorkItem Current => throw new InvalidOperationException("No current item is available for a throwing stream.");
 
-        public IAsyncEnumerator<P.WorkItem> GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
-
-        public ValueTask DisposeAsync() => default;
-
-        public ValueTask<bool> MoveNextAsync() => ValueTask.FromException<bool>(this.exception);
+        public Task<bool> MoveNext(CancellationToken cancellationToken) => Task.FromException<bool>(exception);
     }
 }

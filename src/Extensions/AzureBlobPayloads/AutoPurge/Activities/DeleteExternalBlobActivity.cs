@@ -203,8 +203,8 @@ public class DeleteExternalBlobActivity(
         catch (PayloadStorageException)
         {
             // The payload cannot be accessed through the configured store, for example because its location
-            // is outside that store's container. Keep its tombstone recoverable for a store configured for
-            // the original location instead of reporting deletion or discarding it.
+            // is outside the configured access scopes. Keep its tombstone recoverable until the location is
+            // explicitly authorized instead of reporting deletion or discarding it.
             this.logger.BlobPurgeDeleteRetryable("PayloadStoreUnavailable", null);
             return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }

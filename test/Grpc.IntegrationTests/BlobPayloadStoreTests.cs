@@ -29,6 +29,8 @@ public class BlobPayloadStoreTests
     [Theory]
     [InlineData("https://myaccount.blob.core.windows.net/mycontainer/abc123def456", "mycontainer", "abc123def456")]
     [InlineData("http://127.0.0.1:10000/devstoreaccount1/mycontainer/abc123def456", "mycontainer", "abc123def456")]
+    [InlineData("https://myaccount.blob.core.windows.net/mycontainer/abc123def456?sig=legacy#unused", "mycontainer", "abc123def456")]
+    [InlineData("https://myaccount.blob.core.windows.net/mycontainer/abc123def456?snapshot=old&versionid=old", "mycontainer", "abc123def456")]
     public void DecodeToken_V2Url_ParsesContainerAndBlob(string blobUrl, string expectedContainer, string expectedBlob)
     {
         // Arrange
@@ -41,7 +43,7 @@ public class BlobPayloadStoreTests
         Assert.True(decoded.IsV2);
         Assert.Equal(expectedContainer, decoded.Container);
         Assert.Equal(expectedBlob, decoded.Name);
-        Assert.Equal(new Uri(blobUrl), decoded.BlobUri);
+        Assert.Equal(new Uri(new Uri(blobUrl).GetLeftPart(UriPartial.Path)), decoded.BlobUri);
         Assert.NotNull(decoded.ContainerUri);
         Assert.EndsWith(expectedContainer, decoded.ContainerUri!.AbsolutePath);
     }

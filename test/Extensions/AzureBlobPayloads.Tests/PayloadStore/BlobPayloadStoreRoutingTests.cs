@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Azure;
 using Azure.Core;
@@ -29,6 +30,10 @@ public class BlobPayloadStoreRoutingTests
     [InlineData("https://account.invalid/new", "blob:v2:https://account.invalid/new/folder/a%20b%252Fc", "https://account.invalid/new/folder/a%20b%252Fc", true)]
     [InlineData("https://account.invalid/new", "blob:v1:new:folder/a b%2Fc", "https://account.invalid/new/folder/a%20b%252Fc", false)]
     [InlineData("https://account.invalid/new", "blob:v1:new:folder/a b%2Fc", "https://account.invalid/new/folder/a%20b%252Fc", true)]
+    [InlineData("https://account.invalid/new", "blob:v2:https://ACCOUNT.invalid:443/new/blob", "https://account.invalid/new/blob", false)]
+    [InlineData("https://account.invalid/new", "blob:v2:https://ACCOUNT.invalid:443/new/blob", "https://account.invalid/new/blob", true)]
+    [InlineData("https://account.invalid/new", "blob:v2:https://account.invalid/new/blob%23name%3Fpart", "https://account.invalid/new/blob%23name%3Fpart", false)]
+    [InlineData("https://account.invalid/new", "blob:v2:https://account.invalid/new/blob%23name%3Fpart", "https://account.invalid/new/blob%23name%3Fpart", true)]
     [InlineData("http://127.0.0.1:10000/accounta/new", "blob:v2:http://127.0.0.1:10000/accounta/new/blob", "http://127.0.0.1:10000/accounta/new/blob", false)]
     [InlineData("http://127.0.0.1:10000/accounta/new", "blob:v2:http://127.0.0.1:10000/accounta/new/blob", "http://127.0.0.1:10000/accounta/new/blob", true)]
     [InlineData("http://127.0.0.1:10000/accounta/new", "blob:v1:new:blob", "http://127.0.0.1:10000/accounta/new/blob", false)]
@@ -77,6 +82,7 @@ public class BlobPayloadStoreRoutingTests
     [InlineData("http://127.0.0.1:10000/accounta/new", "http://127.0.0.1:10000/accountb/new/blob")]
     [InlineData("https://account.invalid/new", "https://account.invalid/new/../old/blob")]
     [InlineData("https://account.invalid/new", "https://account.invalid/new/%2e%2e/old/blob")]
+    [InlineData("https://account.invalid/new", "https://account.invalid/new%2f..%2fold/blob")]
     public async Task OtherContainer_RejectsBeforeSendingAsync(string configuredUri, string blobUri)
     {
         // Arrange
@@ -95,9 +101,9 @@ public class BlobPayloadStoreRoutingTests
 
         // Assert
         await download.Should().ThrowAsync<PayloadStorageException>()
-            .WithMessage("*configured payload container*");
+            .WithMessage("*container*");
         await delete.Should().ThrowAsync<PayloadStorageException>()
-            .WithMessage("*configured payload container*");
+            .WithMessage("*container*");
         handler.Requests.Should().BeEmpty();
         credential.VerifyNoOtherCalls();
     }
@@ -106,9 +112,12 @@ public class BlobPayloadStoreRoutingTests
     /// Legacy blob names must also remain within the configured container after URI normalization.
     /// </summary>
     [Theory]
-    [InlineData("../old/blob")]
-    [InlineData("folder/../../old/blob")]
-    public async Task LegacyToken_OutsideContainerAfterNormalization_RejectsBeforeSendingAsync(string blobName)
+    [InlineData("../old/blob", false)]
+    [InlineData("../old/blob", true)]
+    [InlineData("folder/../../old/blob", false)]
+    [InlineData("folder/../../old/blob", true)]
+    public async Task LegacyToken_OutsideContainerAfterNormalization_RejectsBeforeSendingAsync(
+        string blobName, bool allowAllContainers)
     {
         // Arrange
         using RecordingHandler handler = new();
@@ -117,7 +126,8 @@ public class BlobPayloadStoreRoutingTests
             new Uri("https://account.invalid/new"),
             new StorageSharedKeyCredential("accounta", Convert.ToBase64String(new byte[64])),
             new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
-        BlobPayloadStore store = new(new LargePayloadStorageOptions(), container);
+        BlobPayloadStore store = new(
+            new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = allowAllContainers }, container);
 
         // Act
         Func<Task> download = () => store.DownloadAsync($"blob:v1:new:{blobName}", CancellationToken.None);
@@ -132,8 +142,10 @@ public class BlobPayloadStoreRoutingTests
     /// <summary>
     /// Purge preserves an out-of-store payload's tombstone for a store configured for its location.
     /// </summary>
-    [Fact]
-    public async Task Purge_OtherContainer_RetriesWithoutStorageRequestsAsync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Purge_UsesConfiguredAccountScopeAsync(bool allowAllContainers)
     {
         // Arrange
         using RecordingHandler handler = new();
@@ -142,7 +154,8 @@ public class BlobPayloadStoreRoutingTests
             new Uri("https://account.invalid/new"),
             new StorageSharedKeyCredential("accounta", Convert.ToBase64String(new byte[64])),
             new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
-        BlobPayloadStore store = new(new LargePayloadStorageOptions(), container);
+        BlobPayloadStore store = new(
+            new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = allowAllContainers }, container);
         TestLogger<DeleteExternalBlobActivity> logger = new();
         DeleteExternalBlobActivity activity = new(store, logger);
 
@@ -151,18 +164,29 @@ public class BlobPayloadStoreRoutingTests
             null!, ["blob:v2:https://account.invalid/old/blob"]);
 
         // Assert
-        outcomes.Should().ContainSingle().Which.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        handler.Requests.Should().BeEmpty();
-        logger.Logs.Should().ContainSingle(l => l.Message.Contains("PayloadStoreUnavailable"));
+        if (allowAllContainers)
+        {
+            outcomes.Should().ContainSingle().Which.Disposition.Should().Be(LargePayloadPurgeDisposition.Deleted);
+            handler.Requests.Select(r => r.Method).Should().Equal("HEAD", "DELETE");
+            handler.Requests[1].IfMatch.Should().Be("\"owned-etag\"");
+        }
+        else
+        {
+            outcomes.Should().ContainSingle().Which.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
+            handler.Requests.Should().BeEmpty();
+            logger.Logs.Should().ContainSingle(l => l.Message.Contains("PayloadStoreUnavailable"));
+        }
     }
 
     /// <summary>
-    /// Work-item input resolution enforces the store's configured container before exposing the work item.
+    /// Work-item input, event, and past-result resolution use the same configured access scope.
     /// </summary>
     [Theory]
-    [InlineData("new", true)]
-    [InlineData("old", false)]
-    public async Task WorkItem_ResolvesInputOnlyFromConfiguredContainerAsync(string tokenContainer, bool resolves)
+    [InlineData("new", false, true)]
+    [InlineData("old", false, false)]
+    [InlineData("old", true, true)]
+    public async Task WorkItem_ResolvesHistoryUsingConfiguredScopeAsync(
+        string tokenContainer, bool allowAllContainers, bool resolves)
     {
         // Arrange
         using RecordingHandler handler = new();
@@ -171,16 +195,22 @@ public class BlobPayloadStoreRoutingTests
             new Uri("https://account.invalid/new"),
             new StorageSharedKeyCredential("accounta", Convert.ToBase64String(new byte[64])),
             new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
-        BlobPayloadStore store = new(new LargePayloadStorageOptions(), container);
+        BlobPayloadStore store = new(
+            new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = allowAllContainers }, container);
         AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new LargePayloadStorageOptions());
         string token = $"blob:v2:https://account.invalid/{tokenContainer}/blob";
         P.WorkItem workItem = new()
         {
             OrchestratorRequest = new P.OrchestratorRequest
             {
+                PastEvents =
+                {
+                    new P.HistoryEvent { TaskCompleted = new P.TaskCompletedEvent { Result = token } },
+                },
                 NewEvents =
                 {
                     new P.HistoryEvent { ExecutionStarted = new P.ExecutionStartedEvent { Input = token } },
+                    new P.HistoryEvent { EventRaised = new P.EventRaisedEvent { Input = token } },
                 },
             },
         };
@@ -205,7 +235,9 @@ public class BlobPayloadStoreRoutingTests
         {
             (await moveNext()).Should().BeTrue();
             call.ResponseStream.Current.OrchestratorRequest.NewEvents[0].ExecutionStarted.Input.Should().Be("payload");
-            handler.Requests.Should().ContainSingle();
+            call.ResponseStream.Current.OrchestratorRequest.NewEvents[1].EventRaised.Input.Should().Be("payload");
+            call.ResponseStream.Current.OrchestratorRequest.PastEvents[0].TaskCompleted.Result.Should().Be("payload");
+            handler.Requests.Should().HaveCount(3);
         }
         else
         {
@@ -275,6 +307,743 @@ public class BlobPayloadStoreRoutingTests
         request.AuthorizationScheme.Should().BeNull();
     }
 
+    /// <summary>
+    /// Account-wide access retains the configured authentication pipeline for v1 and v2 references.
+    /// </summary>
+    [Theory]
+    [InlineData("https://account.invalid/new", "blob:v2:https://account.invalid/old/folder/a%20b%252Fc", "/old/folder/a%20b%252Fc")]
+    [InlineData("https://account.invalid/new", "blob:v1:old:folder/a b%2Fc", "/old/folder/a%20b%252Fc")]
+    [InlineData("http://127.0.0.1:10000/accounta/new", "blob:v2:http://127.0.0.1:10000/accounta/old/blob", "/accounta/old/blob")]
+    [InlineData("http://127.0.0.1:10000/accounta/new", "blob:v1:old:blob", "/accounta/old/blob")]
+    [InlineData("https://account.invalid/new", "blob:v2:https://ACCOUNT.invalid:443/old/blob", "/old/blob")]
+    [InlineData("https://account.invalid/new", "blob:v2:https://account.invalid/new/../old/blob", "/old/blob")]
+    [InlineData("https://account.invalid/new", "blob:v2:https://account.invalid/new/%2e%2e/old/blob", "/old/blob")]
+    public async Task AccountScope_UsesConfiguredPipelineAsync(string configuredUri, string token, string expectedPath)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        BlobContainerClient container = new(
+            new Uri(configuredUri),
+            new StorageSharedKeyCredential("accounta", Convert.ToBase64String(new byte[64])),
+            new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
+        BlobPayloadStore store = new(new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = true }, container);
+
+        // Act
+        string payload = await store.DownloadAsync(token, CancellationToken.None);
+        PayloadDeleteOutcome outcome = await store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        payload.Should().Be("payload");
+        outcome.Should().Be(PayloadDeleteOutcome.Deleted);
+        handler.Requests.Select(r => r.Method).Should().Equal("GET", "HEAD", "DELETE");
+        handler.Requests.Should().OnlyContain(r => r.Uri.AbsolutePath == expectedPath && r.AuthorizationScheme == "SharedKey");
+        handler.Requests[2].IfMatch.Should().Be("\"owned-etag\"");
+    }
+
+    /// <summary>
+    /// Account-wide access never relaxes the configured service endpoint or path-style account boundary.
+    /// </summary>
+    [Theory]
+    [InlineData("https://account.invalid/new", "https://other.invalid/new/blob")]
+    [InlineData("https://account.invalid/new", "http://account.invalid/new/blob")]
+    [InlineData("https://account.invalid/new", "https://account.invalid:444/new/blob")]
+    [InlineData("http://127.0.0.1:10000/accounta/new", "http://127.0.0.1:10000/accountb/new/blob")]
+    [InlineData("http://127.0.0.1:10000/accounta/new", "http://127.0.0.1:10000/accounta/../accountb/new/blob")]
+    [InlineData("http://127.0.0.1:10000/accounta/new", "http://127.0.0.1:10000/accounta/%2e%2e/accountb/new/blob")]
+    [InlineData("http://127.0.0.1:10000/accounta/new", "http://127.0.0.1:10000/accounta%2f..%2faccountb/new/blob")]
+    public async Task AccountScope_OtherEndpointRejectsBeforeSendingAsync(string configuredUri, string blobUri)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        BlobContainerClient container = new(
+            new Uri(configuredUri),
+            new StorageSharedKeyCredential("accounta", Convert.ToBase64String(new byte[64])),
+            new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
+        BlobPayloadStore store = new(
+            new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = true, Credential = credential.Object },
+            container);
+        string token = $"blob:v2:{blobUri}";
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync(token, CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        await download.Should().ThrowAsync<PayloadStorageException>();
+        await delete.Should().ThrowAsync<PayloadStorageException>();
+        handler.Requests.Should().BeEmpty();
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Path-style account boundaries also hold when a legacy container name is normalized by the client.
+    /// </summary>
+    [Theory]
+    [InlineData("blob:v1:../accountb/old:blob")]
+    [InlineData("blob:v1:old/../../accountb/old:blob")]
+    [InlineData("blob:v2:http://127.0.0.1:10000/accounta/%2e%2e%2faccountb%2fold/blob")]
+    [InlineData("blob:v2:http://127.0.0.1:10000/accounta/%252e%252e%252faccountb%252fold/blob")]
+    [InlineData("blob:v1:..%2faccountb%2fold:blob")]
+    public async Task AccountScope_NormalizedContainerCannotChangeAccountAsync(string token)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        BlobContainerClient container = new(
+            new Uri("http://127.0.0.1:10000/accounta/new"),
+            new StorageSharedKeyCredential("accounta", Convert.ToBase64String(new byte[64])),
+            new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
+        BlobPayloadStore store = new(new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = true }, container);
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync(token, CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        await download.Should().ThrowAsync<PayloadStorageException>();
+        await delete.Should().ThrowAsync<PayloadStorageException>();
+        handler.Requests.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// An additional-account scope uses the configured identity for all containers in that exact endpoint.
+    /// </summary>
+    [Theory]
+    [InlineData("https://other.invalid", "https://other.invalid/old/folder/a%20b%252Fc", "https://other.invalid/old/folder/a%20b%252Fc")]
+    [InlineData("https://other.invalid/", "https://OTHER.invalid:443/another/blob", "https://other.invalid/another/blob")]
+    [InlineData("https://other.invalid:444", "https://other.invalid:444/old/blob", "https://other.invalid:444/old/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountb/old/blob", "https://127.0.0.1:10000/accountb/old/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid/new/%2e%2e/old/blob", "https://other.invalid/old/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/blob?sv=2025-01-05&sig=from-token#unused", "https://other.invalid/old/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/blob?snapshot=old&versionid=old#unused", "https://other.invalid/old/blob")]
+    public async Task AdditionalAccount_UsesConfiguredIdentityAsync(
+        string additionalAccount, string blobUri, string expectedBlobUri)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri(additionalAccount));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        string token = $"blob:v2:{blobUri}";
+
+        // Act
+        string payload = await store.DownloadAsync(token, CancellationToken.None);
+        PayloadDeleteOutcome outcome = await store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        payload.Should().Be("payload");
+        outcome.Should().Be(PayloadDeleteOutcome.Deleted);
+        handler.Requests.Select(r => r.Method).Should().Equal("GET", "HEAD", "DELETE");
+        handler.Requests.Should().OnlyContain(
+            r => r.Uri.GetLeftPart(UriPartial.Path) == expectedBlobUri
+                && r.AuthorizationScheme == "Bearer");
+        handler.Requests[2].IfMatch.Should().Be("\"owned-etag\"");
+        handler.Requests.Should().OnlyContain(r => r.Uri.Query.Length == 0 && r.Uri.Fragment.Length == 0);
+        credential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    /// <summary>
+    /// Storage rejection at an authorized additional account does not trigger authentication fallback.
+    /// </summary>
+    [Fact]
+    public async Task AdditionalAccount_StorageDenialDoesNotFallbackAsync()
+    {
+        // Arrange
+        using RecordingHandler handler = new() { DenyAccess = true };
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object)
+        {
+            ConnectionString = "UseDevelopmentStorage=true",
+        };
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        BlobClientOptions clientOptions = new()
+        {
+            Transport = new HttpClientTransport(httpClient),
+            Retry = { MaxRetries = 0 },
+        };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        string token = "blob:v2:https://other.invalid/old/blob";
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync(token, CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        (await download.Should().ThrowAsync<RequestFailedException>()).Which.Status.Should().Be(403);
+        (await delete.Should().ThrowAsync<RequestFailedException>()).Which.Status.Should().Be(403);
+        handler.Requests.Should().HaveCount(2).And.OnlyContain(
+            r => r.Uri.AbsoluteUri == "https://other.invalid/old/blob" && r.AuthorizationScheme == "Bearer");
+    }
+
+    /// <summary>
+    /// Listing an account does not authorize similar hosts, alternate ports, or other path-style accounts.
+    /// </summary>
+    [Theory]
+    [InlineData("https://other.invalid", "https://unlisted.invalid/old/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid.unlisted.invalid/old/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid:444/old/blob")]
+    [InlineData("https://other.invalid:444", "https://other.invalid/old/blob")]
+    [InlineData("https://other.invalid", "http://other.invalid/old/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountc/old/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/Accountb/old/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountb/%2e%2e/accountc/old/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountb%2f..%2faccountc/old/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountb/..%2faccountc%2fold/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountb/..%252faccountc%252fold/blob")]
+    [InlineData("https://other.invalid", "https://account.invalid/old/blob")]
+    public async Task AdditionalAccount_UnlistedDestinationRejectsBeforeCredentialAccessAsync(
+        string additionalAccount, string blobUri)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri(additionalAccount));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        string token = $"blob:v2:{blobUri}";
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync(token, CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        await download.Should().ThrowAsync<PayloadStorageException>();
+        await delete.Should().ThrowAsync<PayloadStorageException>();
+        handler.Requests.Should().BeEmpty();
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Unsupported additional-account endpoints fail when the store is constructed.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("relative")]
+    [InlineData("other.invalid")]
+    [InlineData("http://other.invalid")]
+    [InlineData("ftp://other.invalid")]
+    [InlineData("https://user@other.invalid")]
+    [InlineData("https://other.invalid?sig=token")]
+    [InlineData("https://other.invalid#fragment")]
+    [InlineData("https://other.invalid/container")]
+    [InlineData("https://other.invalid/container/blob")]
+    [InlineData("https://127.0.0.1:10000/accountb/container")]
+    [InlineData("https://127.0.0.1:10000/")]
+    [InlineData("https://127.0.0.1:10000/accountb%2fother")]
+    [InlineData("https://127.0.0.1:10000/accountb%252fother")]
+    [InlineData("https://127.0.0.1:10000/accountb%5cother")]
+    public void AdditionalAccount_InvalidEndpointRejectsConfiguration(string? endpoint)
+    {
+        // Arrange
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(endpoint is null ? null! : new Uri(endpoint, UriKind.RelativeOrAbsolute));
+
+        // Act
+        Action createStore = () => new BlobPayloadStore(options);
+
+        // Assert
+        createStore.Should().Throw<ArgumentException>().WithMessage("*AdditionalAccountUris*");
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Additional accounts require the effective identity authentication mode, not a credential-only fallback.
+    /// </summary>
+    [Theory]
+    [InlineData("UseDevelopmentStorage=true", false)]
+    [InlineData("UseDevelopmentStorage=true", true)]
+    [InlineData("BlobEndpoint=https://account.invalid;SharedAccessSignature=sv=2025-01-05&sig=fake", false)]
+    public void AdditionalAccount_ConnectionStringAuthenticationRejectsConfiguration(
+        string connectionString, bool setCredential)
+    {
+        // Arrange
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(connectionString)
+        {
+            Credential = setCredential ? credential.Object : null,
+        };
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+
+        // Act
+        Action createStore = () => new BlobPayloadStore(options);
+
+        // Assert
+        createStore.Should().Throw<ArgumentException>().WithMessage("*requires AccountUri and Credential*");
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// A complete identity configuration retains precedence over a connection string.
+    /// </summary>
+    [Fact]
+    public void AdditionalAccount_CompleteIdentityConfigurationDoesNotParseConnectionString()
+    {
+        // Arrange
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object)
+        {
+            ConnectionString = "not-a-connection-string",
+        };
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+
+        // Act
+        Action createStore = () => new BlobPayloadStore(options);
+
+        // Assert
+        createStore.Should().NotThrow();
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Broadening the container scope does not replace a configured SAS or use a SAS supplied in a token.
+    /// </summary>
+    [Fact]
+    public async Task AccountScope_SasPermissionsStillApplyAsync()
+    {
+        // Arrange
+        using RecordingHandler handler = new() { DenyAccess = true };
+        using HttpClient httpClient = new(handler);
+        BlobContainerClient container = new(
+            new Uri("https://account.invalid/new?sv=2025-01-05&sr=c&sp=r&sig=configured"),
+            new BlobClientOptions { Transport = new HttpClientTransport(httpClient), Retry = { MaxRetries = 0 } });
+        BlobPayloadStore store = new(new LargePayloadStorageOptions { AllowAllContainersInConfiguredAccount = true }, container);
+        string token = "blob:v2:https://account.invalid/old/blob?sig=from-token&snapshot=old&versionid=old#unused";
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync(token, CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync(token, CancellationToken.None);
+
+        // Assert
+        (await download.Should().ThrowAsync<RequestFailedException>()).Which.Status.Should().Be(403);
+        (await delete.Should().ThrowAsync<RequestFailedException>()).Which.Status.Should().Be(403);
+        handler.Requests.Should().HaveCount(2).And.OnlyContain(r => r.Uri.AbsolutePath == "/old/blob");
+        handler.Requests.Should().OnlyContain(r => r.Uri.Query.Contains("sig=configured") && !r.Uri.Query.Contains("from-token"));
+        handler.Requests.Should().OnlyContain(r => !r.Uri.Query.Contains("snapshot") && !r.Uri.Query.Contains("versionid"));
+        handler.Requests.Should().OnlyContain(r => r.AuthorizationScheme == null);
+    }
+
+    /// <summary>
+    /// Access scopes are fixed for the lifetime of a store rather than following mutable options.
+    /// </summary>
+    [Fact]
+    public async Task AccessScopes_CaptureConfigurationAtConstructionAsync()
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        options.AllowAllContainersInConfiguredAccount = true;
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+
+        // Act
+        Func<Task> sameAccount = () => store.DownloadAsync("blob:v2:https://account.invalid/old/blob", CancellationToken.None);
+        Func<Task> additionalAccount = () => store.DeleteAsync("blob:v2:https://other.invalid/old/blob", CancellationToken.None);
+
+        // Assert
+        await sameAccount.Should().ThrowAsync<PayloadStorageException>();
+        await additionalAccount.Should().ThrowAsync<PayloadStorageException>();
+        handler.Requests.Should().BeEmpty();
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Equivalent primary endpoints must use the primary account-wide switch instead of the additional list.
+    /// </summary>
+    [Theory]
+    [InlineData("https://account.invalid", "https://ACCOUNT.invalid:443/", false)]
+    [InlineData("https://account.invalid", "https://ACCOUNT.invalid:443/", true)]
+    [InlineData("https://127.0.0.1:10000/accounta", "https://127.0.0.1:10000/accounta/", false)]
+    [InlineData("https://127.0.0.1:10000/accounta", "https://127.0.0.1:10000/accounta/", true)]
+    public void AdditionalAccount_PrimaryEndpointRejectsConfiguration(string primary, string additional, bool allowPrimary)
+    {
+        // Arrange
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri(primary), credential.Object)
+        {
+            AllowAllContainersInConfiguredAccount = allowPrimary,
+        };
+        options.AdditionalAccountUris.Add(new Uri(additional));
+
+        // Act
+        Action createStore = () => new BlobPayloadStore(options);
+
+        // Assert
+        createStore.Should().Throw<ArgumentException>().WithMessage("*AllowAllContainersInConfiguredAccount*");
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Canonically equivalent additional endpoints share one client.
+    /// </summary>
+    [Theory]
+    [InlineData("https://other.invalid", "https://OTHER.invalid:443/")]
+    [InlineData("https://127.0.0.1:10000/accountb", "https://127.0.0.1:10000/accountb/")]
+    public void AdditionalAccount_DeduplicatesEquivalentEndpoints(string endpoint, string equivalent)
+    {
+        // Arrange
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri(endpoint));
+        options.AdditionalAccountUris.Add(new Uri(equivalent));
+
+        // Act
+        BlobServiceClient[] clients = BlobPayloadStore.CreateAdditionalAccountClients(
+            options, credential.Object, options.AccountUri!, new BlobClientOptions());
+
+        // Assert
+        clients.Should().ContainSingle().Which.Uri.Should().Be(new Uri(endpoint));
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Reference user information is rejected before identity acquisition or storage requests.
+    /// </summary>
+    [Theory]
+    [InlineData("https://user:password@account.invalid/new/blob")]
+    [InlineData("https://user@other.invalid/old/blob")]
+    public async Task TokenUserInfo_RejectsBeforeCredentialAccessAsync(string blobUri)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync($"blob:v2:{blobUri}", CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync($"blob:v2:{blobUri}", CancellationToken.None);
+
+        // Assert
+        await download.Should().ThrowAsync<ArgumentException>();
+        await delete.Should().ThrowAsync<ArgumentException>();
+        handler.Requests.Should().BeEmpty();
+        credential.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// New references retain escaped paths but never include URL authentication or selectors.
+    /// </summary>
+    [Theory]
+    [InlineData("https://user:password@account.invalid/new/a%20b%252Fc%23%3F?sig=configured#unused", "https://account.invalid/new/a%20b%252Fc%23%3F")]
+    [InlineData("http://127.0.0.1:10000/accounta/new/blob?sig=configured#unused", "http://127.0.0.1:10000/accounta/new/blob")]
+    public void EncodeToken_EmitsLocationOnly(string blobUri, string expectedUri)
+    {
+        // Arrange
+        Uri location = new(blobUri);
+
+        // Act
+        string token = BlobPayloadStore.EncodeToken(location);
+
+        // Assert
+        token.Should().Be($"blob:v2:{expectedUri}");
+    }
+
+    /// <summary>
+    /// Upload requests keep configured SAS authentication without persisting it in their returned token.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Upload_WithSasEmitsLocationOnlyAsync(bool compress)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        BlobContainerClient container = new(
+            new Uri("https://account.invalid/new?sv=2025-01-05&sig=configured"),
+            new BlobClientOptions { Transport = new HttpClientTransport(httpClient) });
+        BlobPayloadStore store = new(new LargePayloadStorageOptions
+        {
+            AllowAllContainersInConfiguredAccount = true,
+            CompressionEnabled = compress,
+        }, container);
+
+        // Act
+        string token = await store.UploadAsync("payload", CancellationToken.None);
+
+        // Assert
+        Uri location = new(token.Substring(BlobPayloadStore.TokenPrefixV2.Length));
+        location.GetLeftPart(UriPartial.Authority).Should().Be("https://account.invalid");
+        location.AbsolutePath.Should().StartWith("/new/");
+        location.Query.Should().BeEmpty();
+        location.Fragment.Should().BeEmpty();
+        location.UserInfo.Should().BeEmpty();
+        handler.Requests.Should().NotBeEmpty().And.OnlyContain(
+            r => r.Method == "PUT" && r.Uri.Host == "account.invalid"
+                && r.Uri.AbsolutePath.StartsWith("/new") && r.Uri.Query.Contains("sig=configured"));
+    }
+
+    /// <summary>
+    /// The two independent switches apply consistently to reads, deletion, legacy tokens, and uploads.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task AccessScopes_ApplyFullMatrixAsync(bool allowPrimary, bool addAccount)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object)
+        {
+            AllowAllContainersInConfiguredAccount = allowPrimary,
+            CompressionEnabled = false,
+        };
+        if (addAccount)
+        {
+            options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        }
+
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        (string Token, bool Allowed)[] references =
+        [
+            ("blob:v2:https://account.invalid/new/blob", true),
+            ("blob:v1:new:blob", true),
+            ("blob:v2:https://account.invalid/old/blob", allowPrimary),
+            ("blob:v1:old:blob", allowPrimary),
+            ("blob:v2:https://other.invalid/old/blob", addAccount),
+            ("blob:v2:https://unlisted.invalid/new/blob", false),
+        ];
+
+        // Act and Assert
+        foreach ((string token, bool allowed) in references)
+        {
+            int requests = handler.Requests.Count;
+            int credentialCalls = credential.Invocations.Count;
+            if (allowed)
+            {
+                (await store.DownloadAsync(token, CancellationToken.None)).Should().Be("payload");
+                (await store.DeleteAsync(token, CancellationToken.None)).Should().Be(PayloadDeleteOutcome.Deleted);
+            }
+            else
+            {
+                Func<Task> download = () => store.DownloadAsync(token, CancellationToken.None);
+                Func<Task> delete = () => store.DeleteAsync(token, CancellationToken.None);
+                await download.Should().ThrowAsync<Exception>();
+                await delete.Should().ThrowAsync<Exception>();
+                handler.Requests.Should().HaveCount(requests);
+                credential.Invocations.Should().HaveCount(credentialCalls);
+            }
+        }
+
+        string uploaded = await store.UploadAsync("payload", CancellationToken.None);
+        uploaded.Should().StartWith("blob:v2:https://account.invalid/new/");
+        handler.Requests.Where(r => r.Method == "PUT").Should().OnlyContain(
+            r => r.Uri.Host == "account.invalid" && r.Uri.AbsolutePath.StartsWith("/new"));
+    }
+
+    /// <summary>
+    /// Additional-account retries do not use a primary account's secondary endpoint.
+    /// </summary>
+    [Fact]
+    public async Task AdditionalAccount_RetryRemainsAtAdditionalEndpointAsync()
+    {
+        // Arrange
+        using RecordingHandler handler = new() { TransientFailures = 1 };
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        BlobClientOptions clientOptions = new()
+        {
+            Transport = new HttpClientTransport(httpClient),
+            GeoRedundantSecondaryUri = new Uri("https://primary-secondary.invalid"),
+            Retry = { MaxRetries = 1, Delay = TimeSpan.Zero, MaxDelay = TimeSpan.Zero },
+        };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+
+        // Act
+        string payload = await store.DownloadAsync("blob:v2:https://other.invalid/old/blob", CancellationToken.None);
+
+        // Assert
+        payload.Should().Be("payload");
+        handler.Requests.Should().HaveCount(2).And.OnlyContain(
+            r => r.Uri.AbsoluteUri == "https://other.invalid/old/blob" && r.AuthorizationScheme == "Bearer");
+    }
+
+    /// <summary>
+    /// Mutating endpoint and credential options cannot change an existing store's selected clients.
+    /// </summary>
+    [Fact]
+    public async Task AccessScopes_CaptureEndpointAndIdentityAsync()
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> originalCredential = CreateCredential();
+        Mock<TokenCredential> replacementCredential = new(MockBehavior.Strict);
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), originalCredential.Object);
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), originalCredential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        options.AccountUri = new Uri("https://replacement.invalid");
+        options.ContainerName = "old";
+        options.Credential = replacementCredential.Object;
+        options.AdditionalAccountUris.Clear();
+        options.AdditionalAccountUris.Add(new Uri("https://replacement.invalid"));
+
+        // Act
+        string primary = await store.DownloadAsync("blob:v2:https://account.invalid/new/blob", CancellationToken.None);
+        string additional = await store.DownloadAsync("blob:v2:https://other.invalid/old/blob", CancellationToken.None);
+        Func<Task> replacement = () => store.DownloadAsync("blob:v2:https://replacement.invalid/old/blob", CancellationToken.None);
+
+        // Assert
+        primary.Should().Be("payload");
+        additional.Should().Be("payload");
+        await replacement.Should().ThrowAsync<PayloadStorageException>();
+        handler.Requests.Should().HaveCount(2);
+        replacementCredential.VerifyNoOtherCalls();
+        originalCredential.Verify(
+            c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    /// <summary>
+    /// The public store's default transport surfaces redirects without following another account.
+    /// </summary>
+    [Fact]
+    public async Task Download_RedirectDoesNotChangeEndpointAsync()
+    {
+        // Arrange
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        string? requestLine = null;
+        Task server = ServeRedirectAsync();
+        BlobPayloadStore store = new(new LargePayloadStorageOptions(
+            $"BlobEndpoint=http://127.0.0.1:{port}/accounta;AccountName=accounta;AccountKey={Convert.ToBase64String(new byte[64])}")
+        {
+            ContainerName = "new",
+        });
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync(
+            $"blob:v2:http://127.0.0.1:{port}/accounta/new/blob", timeout.Token);
+
+        // Assert
+        (await download.Should().ThrowAsync<RequestFailedException>()).Which.Status.Should().Be(307);
+        await server;
+        requestLine.Should().Be("GET /accounta/new/blob HTTP/1.1");
+
+        async Task ServeRedirectAsync()
+        {
+            using TcpClient connection = await listener.AcceptTcpClientAsync(timeout.Token);
+            using NetworkStream stream = connection.GetStream();
+            using StreamReader reader = new(stream, Encoding.ASCII, leaveOpen: true);
+            requestLine = await reader.ReadLineAsync(timeout.Token);
+            while (await reader.ReadLineAsync(timeout.Token) is string line && line.Length != 0)
+            {
+            }
+
+            byte[] response = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/accountb/new/blob\r\n" +
+                "Content-Length: 0\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(response, timeout.Token);
+        }
+    }
+
+    /// <summary>
+    /// Listing another account does not implicitly grant account-wide access in the configured account.
+    /// </summary>
+    [Fact]
+    public async Task AdditionalAccount_PrimaryContainerStillWorksAsync()
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+
+        // Act
+        string payload = await store.DownloadAsync("blob:v2:https://account.invalid/new/blob", CancellationToken.None);
+        PayloadDeleteOutcome outcome = await store.DeleteAsync("blob:v1:new:blob", CancellationToken.None);
+
+        // Assert
+        payload.Should().Be("payload");
+        outcome.Should().Be(PayloadDeleteOutcome.Deleted);
+        handler.Requests.Should().HaveCount(3).And.OnlyContain(
+            r => r.Uri.AbsoluteUri == "https://account.invalid/new/blob" && r.AuthorizationScheme == "Bearer");
+    }
+
+    /// <summary>
+    /// Explicit additional-account scopes preserve retry behavior for references that remain disallowed.
+    /// </summary>
+    [Theory]
+    [InlineData("other", LargePayloadPurgeDisposition.Deleted)]
+    [InlineData("unlisted", LargePayloadPurgeDisposition.Retry)]
+    public async Task Purge_UsesAdditionalAccountScopeAsync(string account, LargePayloadPurgeDisposition disposition)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        TestLogger<DeleteExternalBlobActivity> logger = new();
+        DeleteExternalBlobActivity activity = new(store, logger);
+
+        // Act
+        List<BlobPurgeOutcome> outcomes = await activity.RunAsync(
+            null!, [$"blob:v2:https://{account}.invalid/old/blob"]);
+
+        // Assert
+        outcomes.Should().ContainSingle().Which.Disposition.Should().Be(disposition);
+        if (disposition == LargePayloadPurgeDisposition.Retry)
+        {
+            handler.Requests.Should().BeEmpty();
+            credential.VerifyNoOtherCalls();
+        }
+        else
+        {
+            handler.Requests.Select(r => r.Method).Should().Equal("HEAD", "DELETE");
+            handler.Requests[1].IfMatch.Should().Be("\"owned-etag\"");
+        }
+    }
+
+    static Mock<TokenCredential> CreateCredential()
+    {
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        AccessToken token = new("offline-test-token", DateTimeOffset.UtcNow.AddHours(1));
+        credential.Setup(c => c.GetToken(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>())).Returns(token);
+        credential.Setup(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>())).ReturnsAsync(token);
+        return credential;
+    }
+
     sealed record RecordedRequest(string Method, Uri Uri, string? AuthorizationScheme, string? IfMatch);
 
     sealed class RecordingHandler : HttpMessageHandler
@@ -283,15 +1052,32 @@ public class BlobPayloadStoreRoutingTests
 
         public bool DenyAccess { get; init; }
 
+        public int TransientFailures { get; init; }
+
         protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(this.RecordAndRespond(request));
+
+        protected override HttpResponseMessage Send(
+            HttpRequestMessage request, CancellationToken cancellationToken) => this.RecordAndRespond(request);
+
+        HttpResponseMessage RecordAndRespond(HttpRequestMessage request)
         {
             this.Requests.Add(new(
                 request.Method.Method, request.RequestUri!, request.Headers.Authorization?.Scheme,
                 request.Headers.IfMatch.FirstOrDefault()?.ToString()));
+            if (this.Requests.Count <= this.TransientFailures)
+            {
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent("<Error><Code>ServerBusy</Code></Error>", Encoding.UTF8, "application/xml"),
+                };
+            }
+
             HttpResponseMessage response = new(this.DenyAccess
                 ? HttpStatusCode.Forbidden
-                : request.Method == HttpMethod.Delete ? HttpStatusCode.Accepted : HttpStatusCode.OK);
+                : request.Method == HttpMethod.Delete ? HttpStatusCode.Accepted
+                : request.Method == HttpMethod.Put ? HttpStatusCode.Created : HttpStatusCode.OK);
             response.Content = new StringContent(
                 this.DenyAccess
                     ? "<Error><Code>AuthorizationPermissionMismatch</Code><Message>Denied by test service.</Message></Error>"
@@ -311,7 +1097,7 @@ public class BlobPayloadStoreRoutingTests
                 response.Content.Headers.LastModified = DateTimeOffset.UnixEpoch;
             }
 
-            return Task.FromResult(response);
+            return response;
         }
     }
 }

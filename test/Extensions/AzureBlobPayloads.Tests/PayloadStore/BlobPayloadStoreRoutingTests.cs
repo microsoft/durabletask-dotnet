@@ -450,6 +450,73 @@ public class BlobPayloadStoreRoutingTests
     }
 
     /// <summary>
+    /// Reads and deletion preserve distinct objects with leading or trailing slashes in their names.
+    /// </summary>
+    [Theory]
+    [InlineData("https://account.invalid", "new", false, false, false)]
+    [InlineData("https://account.invalid", "old", true, false, false)]
+    [InlineData("https://other.invalid", "old", false, true, false)]
+    [InlineData("https://127.0.0.1:10000/accountb", "old", false, true, false)]
+    [InlineData("https://account.invalid", "new", false, false, true)]
+    [InlineData("https://account.invalid", "old", true, false, true)]
+    public async Task BlobNameSlashes_PreserveObjectIdentityAsync(
+        string accountUri, string tokenContainer, bool allowPrimary, bool additional, bool legacy)
+    {
+        (string Name, string Payload)[] blobNames =
+        [
+            ("blob", "plain"),
+            ("/blob", "leading"),
+            ("blob/", "trailing"),
+        ];
+        foreach ((string blobName, string expectedPayload) in blobNames)
+        {
+            // Arrange
+            string containerUri = $"{accountUri}/{tokenContainer}";
+            Dictionary<string, string> blobs = new(StringComparer.Ordinal)
+            {
+                [$"{containerUri}/blob"] = "plain",
+                [$"{containerUri}//blob"] = "leading",
+                [$"{containerUri}/blob/"] = "trailing",
+            };
+            string expectedUri = $"{containerUri}/{blobName}";
+            KeyValuePair<string, string>[] remainingBlobs = blobs.Where(b => b.Key != expectedUri).ToArray();
+            using RecordingHandler handler = new() { BlobPayloads = blobs };
+            using HttpClient httpClient = new(handler);
+            Mock<TokenCredential> credential = CreateCredential();
+            LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object)
+            {
+                AllowAllContainersInConfiguredAccount = allowPrimary,
+            };
+            if (additional)
+            {
+                options.AdditionalAccountUris.Add(new Uri(accountUri));
+            }
+
+            BlobClientOptions clientOptions = new()
+            {
+                Transport = new HttpClientTransport(httpClient),
+                TrimBlobNameSlashes = false,
+            };
+            BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+            BlobPayloadStore store = new(options, container, clientOptions);
+            string token = legacy ? $"blob:v1:{tokenContainer}:{blobName}" : $"blob:v2:{expectedUri}";
+
+            // Act
+            string payload = await store.DownloadAsync(token, CancellationToken.None);
+            PayloadDeleteOutcome outcome = await store.DeleteAsync(token, CancellationToken.None);
+
+            // Assert
+            payload.Should().Be(expectedPayload);
+            outcome.Should().Be(PayloadDeleteOutcome.Deleted);
+            blobs.Should().BeEquivalentTo(remainingBlobs.ToDictionary(b => b.Key, b => b.Value));
+            handler.Requests.Select(r => r.Method).Should().Equal("GET", "HEAD", "DELETE");
+            handler.Requests.Should().OnlyContain(
+                r => r.Uri.GetLeftPart(UriPartial.Path) == expectedUri && r.AuthorizationScheme == "Bearer");
+            handler.Requests[2].IfMatch.Should().Be($"\"{expectedPayload}-etag\"");
+        }
+    }
+
+    /// <summary>
     /// Storage rejection at an authorized additional account does not trigger authentication fallback.
     /// </summary>
     [Fact]
@@ -928,8 +995,11 @@ public class BlobPayloadStoreRoutingTests
     /// <summary>
     /// The public store's default transport surfaces redirects without following another account.
     /// </summary>
-    [Fact]
-    public async Task Download_RedirectDoesNotChangeEndpointAsync()
+    [Theory]
+    [InlineData("blob")]
+    [InlineData("/blob")]
+    [InlineData("blob/")]
+    public async Task Download_RedirectDoesNotChangeEndpointAsync(string blobName)
     {
         // Arrange
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
@@ -946,12 +1016,12 @@ public class BlobPayloadStoreRoutingTests
 
         // Act
         Func<Task> download = () => store.DownloadAsync(
-            $"blob:v2:http://127.0.0.1:{port}/accounta/new/blob", timeout.Token);
+            $"blob:v2:http://127.0.0.1:{port}/accounta/new/{blobName}", timeout.Token);
 
         // Assert
         (await download.Should().ThrowAsync<RequestFailedException>()).Which.Status.Should().Be(307);
         await server;
-        requestLine.Should().Be("GET /accounta/new/blob HTTP/1.1");
+        requestLine.Should().Be($"GET /accounta/new/{blobName} HTTP/1.1");
 
         async Task ServeRedirectAsync()
         {
@@ -1055,6 +1125,8 @@ public class BlobPayloadStoreRoutingTests
 
         public int TransientFailures { get; init; }
 
+        public Dictionary<string, string>? BlobPayloads { get; init; }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(this.RecordAndRespond(request));
@@ -1075,6 +1147,26 @@ public class BlobPayloadStoreRoutingTests
                 };
             }
 
+            string payload = "payload";
+            if (this.BlobPayloads is not null)
+            {
+                if (!this.BlobPayloads.TryGetValue(request.RequestUri!.GetLeftPart(UriPartial.Path), out string? storedPayload))
+                {
+                    HttpResponseMessage missing = new(HttpStatusCode.NotFound)
+                    {
+                        Content = new StringContent("<Error><Code>BlobNotFound</Code></Error>", Encoding.UTF8, "application/xml"),
+                    };
+                    missing.Headers.TryAddWithoutValidation("x-ms-error-code", "BlobNotFound");
+                    return missing;
+                }
+
+                payload = storedPayload;
+                if (request.Method == HttpMethod.Delete)
+                {
+                    this.BlobPayloads.Remove(request.RequestUri!.GetLeftPart(UriPartial.Path));
+                }
+            }
+
             HttpResponseMessage response = new(this.DenyAccess
                 ? HttpStatusCode.Forbidden
                 : request.Method == HttpMethod.Delete ? HttpStatusCode.Accepted
@@ -1082,7 +1174,7 @@ public class BlobPayloadStoreRoutingTests
             response.Content = new StringContent(
                 this.DenyAccess
                     ? "<Error><Code>AuthorizationPermissionMismatch</Code><Message>Denied by test service.</Message></Error>"
-                    : "payload",
+                    : payload,
                 Encoding.UTF8,
                 this.DenyAccess ? "application/xml" : "text/plain");
             response.Headers.TryAddWithoutValidation("x-ms-request-id", "offline");
@@ -1092,7 +1184,7 @@ public class BlobPayloadStoreRoutingTests
             }
             else
             {
-                response.Headers.ETag = new("\"owned-etag\"");
+                response.Headers.ETag = new(this.BlobPayloads is null ? "\"owned-etag\"" : $"\"{payload}-etag\"");
                 response.Headers.TryAddWithoutValidation("x-ms-meta-managed_by", "dts");
                 response.Headers.TryAddWithoutValidation("x-ms-blob-type", "BlockBlob");
                 response.Content.Headers.LastModified = DateTimeOffset.UnixEpoch;

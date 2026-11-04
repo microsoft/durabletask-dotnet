@@ -31,6 +31,9 @@ public class BlobPayloadStoreTests
     [InlineData("http://127.0.0.1:10000/devstoreaccount1/mycontainer/abc123def456", "mycontainer", "abc123def456")]
     [InlineData("https://myaccount.blob.core.windows.net/mycontainer/abc123def456?sig=legacy#unused", "mycontainer", "abc123def456")]
     [InlineData("https://myaccount.blob.core.windows.net/mycontainer/abc123def456?snapshot=old&versionid=old", "mycontainer", "abc123def456")]
+    [InlineData("https://myaccount.blob.core.windows.net/mycontainer//blob", "mycontainer", "/blob")]
+    [InlineData("https://myaccount.blob.core.windows.net/mycontainer/blob/", "mycontainer", "blob/")]
+    [InlineData("http://127.0.0.1:10000/devstoreaccount1/mycontainer//blob/", "mycontainer", "/blob/")]
     public void DecodeToken_V2Url_ParsesContainerAndBlob(string blobUrl, string expectedContainer, string expectedBlob)
     {
         // Arrange

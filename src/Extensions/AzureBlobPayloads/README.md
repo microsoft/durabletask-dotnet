@@ -23,8 +23,9 @@ Azure SDK path-style account component, such as `accounta` in
 restriction: it does not permit another scheme, port, or path-style account.
 The SDK uses `BlobUriBuilder` for DNS-style and path-style URLs and validates
 the final normalized client URI before storage requests or credential acquisition.
-Blob-name escaping is preserved; a blob name that normalizes outside its selected
-container is rejected.
+Blob-name escaping and literal leading or trailing slashes are preserved:
+`blob`, `/blob`, and `blob/` identify distinct objects for reads and deletion.
+A blob name that normalizes outside its selected container is rejected.
 
 There is no hostname-only allowlist and no permission to follow arbitrary accounts
 merely because the configured identity has Storage permissions.

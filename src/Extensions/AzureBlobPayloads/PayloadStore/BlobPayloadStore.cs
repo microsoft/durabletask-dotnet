@@ -96,6 +96,7 @@ public sealed class BlobPayloadStore : PayloadStore
 
         BlobClientOptions clientOptions = new()
         {
+            TrimBlobNameSlashes = false,
             Retry =
             {
                 Mode = RetryMode.Exponential,
@@ -337,7 +338,7 @@ public sealed class BlobPayloadStore : PayloadStore
 
             // Reference queries never select credentials, snapshots, or versions.
             blobUri = new Uri(blobUri.GetLeftPart(UriPartial.Path));
-            BlobUriBuilder builder = new(blobUri);
+            BlobUriBuilder builder = new(blobUri, trimBlobNameSlashes: false);
             string container = builder.BlobContainerName;
             string name = builder.BlobName;
             builder.BlobName = string.Empty;
@@ -388,6 +389,7 @@ public sealed class BlobPayloadStore : PayloadStore
         BlobClientOptions additionalOptions = new()
         {
             Transport = clientOptions.Transport,
+            TrimBlobNameSlashes = false,
             Retry =
             {
                 Mode = clientOptions.Retry.Mode,

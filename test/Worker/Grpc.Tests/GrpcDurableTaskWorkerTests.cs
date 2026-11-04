@@ -11,6 +11,7 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Tests.Logging;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
@@ -372,6 +373,269 @@ public class GrpcDurableTaskWorkerTests
         logs.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Completed'"));
     }
 
+    // Keep listener tests in this class so xUnit serializes access to TraceHelper's process-wide ActivitySource.
+    [Fact]
+    public void EmitTraceActivitiesForNewEvents_NoActivityListeners_DoesNotEnumerateHistory()
+    {
+        // Arrange
+        TraceHelper.HasListeners.Should().BeFalse();
+        Mock<IEnumerable<P.HistoryEvent>> pastEvents = new(MockBehavior.Strict);
+        Mock<IEnumerable<P.HistoryEvent>> newEvents = new(MockBehavior.Strict);
+
+        // Act
+        TraceHelper.EmitTraceActivitiesForNewEvents(
+            "instance1", "TestOrchestration", pastEvents.Object, newEvents.Object);
+
+        // Assert
+        pastEvents.Verify(events => events.GetEnumerator(), Times.Never);
+        newEvents.Verify(events => events.GetEnumerator(), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EmitTraceActivitiesForNewEvents_WithActivityListener_CorrelatesCompletions(bool failed)
+    {
+        // Arrange
+        List<Activity> activities = [];
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activities.Add,
+        };
+        ActivitySource.AddActivityListener(listener);
+        P.WorkItem workItem = CreateOrchestratorWorkItem();
+        if (failed)
+        {
+            workItem.OrchestratorRequest.NewEvents[0].TaskFailed = new P.TaskFailedEvent
+            {
+                TaskScheduledId = 1,
+                FailureDetails = new P.TaskFailureDetails { ErrorType = "TaskError", ErrorMessage = "Task failed" },
+            };
+            workItem.OrchestratorRequest.NewEvents[1].SubOrchestrationInstanceFailed =
+                new P.SubOrchestrationInstanceFailedEvent
+                {
+                    TaskScheduledId = 2,
+                    FailureDetails = new P.TaskFailureDetails { ErrorType = "SubError", ErrorMessage = "Sub failed" },
+                };
+        }
+
+        using Activity parent = new Activity("parent").Start();
+
+        // Act
+        TraceHelper.EmitTraceActivitiesForNewEvents(
+            workItem.OrchestratorRequest.InstanceId,
+            "TestOrchestration",
+            workItem.OrchestratorRequest.PastEvents,
+            workItem.OrchestratorRequest.NewEvents);
+
+        // Assert
+        activities.Should().HaveCount(2);
+        activities.Select(activity => activity.OperationName).Should().Equal("activity:FirstScheduled", "orchestration:FirstSub");
+        activities.Should().AllSatisfy(activity =>
+        {
+            activity.Kind.Should().Be(ActivityKind.Client);
+            activity.ParentSpanId.Should().Be(parent.SpanId);
+            activity.TraceId.Should().Be(parent.TraceId);
+            activity.Status.Should().Be(failed
+                ? System.Diagnostics.ActivityStatusCode.Error
+                : System.Diagnostics.ActivityStatusCode.Unset);
+        });
+    }
+
+    [Fact]
+    public void EmitTraceActivitiesForNewEvents_WithoutCompletions_DoesNotEnumeratePastEvents()
+    {
+        // Arrange
+        List<Activity> activities = [];
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activities.Add,
+        };
+        ActivitySource.AddActivityListener(listener);
+        Mock<IEnumerable<P.HistoryEvent>> pastEvents = new(MockBehavior.Strict);
+        P.HistoryEvent[] newEvents =
+        [
+            new() { OrchestratorStarted = new P.OrchestratorStartedEvent() },
+            new() { EventRaised = new P.EventRaisedEvent { Name = "external-event" } },
+            new()
+            {
+                Timestamp = Timestamp.FromDateTime(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+                TimerFired = new P.TimerFiredEvent
+                {
+                    TimerId = 1,
+                    FireAt = Timestamp.FromDateTime(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+                },
+            },
+        ];
+
+        // Act
+        TraceHelper.EmitTraceActivitiesForNewEvents("instance1", "TestOrchestration", pastEvents.Object, newEvents);
+
+        // Assert
+        pastEvents.Verify(events => events.GetEnumerator(), Times.Never);
+        activities.Should().ContainSingle()
+            .Which.OperationName.Should().Be("orchestration:TestOrchestration:timer");
+    }
+
+    [Fact]
+    public async Task DispatchWorkItem_OrchestratorRequest_NoActivityListeners_CompletesWorkItem()
+    {
+        // Arrange
+        TraceHelper.HasListeners.Should().BeFalse();
+
+        P.WorkItem orchestratorWorkItem = CreateOrchestratorWorkItem();
+
+        TaskCompletionSource completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrpcDurableTaskWorker worker = CreateActivityWorker(new GrpcDurableTaskWorkerOptions());
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => completed.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, orchestratorWorkItem, CancellationToken.None);
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        clientMock.VerifyAll();
+    }
+
+    [Fact]
+    public async Task DispatchWorkItem_OrchestratorRequest_WithActivityListener_DuplicateEventIds_AbandonsWorkItem()
+    {
+        // Arrange
+        TaskCompletionSource<Activity> stoppedOrchestrationActivity = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "orchestration:TestOrchestration")
+                {
+                    stoppedOrchestrationActivity.TrySetResult(activity);
+                }
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+        TraceHelper.HasListeners.Should().BeTrue();
+
+        P.WorkItem orchestratorWorkItem = CreateOrchestratorWorkItemWithDuplicateEventIds();
+        orchestratorWorkItem.OrchestratorRequest.PastEvents[0].ExecutionStarted.ParentTraceContext = new P.TraceContext
+        {
+            TraceParent = "00-11111111111111111111111111111111-2222222222222222-01",
+        };
+
+        TaskCompletionSource abandoned = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TestLogProvider logProvider = new(new NullOutput());
+        GrpcDurableTaskWorker worker = CreateActivityWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            new DurableTaskWorkerOptions { Logging = { UseLegacyCategories = false } },
+            new SimpleLoggerFactory(logProvider));
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.AbandonTaskOrchestratorWorkItemAsync(
+                It.Is<P.AbandonOrchestrationTaskRequest>(
+                    request => request.CompletionToken == orchestratorWorkItem.CompletionToken),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => abandoned.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.AbandonOrchestrationTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, orchestratorWorkItem, CancellationToken.None);
+        await abandoned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        Activity stoppedActivity = await stoppedOrchestrationActivity.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        stoppedActivity.Kind.Should().Be(ActivityKind.Server);
+        logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
+        logs!.Should().Contain(log => log.Exception is ArgumentException);
+        clientMock.VerifyAll();
+        clientMock.Verify(
+            client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    static P.WorkItem CreateOrchestratorWorkItemWithDuplicateEventIds()
+    {
+        P.WorkItem workItem = CreateOrchestratorWorkItem();
+        workItem.OrchestratorRequest.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 1,
+            TaskScheduled = new P.TaskScheduledEvent { Name = "DuplicateScheduled" },
+        });
+        return workItem;
+    }
+
+    static P.WorkItem CreateOrchestratorWorkItem()
+    {
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "instance1",
+            ExecutionId = "execution1",
+        };
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = -1,
+            ExecutionStarted = new P.ExecutionStartedEvent
+            {
+                Name = "TestOrchestration",
+                OrchestrationInstance = new P.OrchestrationInstance { InstanceId = "instance1", ExecutionId = "execution1" },
+            },
+        });
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 1,
+            TaskScheduled = new P.TaskScheduledEvent { Name = "FirstScheduled" },
+        });
+        request.PastEvents.Add(new P.HistoryEvent
+        {
+            EventId = 2,
+            SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+            {
+                InstanceId = "sub1",
+                Name = "FirstSub",
+            },
+        });
+        request.NewEvents.Add(new P.HistoryEvent
+        {
+            EventId = 10,
+            TaskCompleted = new P.TaskCompletedEvent { TaskScheduledId = 1 },
+        });
+        request.NewEvents.Add(new P.HistoryEvent
+        {
+            EventId = 11,
+            SubOrchestrationInstanceCompleted = new P.SubOrchestrationInstanceCompletedEvent { TaskScheduledId = 2 },
+        });
+
+        return new P.WorkItem
+        {
+            OrchestratorRequest = request,
+            CompletionToken = "completion1",
+        };
+    }
+
     [Fact]
     public async Task ProcessorExecuteAsync_HelloDeadlineExceeded_ReturnsChannelRecreateRequested()
     {
@@ -672,14 +936,15 @@ public class GrpcDurableTaskWorkerTests
         runtimeState.ExecutionStartedEvent!.Name.Should().Be("TestOrchestration");
     }
 
-    [Fact]
-    public async Task OnRunOrchestratorAsync_StreamingHistory_StartsTraceFromExecutionStarted()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OnRunOrchestratorAsync_StreamingHistory_StartsTraceAndCorrelatesEvents(bool correlateEvents)
     {
         // Arrange
         const string ParentTraceId = "11111111111111111111111111111111";
         const string ParentSpanId = "2222222222222222";
-        SequenceAsyncStreamReader<P.HistoryChunk> historyReader = new(
-            new P.HistoryChunk
+        P.HistoryChunk startChunk = new()
             {
                 Events =
                 {
@@ -702,7 +967,31 @@ public class GrpcDurableTaskWorkerTests
                         },
                     },
                 },
-            });
+            };
+        P.HistoryChunk schedulingChunk = new()
+        {
+            Events =
+            {
+                new P.HistoryEvent
+                {
+                    EventId = 1,
+                    Timestamp = Timestamp.FromDateTime(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+                    TaskScheduled = new P.TaskScheduledEvent { Name = "StreamedActivity" },
+                },
+                new P.HistoryEvent
+                {
+                    EventId = 2,
+                    Timestamp = Timestamp.FromDateTime(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+                    SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+                    {
+                        Name = "StreamedSubOrchestration",
+                        InstanceId = "child-instance",
+                    },
+                },
+            },
+        };
+        SequenceAsyncStreamReader<P.HistoryChunk> historyReader = new(
+            correlateEvents ? [startChunk, schedulingChunk] : [startChunk]);
 
         Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
             MockBehavior.Strict,
@@ -753,13 +1042,30 @@ public class GrpcDurableTaskWorkerTests
             },
         };
 
-        Activity? orchestrationActivity = null;
+        if (correlateEvents)
+        {
+            request.NewEvents.Add(new P.HistoryEvent
+            {
+                EventId = 3,
+                Timestamp = Timestamp.FromDateTime(new DateTime(2025, 1, 1, 0, 0, 1, DateTimeKind.Utc)),
+                TaskCompleted = new P.TaskCompletedEvent { TaskScheduledId = 1 },
+            });
+            request.NewEvents.Add(new P.HistoryEvent
+            {
+                EventId = 4,
+                Timestamp = Timestamp.FromDateTime(new DateTime(2025, 1, 1, 0, 0, 1, DateTimeKind.Utc)),
+                SubOrchestrationInstanceCompleted =
+                    new P.SubOrchestrationInstanceCompletedEvent { TaskScheduledId = 2 },
+            });
+        }
+
+        List<Activity> startedActivities = [];
         using ActivityListener listener = new()
         {
             ShouldListenTo = source => source.Name == "Microsoft.DurableTask",
             Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
                 ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStarted = activity => orchestrationActivity = activity,
+            ActivityStarted = activity => startedActivities.Add(activity),
         };
         ActivitySource.AddActivityListener(listener);
 
@@ -771,9 +1077,28 @@ public class GrpcDurableTaskWorkerTests
             CancellationToken.None);
 
         // Assert
-        orchestrationActivity.Should().NotBeNull();
-        orchestrationActivity!.TraceId.Should().Be(ActivityTraceId.CreateFromString(ParentTraceId.AsSpan()));
+        Activity orchestrationActivity = startedActivities.Should().ContainSingle(
+            activity => activity.Kind == ActivityKind.Server
+                && activity.OperationName == "orchestration:TestOrchestration").Subject;
+        orchestrationActivity.TraceId.Should().Be(ActivityTraceId.CreateFromString(ParentTraceId.AsSpan()));
         orchestrationActivity.ParentSpanId.Should().Be(ActivitySpanId.CreateFromString(ParentSpanId.AsSpan()));
+        if (correlateEvents)
+        {
+            foreach (string operationName in new[] { "activity:StreamedActivity", "orchestration:StreamedSubOrchestration" })
+            {
+                Activity scheduledActivity = startedActivities.Should().ContainSingle(
+                    activity => activity.Kind == ActivityKind.Client
+                        && activity.OperationName == operationName).Subject;
+                scheduledActivity.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
+                scheduledActivity.TraceId.Should().Be(orchestrationActivity.TraceId);
+            }
+        }
+
+        clientMock.Verify(client => client.StreamInstanceHistory(
+            It.IsAny<P.StreamInstanceHistoryRequest>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
         clientMock.VerifyAll();
         factoryMock.VerifyAll();
     }

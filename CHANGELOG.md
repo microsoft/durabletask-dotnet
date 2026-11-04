@@ -4,6 +4,9 @@
 
 - Keep externalized payload tokens stable across completion retries and release entity locks when payload storage permanently fails an orchestration.
 - Add the worker-owned `SetOrchestratorResponsePreparation` infrastructure API for response preparation before final worker entity cleanup and chunking.
+- Restrict Azure Blob payload downloads and deletion to the configured container and storage endpoint by default, with explicit account-wide access through `AllowAllContainersInConfiguredAccount` and additional identity-authenticated account endpoints through `AdditionalAccountUris`. Preserve v1/v2 token formats. Before changing the storage location, complete or explicitly migrate existing instances and clean up their payloads, or explicitly authorize the original location.
+- Preserve exact blob-name identity during payload reads and deletion, including literal leading and trailing slashes. Reject references whose decoded names change during URI normalization; complete affected instances or migrate those payloads and references before upgrading.
+- Externalize continue-as-new carryover event payloads using the configured UTF-8 size limits, preventing oversized completion responses ([#819](https://github.com/microsoft/durabletask-dotnet/issues/819)).
 
 ## v1.27.1
 - Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))

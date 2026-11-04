@@ -17,6 +17,11 @@ Environment variables (optional):
 - `DURABLETASK_STORAGE`: Azure Storage connection string. Defaults to `UseDevelopmentStorage=true`.
 - `DURABLETASK_PAYLOAD_CONTAINER`: Blob container name. Defaults to `durabletask-payloads`.
 
+The sample keeps the default access scope: payload downloads and deletion are limited
+to the configured storage account endpoint and container. Explicit account-wide
+and additional-account options, authentication requirements, and migration behavior
+are described in the [payload access scope documentation](../../src/Extensions/AzureBlobPayloads/README.md).
+
 ## Run
 
 ```bash

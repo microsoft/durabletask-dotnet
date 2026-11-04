@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Azure.Core;
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.AzureBlobPayloads;
@@ -21,6 +22,57 @@ namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests.DependencyInj
 
 public class UseExternalizedPayloadsTests
 {
+    /// <summary>
+    /// Client and worker configuration callbacks configure the same store access policy.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UseExternalizedPayloads_NamedBuildersApplyPayloadAccessScopesAsync(bool worker)
+    {
+        // Arrange
+        const string Name = "scoped-builder";
+        ServiceCollection services = new();
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
+        Action<LargePayloadStorageOptions> configure = options =>
+        {
+            options.AccountUri = new Uri("https://account.invalid");
+            options.Credential = credential.Object;
+            options.AllowAllContainersInConfiguredAccount = true;
+            options.AdditionalAccountUris.Add(new Uri("https://other.invalid"));
+        };
+        if (worker)
+        {
+            Mock<IDurableTaskWorkerBuilder> builder = new();
+            builder.Setup(b => b.Services).Returns(services);
+            builder.Setup(b => b.Name).Returns(Name);
+            builder.Object.UseExternalizedPayloads(configure);
+        }
+        else
+        {
+            Mock<IDurableTaskClientBuilder> builder = new();
+            builder.Setup(b => b.Services).Returns(services);
+            builder.Setup(b => b.Name).Returns(Name);
+            builder.Object.UseExternalizedPayloads(configure);
+        }
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        PayloadStore store = provider.GetRequiredService<PayloadStore>();
+
+        // Act
+        Func<Task> download = () => store.DownloadAsync("blob:v2:https://unlisted.invalid/old/blob", CancellationToken.None);
+        Func<Task> delete = () => store.DeleteAsync("blob:v2:https://unlisted.invalid/old/blob", CancellationToken.None);
+
+        // Assert
+        LargePayloadStorageOptions configured =
+            provider.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(Name);
+        configured.AllowAllContainersInConfiguredAccount.Should().BeTrue();
+        configured.AdditionalAccountUris.Should().ContainSingle().Which.Should().Be(new Uri("https://other.invalid"));
+        await download.Should().ThrowAsync<PayloadStorageException>();
+        await delete.Should().ThrowAsync<PayloadStorageException>();
+        credential.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public void UseExternalizedPayloads_Client_RegistersNoHostedService()
     {

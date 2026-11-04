@@ -187,9 +187,8 @@ public class DeleteExternalBlobActivity(
         }
         catch (ArgumentException)
         {
-            // The prefix gate above proves this is a v2 token, so the only remaining decode failure is a v2
-            // body that does not parse. The SDK and backend control both sides of the protocol, so that
-            // indicates a producer, corruption, or compatibility bug; retrying can never fix it.
+            // The prefix gate proves this is v2. A malformed body or a blob name that changes during URI
+            // normalization needs reference correction rather than another delete attempt.
             this.logger.BlobPurgeDeleteQuarantined("MalformedToken", null);
             return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Quarantined);
         }
@@ -202,10 +201,10 @@ public class DeleteExternalBlobActivity(
         }
         catch (PayloadStorageException)
         {
-            // The token is well formed but points at a storage account this worker's credential cannot reach
-            // (account-key auth is account-specific). Recoverable after a configuration or credential change,
-            // so it is deferred rather than discarded.
-            this.logger.BlobPurgeDeleteRetryable("StorageAccountUnreachable", null);
+            // The payload cannot be accessed through the configured store, for example because its location
+            // is outside the configured access scopes. Keep its tombstone recoverable until the location is
+            // explicitly authorized instead of reporting deletion or discarding it.
+            this.logger.BlobPurgeDeleteRetryable("PayloadStoreUnavailable", null);
             return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Retry);
         }
         catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.BadRequest)

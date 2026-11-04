@@ -10,7 +10,7 @@ namespace Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="BlobPayloadStore.DeleteAsync"/>, covering legacy v1 back-compatibility, the
-/// self-describing v2 token resolution (same account, cross-account with identity, cross-account without), and
+/// self-describing v2 token resolution restricted to the configured container and endpoint, and
 /// the ownership marker that gates every delete.
 /// </summary>
 public class BlobPayloadStoreDeleteTests
@@ -26,6 +26,7 @@ public class BlobPayloadStoreDeleteTests
         container.Setup(c => c.Name).Returns(ContainerName);
         container.Setup(c => c.Uri).Returns(new Uri($"{ConfiguredAccountUrl}/{ContainerName}"));
         container.Setup(c => c.GetBlobClient(expectedBlobName)).Returns(blob.Object);
+        blob.SetupGet(b => b.Uri).Returns(new Uri($"{ConfiguredAccountUrl}/{ContainerName}/{expectedBlobName}"));
         return container;
     }
 
@@ -187,8 +188,7 @@ public class BlobPayloadStoreDeleteTests
     public async Task DeleteAsync_V2TokenSameContainer_DeletesViaConfiguredClient()
     {
         // Arrange - a self-describing v2 token whose account+container match the configured store. The store
-        // recognizes it via IsConfiguredContainer and deletes through the existing container client (which works
-        // with any auth mode), never building a cross-account client.
+        // deletes through the existing container client with its configured authentication.
         Mock<BlobClient> blob = CreateBlob(existed: true);
         Mock<BlobContainerClient> container = CreateContainer(blob, "abc123");
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), container.Object);
@@ -209,37 +209,31 @@ public class BlobPayloadStoreDeleteTests
     }
 
     [Fact]
-    public async Task DeleteAsync_V2TokenDifferentAccountWithCredential_DoesNotUseConfiguredContainer()
+    public async Task DeleteAsync_V2TokenDifferentAccountWithCredential_RejectsBeforeCredentialAccess()
     {
-        // Arrange - a v2 token pointing at a DIFFERENT account than the configured store, with identity auth
-        // available. The store must build a BlobClient bound to the token's own account using the credential and
-        // must not touch the configured container client. A credential that throws on token acquisition proves
-        // the cross-account path is taken without any network call (the throw short-circuits before the send).
+        // Arrange
         Mock<BlobClient> blob = CreateBlob(existed: true);
         Mock<BlobContainerClient> container = CreateContainer(blob, "abc123");
-        SentinelCredential credential = new();
+        Mock<TokenCredential> credential = new(MockBehavior.Strict);
         BlobPayloadStore store = new(
-            new LargePayloadStorageOptions(new Uri(ConfiguredAccountUrl), credential), container.Object);
+            new LargePayloadStorageOptions(new Uri(ConfiguredAccountUrl), credential.Object), container.Object);
         string token = "blob:v2:https://otheraccount.blob.core.windows.net/othercontainer/abc123";
 
         // Act
-        Exception error = await Assert.ThrowsAnyAsync<Exception>(
+        PayloadStorageException error = await Assert.ThrowsAsync<PayloadStorageException>(
             () => store.DeleteAsync(token, CancellationToken.None));
 
-        // Assert - the cross-account BlobClient invoked our sentinel credential (directly or wrapped), proving
-        // that branch ran; the configured container client is never used for a different account.
-        Assert.True(
-            error is SentinelCredential.InvokedException || error.InnerException is SentinelCredential.InvokedException,
-            $"Expected the cross-account BlobClient to invoke the credential, but got: {error}");
+        // Assert
+        Assert.Contains("configured payload container", error.Message, StringComparison.Ordinal);
+        credential.VerifyNoOtherCalls();
         container.Verify(c => c.GetBlobClient(It.IsAny<string>()), Times.Never);
+        blob.VerifyNoOtherCalls();
     }
 
     [Fact]
     public async Task DeleteAsync_V2TokenDifferentAccountWithoutCredential_ThrowsPayloadStorageExceptionAndDoesNotDelete()
     {
-        // Arrange - the configured store uses a connection string (account-key auth, no TokenCredential) and the
-        // token points at a different account. Account keys are account-specific, so the delete cannot cross
-        // accounts and must fail fast with a clear PayloadStorageException before any network call.
+        // Arrange
         Mock<BlobClient> blob = CreateBlob(existed: true);
         Mock<BlobContainerClient> container = CreateContainer(blob, "abc123");
         BlobPayloadStore store = new(new LargePayloadStorageOptions("UseDevelopmentStorage=true"), container.Object);
@@ -250,27 +244,11 @@ public class BlobPayloadStoreDeleteTests
             () => store.DeleteAsync(token, CancellationToken.None));
 
         // Assert - fails before touching the network or the configured container.
-        Assert.Contains("different storage account", error.Message, StringComparison.Ordinal);
+        Assert.Contains("configured payload container", error.Message, StringComparison.Ordinal);
         container.Verify(c => c.GetBlobClient(It.IsAny<string>()), Times.Never);
         blob.Verify(
             b => b.DeleteIfExistsAsync(
                 It.IsAny<DeleteSnapshotsOption>(), It.IsAny<BlobRequestConditions>(), It.IsAny<CancellationToken>()),
             Times.Never);
-    }
-
-    // A TokenCredential that throws as soon as a token is requested, proving the cross-account BlobClient path
-    // was taken without performing any network I/O.
-    sealed class SentinelCredential : TokenCredential
-    {
-        public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) =>
-            throw new InvokedException();
-
-        public override ValueTask<AccessToken> GetTokenAsync(
-            TokenRequestContext requestContext, CancellationToken cancellationToken) =>
-            throw new InvokedException();
-
-        public sealed class InvokedException : Exception
-        {
-        }
     }
 }

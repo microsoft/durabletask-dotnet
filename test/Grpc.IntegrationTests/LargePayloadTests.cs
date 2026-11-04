@@ -2,17 +2,76 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
+using FluentAssertions;
+using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
 public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CompletionRetry_DoesNotExternalizePayloadTokensAgain(bool retryActivity)
+    {
+        // Arrange
+        string payload = new('R', 1024);
+        TaskName orchestratorName = nameof(CompletionRetry_DoesNotExternalizePayloadTokensAgain);
+        TaskName activityName = "RetryPayloadActivity";
+        InMemoryPayloadStore store = new();
+        RetryCompletionInterceptor retry = new(retryActivity);
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, string>(orchestratorName, async (context, _) =>
+                    {
+                        string result = await context.CallActivityAsync<string>(activityName);
+                        context.SetCustomStatus(result);
+                        return result;
+                    })
+                    .AddActivityFunc<string>(activityName, _ => Task.FromResult(payload)));
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(store);
+                worker.Services.PostConfigure<GrpcDurableTaskWorkerOptions>(
+                    options => options.Interceptors.Add(retry));
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(store);
+            },
+            services => services.AddExternalizedPayloadStore(options =>
+            {
+                options.ThresholdBytes = 16;
+                options.ConnectionString = "UseDevelopmentStorage=true";
+            }));
+
+        // Act
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // Assert
+        retry.Payloads.Should().HaveCount(2);
+        retry.Payloads[0].Length.Should().BeGreaterThan(16);
+        retry.Payloads[1].Should().Be(retry.Payloads[0]);
+        store.UploadCount.Should().Be(3, "only the activity result, orchestration result, and custom status need uploading");
+        store.uploadedPayloads.Should().NotContain(value => store.IsKnownPayloadToken(value));
+        result.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        result.ReadOutputAs<string>().Should().Be(payload);
+        result.ReadCustomStatusAs<string>().Should().Be(payload);
+    }
+
     // Validates client externalizes a large orchestration input and worker resolves it.
     [Fact]
     public async Task LargeOrchestrationInputAndOutputAndCustomStatus()
@@ -790,6 +849,42 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
         string? output = completed.ReadOutputAs<string>();
         Assert.Equal(largeOutput.Length, output?.Length);
+    }
+
+    sealed class RetryCompletionInterceptor(bool retryActivity) : Interceptor
+    {
+        public List<string> Payloads { get; } = [];
+
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
+            TRequest request,
+            ClientInterceptorContext<TRequest, TResponse> context,
+            AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
+        {
+            string? payload = request switch
+            {
+                P.ActivityResponse response when retryActivity => response.Result,
+                P.OrchestratorResponse response when !retryActivity =>
+                    response.Actions.FirstOrDefault(action => action.CompleteOrchestration is not null)
+                        ?.CompleteOrchestration.Result,
+                _ => null,
+            };
+            if (payload is not null)
+            {
+                this.Payloads.Add(payload);
+                if (this.Payloads.Count == 1)
+                {
+                    Status status = new(StatusCode.Unavailable, "Simulated completion transport failure.");
+                    return new AsyncUnaryCall<TResponse>(
+                        Task.FromException<TResponse>(new RpcException(status)),
+                        Task.FromResult(new Metadata()),
+                        () => status,
+                        () => new Metadata(),
+                        () => { });
+                }
+            }
+
+            return continuation(request, context);
+        }
     }
 
     class InMemoryPayloadStore : PayloadStore

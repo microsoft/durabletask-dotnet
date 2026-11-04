@@ -17,6 +17,8 @@ namespace Microsoft.DurableTask;
 /// Stores payloads as blobs and returns self-describing opaque tokens in the form
 /// <c>blob:v2:{fullBlobUrl}</c>, where the URL is the blob's absolute URI including the storage account.
 /// Legacy <c>blob:v1:{container}:{blobName}</c> tokens are still recognized for read back-compatibility.
+/// Downloads and deletion are restricted to the configured payload container and storage endpoint by default.
+/// Account-wide access requires explicit opt-in through <see cref="LargePayloadStorageOptions"/>.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage(
     "Design",
@@ -59,7 +61,8 @@ public sealed class BlobPayloadStore : PayloadStore
 
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
-    readonly BlobClientOptions clientOptions;
+    readonly bool allowAllContainersInConfiguredAccount;
+    readonly BlobServiceClient[] additionalAccounts;
     readonly SemaphoreSlim containerInitializationLock = new(initialCount: 1, maxCount: 1);
 
     // Each successful initialization publishes a unique token. The token lets a stale
@@ -71,7 +74,10 @@ public sealed class BlobPayloadStore : PayloadStore
     /// </summary>
     /// <param name="options">The options for the blob payload store.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when neither connection string nor account URI/credential are provided.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when neither connection string nor account URI/credential are provided, an additional account
+    /// endpoint is invalid, or additional accounts are configured without identity authentication.
+    /// </exception>
     public BlobPayloadStore(LargePayloadStorageOptions options)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
@@ -88,8 +94,9 @@ public sealed class BlobPayloadStore : PayloadStore
                 nameof(options));
         }
 
-        this.clientOptions = new BlobClientOptions
+        BlobClientOptions clientOptions = new()
         {
+            TrimBlobNameSlashes = false,
             Retry =
             {
                 Mode = RetryMode.Exponential,
@@ -100,11 +107,14 @@ public sealed class BlobPayloadStore : PayloadStore
             },
         };
 
+        this.allowAllContainersInConfiguredAccount = options.AllowAllContainersInConfiguredAccount;
         BlobServiceClient serviceClient = hasIdentityAuth
-            ? new BlobServiceClient(options.AccountUri, options.Credential, this.clientOptions)
-            : new BlobServiceClient(options.ConnectionString, this.clientOptions);
+            ? new BlobServiceClient(options.AccountUri, options.Credential, clientOptions)
+            : new BlobServiceClient(options.ConnectionString, clientOptions);
 
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
+        this.additionalAccounts = CreateAdditionalAccountClients(
+            options, hasIdentityAuth ? options.Credential : null, serviceClient.Uri, clientOptions);
     }
 
     /// <summary>
@@ -113,11 +123,20 @@ public sealed class BlobPayloadStore : PayloadStore
     /// </summary>
     /// <param name="options">The options for the blob payload store.</param>
     /// <param name="containerClient">The blob container client to use.</param>
-    internal BlobPayloadStore(LargePayloadStorageOptions options, BlobContainerClient containerClient)
+    /// <param name="clientOptions">The options for additional-account clients.</param>
+    internal BlobPayloadStore(
+        LargePayloadStorageOptions options,
+        BlobContainerClient containerClient,
+        BlobClientOptions? clientOptions = null)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
         this.containerClient = containerClient ?? throw new ArgumentNullException(nameof(containerClient));
-        this.clientOptions = new BlobClientOptions();
+        this.allowAllContainersInConfiguredAccount = options.AllowAllContainersInConfiguredAccount;
+        this.additionalAccounts = options.AdditionalAccountUris.Count == 0 ? [] : CreateAdditionalAccountClients(
+            options,
+            options.AccountUri is not null ? options.Credential : null,
+            GetAccountUri(containerClient.Uri),
+            clientOptions ?? new BlobClientOptions());
     }
 
     /// <inheritdoc/>
@@ -193,6 +212,12 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentException">
+    /// The token is malformed or its decoded blob name changes during URI normalization.
+    /// </exception>
+    /// <exception cref="PayloadStorageException">
+    /// The token refers to a blob outside the configured payload access scopes.
+    /// </exception>
     public override async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
     {
         BlobClient blob = this.GetBlobClient(token);
@@ -205,6 +230,12 @@ public sealed class BlobPayloadStore : PayloadStore
     /// A 404 with an unknown or missing error code propagates as <see cref="RequestFailedException"/>,
     /// allowing auto-purge to retry instead of resolving a tombstone without confirmed absence.
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The token is malformed or its decoded blob name changes during URI normalization.
+    /// </exception>
+    /// <exception cref="PayloadStorageException">
+    /// The token refers to a blob outside the configured payload access scopes.
+    /// </exception>
     public override async Task<PayloadDeleteOutcome> DeleteAsync(string token, CancellationToken cancellationToken)
     {
         BlobClient blob = this.GetBlobClient(token);
@@ -272,12 +303,23 @@ public sealed class BlobPayloadStore : PayloadStore
 
     /// <summary>
     /// Encodes a self-describing v2 payload token from the blob's absolute URI. The token carries the full blob
-    /// URL (including the storage account) so readers can locate the payload without relying on the currently
-    /// configured store. <c>BlobClient.Uri</c> contains no SAS or account key and is safe to persist.
+    /// URL (including the storage account, but without user information, query, or fragment) so the payload's
+    /// location remains explicit. Downloads still require
+    /// that location to be authorized by the configured access scopes and use the store's configured authentication.
     /// </summary>
     /// <param name="blobUri">The absolute URI of the blob holding the payload.</param>
     /// <returns>An opaque payload token in the form <c>blob:v2:{fullBlobUrl}</c>.</returns>
-    internal static string EncodeToken(Uri blobUri) => $"{TokenPrefixV2}{blobUri}";
+    internal static string EncodeToken(Uri blobUri)
+    {
+        UriBuilder location = new(blobUri)
+        {
+            UserName = string.Empty,
+            Password = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+        return $"{TokenPrefixV2}{location.Uri.AbsoluteUri}";
+    }
 
     /// <summary>
     /// Decodes a payload token. Supports self-describing v2 tokens (<c>blob:v2:{fullBlobUrl}</c>) and legacy v1
@@ -293,12 +335,16 @@ public sealed class BlobPayloadStore : PayloadStore
         if (token.StartsWith(TokenPrefixV2, StringComparison.Ordinal))
         {
             string rest = token.Substring(TokenPrefixV2.Length);
-            if (!Uri.TryCreate(rest, UriKind.Absolute, out Uri? blobUri))
+            if (!Uri.TryCreate(rest, UriKind.Absolute, out Uri? blobUri)
+                || (blobUri.Scheme != Uri.UriSchemeHttps && blobUri.Scheme != Uri.UriSchemeHttp)
+                || blobUri.Host.Length == 0 || blobUri.UserInfo.Length != 0)
             {
                 throw new ArgumentException("Invalid external payload token format.", nameof(token));
             }
 
-            BlobUriBuilder builder = new(blobUri);
+            // Reference queries never select credentials, snapshots, or versions.
+            blobUri = new Uri(blobUri.GetLeftPart(UriPartial.Path));
+            BlobUriBuilder builder = new(blobUri, trimBlobNameSlashes: false);
             string container = builder.BlobContainerName;
             string name = builder.BlobName;
             builder.BlobName = string.Empty;
@@ -319,6 +365,85 @@ public sealed class BlobPayloadStore : PayloadStore
         }
 
         throw new ArgumentException("Invalid external payload token.", nameof(token));
+    }
+
+    /// <summary>
+    /// Validates and snapshots additional account endpoints with the selected identity.
+    /// </summary>
+    /// <param name="options">The configured payload options.</param>
+    /// <param name="credential">The selected identity credential.</param>
+    /// <param name="primaryAccount">The primary account service endpoint.</param>
+    /// <param name="clientOptions">The transport and retry options to retain.</param>
+    /// <returns>One client per distinct additional account endpoint.</returns>
+    internal static BlobServiceClient[] CreateAdditionalAccountClients(
+        LargePayloadStorageOptions options, TokenCredential? credential, Uri primaryAccount, BlobClientOptions clientOptions)
+    {
+        if (options.AdditionalAccountUris.Count == 0)
+        {
+            return [];
+        }
+
+        if (credential is null)
+        {
+            throw new ArgumentException(
+                "AdditionalAccountUris requires AccountUri and Credential authentication; " +
+                "connection-string credentials cannot be reused for additional accounts.",
+                nameof(options));
+        }
+
+        // Keep retry/transport settings, but not primary-account secondary-host routing.
+        BlobClientOptions additionalOptions = new()
+        {
+            Transport = clientOptions.Transport,
+            TrimBlobNameSlashes = false,
+            Retry =
+            {
+                Mode = clientOptions.Retry.Mode,
+                MaxRetries = clientOptions.Retry.MaxRetries,
+                Delay = clientOptions.Retry.Delay,
+                MaxDelay = clientOptions.Retry.MaxDelay,
+                NetworkTimeout = clientOptions.Retry.NetworkTimeout,
+            },
+        };
+        List<BlobServiceClient> clients = [];
+        foreach (Uri endpoint in options.AdditionalAccountUris)
+        {
+            if (endpoint is null || !endpoint.IsAbsoluteUri || endpoint.Scheme != Uri.UriSchemeHttps
+                || endpoint.HostNameType == UriHostNameType.Unknown
+                || endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
+            {
+                throw new ArgumentException(
+                    "AdditionalAccountUris entries must be absolute HTTPS account endpoints without " +
+                    "user information, queries, or fragments.",
+                    nameof(options));
+            }
+
+            BlobUriBuilder builder = new(endpoint);
+            if (builder.BlobContainerName.Length != 0 || builder.BlobName.Length != 0
+                || ((endpoint.HostNameType == UriHostNameType.IPv4 || endpoint.HostNameType == UriHostNameType.IPv6)
+                    && builder.AccountName.Length == 0)
+                || (builder.AccountName.Length != 0 && !IsSinglePathSegment(builder.AccountName)))
+            {
+                throw new ArgumentException(
+                    "AdditionalAccountUris entries must identify storage accounts, not containers or blobs.",
+                    nameof(options));
+            }
+
+            if (IsSameEndpoint(endpoint, primaryAccount))
+            {
+                throw new ArgumentException(
+                    "AdditionalAccountUris must not include the configured primary account; " +
+                    "use AllowAllContainersInConfiguredAccount instead.",
+                    nameof(options));
+            }
+
+            if (!clients.Any(client => IsSameEndpoint(endpoint, client.Uri)))
+            {
+                clients.Add(new BlobServiceClient(GetAccountUri(endpoint), credential, additionalOptions));
+            }
+        }
+
+        return clients.ToArray();
     }
 
     /// <summary>
@@ -402,13 +527,6 @@ public sealed class BlobPayloadStore : PayloadStore
         }
     }
 
-    static Uri GetServiceUri(Uri containerUri)
-    {
-        // The SDK preserves the account path for path-style endpoints such as Azurite.
-        BlobUriBuilder builder = new(containerUri) { BlobContainerName = string.Empty, BlobName = string.Empty };
-        return builder.ToUri();
-    }
-
     static bool IsSameEndpoint(Uri left, Uri right) =>
         string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase)
             && string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase)
@@ -418,44 +536,103 @@ public sealed class BlobPayloadStore : PayloadStore
                 right.AbsolutePath.TrimEnd('/'),
                 StringComparison.Ordinal);
 
+    static bool IsSinglePathSegment(string value)
+    {
+        string unescaped = Uri.UnescapeDataString(value);
+        return unescaped.Length != 0 && unescaped != "." && unescaped != ".."
+            && unescaped.IndexOfAny(['/', '\\', '%']) < 0;
+    }
+
+    static Uri GetAccountUri(Uri containerUri)
+    {
+        BlobUriBuilder builder = new(new Uri(containerUri.GetLeftPart(UriPartial.Path)))
+        {
+            BlobContainerName = string.Empty,
+            BlobName = string.Empty,
+        };
+        return builder.ToUri();
+    }
+
     BlobClient GetBlobClient(string token)
     {
         DecodeTokenResult decoded = DecodeToken(token);
+        if (!IsSinglePathSegment(decoded.Container))
+        {
+            throw new PayloadStorageException(
+                "Payload references must identify a single container without path normalization.");
+        }
+
+        BlobContainerClient destinationContainer;
         if (!decoded.IsV2)
         {
-            if (!string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal))
+            bool configuredContainer = string.Equals(decoded.Container, this.containerClient.Name, StringComparison.Ordinal);
+            if (!configuredContainer && !this.allowAllContainersInConfiguredAccount)
             {
                 throw new ArgumentException("Token container does not match configured container.", nameof(token));
             }
 
-            return this.containerClient.GetBlobClient(decoded.Name);
+            destinationContainer = configuredContainer
+                ? this.containerClient
+                : this.containerClient.GetParentBlobServiceClient().GetBlobContainerClient(decoded.Container);
+        }
+        else
+        {
+            destinationContainer = this.GetAuthorizedContainer(decoded);
         }
 
-        Uri configured = this.containerClient.Uri;
-        if (IsSameEndpoint(decoded.ContainerUri!, configured))
+        BlobClient blob = destinationContainer.GetBlobClient(decoded.Name);
+
+        // Client construction can normalize path segments in both container and blob names.
+        BlobUriBuilder destination = new(blob.Uri, trimBlobNameSlashes: false);
+        string finalBlobName = destination.BlobName;
+        destination.BlobName = string.Empty;
+        Uri finalContainer = destination.ToUri();
+        Uri expectedAccount = GetAccountUri(decoded.ContainerUri ?? this.containerClient.Uri);
+        if (!IsSameEndpoint(finalContainer, destinationContainer.Uri)
+            || !IsSameEndpoint(GetAccountUri(finalContainer), expectedAccount))
         {
-            return this.containerClient.GetBlobClient(decoded.Name);
+            throw new PayloadStorageException(
+                "Payload references must remain within their authorized container and storage endpoint.");
         }
 
-        if (IsSameEndpoint(GetServiceUri(decoded.ContainerUri!), GetServiceUri(configured)))
+        if (!string.Equals(finalBlobName, decoded.Name, StringComparison.Ordinal))
         {
-            // Preserve the configured credential and pipeline without forwarding an account key to another
-            // endpoint. A SAS retains its original permissions; storage may still reject this container.
-            return this.containerClient.GetParentBlobServiceClient()
-                .GetBlobContainerClient(decoded.Container).GetBlobClient(decoded.Name);
+            throw new ArgumentException(
+                "Payload reference blob names must not change during URI normalization.", nameof(token));
         }
 
-        if (this.options.Credential != null)
+        return blob;
+    }
+
+    BlobContainerClient GetAuthorizedContainer(DecodeTokenResult decoded)
+    {
+        if (IsSameEndpoint(decoded.ContainerUri!, this.containerClient.Uri))
         {
-            return new BlobClient(decoded.BlobUri, this.options.Credential, this.clientOptions);
+            return this.containerClient;
+        }
+
+        Uri account = GetAccountUri(decoded.ContainerUri!);
+        if (IsSameEndpoint(account, GetAccountUri(this.containerClient.Uri)))
+        {
+            if (this.allowAllContainersInConfiguredAccount)
+            {
+                return this.containerClient.GetParentBlobServiceClient().GetBlobContainerClient(decoded.Container);
+            }
+        }
+        else
+        {
+            foreach (BlobServiceClient client in this.additionalAccounts)
+            {
+                if (IsSameEndpoint(account, client.Uri))
+                {
+                    return client.GetBlobContainerClient(decoded.Container);
+                }
+            }
         }
 
         throw new PayloadStorageException(
-            $"The externalized payload lives in a different storage account or service endpoint " +
-            $"('{decoded.ContainerUri!.GetLeftPart(UriPartial.Path)}') than the currently-configured payload store " +
-            $"('{configured.GetLeftPart(UriPartial.Path)}'). Cross-account payload access requires identity (AAD) " +
-            "authentication with access to both accounts; configured connection-string credentials cannot be " +
-            "reused for another account or endpoint.");
+            "Payload references must use the configured payload container and storage endpoint " +
+            "or an explicitly authorized account-wide scope.");
     }
 
     /// <summary>

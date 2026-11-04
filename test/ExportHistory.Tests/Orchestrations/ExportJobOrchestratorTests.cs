@@ -154,7 +154,7 @@ public class ExportJobOrchestratorTests
         Random random = new(seed);
         ListedInstance[] instances = Enumerable.Range(0, 300).Select(index =>
         {
-            DateTimeOffset completed = start.AddSeconds((index * 24) + random.Next(1, 1201));
+            DateTimeOffset completed = start.AddSeconds((index * 24d) + random.Next(1, 1201));
             return new ListedInstance($"instance-{index}", index.ToString("D6"), completed, completed);
         }).ToArray();
         runner.Now = start;

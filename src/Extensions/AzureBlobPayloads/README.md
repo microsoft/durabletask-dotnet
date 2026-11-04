@@ -146,6 +146,30 @@ the appropriate explicit scope allows a later attempt to proceed. An authorized
 delete still checks the blob's ownership metadata and uses its ETag in the delete
 condition.
 
+## Payload size validation
+
+Before uploading a multi-field orchestration response or entity batch, the
+interceptor snapshots eligible payload fields and validates their UTF-8 byte
+sizes. This includes nested continue-as-new carryover and rewind history fields.
+A deterministic `MaxPayloadBytes` violation causes zero uploads and no partial
+payload-token substitutions for that message. Existing worker failure conversion
+still applies, including entity unlocks on permanent orchestration failures.
+
+The threshold and maximum are inclusive: a nonempty value at `ThresholdBytes`
+is externalized, and a value at `MaxPayloadBytes` is allowed. The maximum applies
+only to fields selected for externalization. Empty, absent, below-threshold, and
+recognized-token values are unchanged. Precancellation takes priority over size
+validation for eligible work; a message with no eligible fields performs no
+storage work, even with a canceled token.
+
+Because preflight starts no I/O, a deterministic size violation takes precedence
+over an earlier field's hypothetical upload failure. Once preflight passes,
+uploads retain bounded concurrency, drainage, and message-order selection of
+actual I/O failures. This is not a cross-blob transaction or cleanup of existing
+orphan blobs: real I/O failures, cancellation during uploads, and uncertain
+backend submission can still leave unrecorded uploads. No catch-and-delete
+rollback is performed.
+
 ## SDK and dashboard boundaries
 
 The client and worker gRPC interceptors resolve orchestration inputs, external

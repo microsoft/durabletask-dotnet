@@ -457,6 +457,525 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         store.MaxObservedConcurrency.Should().BeLessOrEqualTo(8, "concurrency must be bounded to avoid Azure Storage throttling");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_OversizedLaterPayloadDoesNotUploadOrMutateTokens(
+        bool unicode)
+    {
+        // Arrange
+        TrackingPayloadStore store = new();
+        LargePayloadStorageOptions options = new() { ThresholdBytes = 1024, MaxPayloadBytes = 2048 };
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, options);
+        P.OrchestratorAction action = new()
+        {
+            Id = 1,
+            ScheduleTask = new P.ScheduleTaskAction
+            {
+                Name = "activity",
+                Input = unicode ? new string('\u00e9', 1025) : new string('x', 2049),
+            },
+        };
+        P.OrchestratorAction expectedAction = action.Clone();
+        P.OrchestratorResponse response = new()
+        {
+            InstanceId = "instance-1",
+            CompletionToken = "completion-token",
+            CustomStatus = new string('s', 1024),
+            Actions = { action },
+        };
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        store.UploadCount.Should().Be(0);
+        action.Should().Be(expectedAction);
+        response.CustomStatus.Should().BeNull();
+        response.CompletionToken.Should().Be("completion-token");
+        P.CompleteOrchestrationAction failure = response.Actions.Should().ContainSingle().Subject.CompleteOrchestration;
+        failure.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Failed);
+        failure.FailureDetails.ErrorType.Should().Be(typeof(PayloadStorageException).FullName);
+        failure.FailureDetails.IsNonRetriable.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExternalizeRequestPayloadsAsync_EntityBatchRequest_OversizedLaterPayloadDoesNotUploadOrMutateTokens(
+        bool unicode)
+    {
+        // Arrange
+        TrackingPayloadStore store = new();
+        LargePayloadStorageOptions options = new() { ThresholdBytes = 1024, MaxPayloadBytes = 2048 };
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, options);
+        P.EntityBatchRequest request = new()
+        {
+            InstanceId = "entity-1",
+            EntityState = new string('s', 1024),
+            Operations =
+            {
+                new P.OperationRequest { Operation = "first", Input = new string('x', 2048) },
+                new P.OperationRequest
+                {
+                    Operation = "second",
+                    Input = unicode ? new string('\u00e9', 1025) : new string('x', 2049),
+                },
+            },
+        };
+        P.EntityBatchRequest expected = request.Clone();
+
+        // Act
+        Func<Task> act = () => ExternalizeAsync(interceptor, request, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<PayloadStorageException>()
+            .WithMessage("*exceeds the configured maximum*");
+        store.UploadCount.Should().Be(0);
+        request.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("result")]
+    [InlineData("details")]
+    [InlineData("termination")]
+    [InlineData("sub-orchestration")]
+    [InlineData("event")]
+    [InlineData("entity-signal")]
+    [InlineData("entity-call")]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_OversizedActionPreflightsEntireMessage(
+        string field)
+    {
+        // Arrange
+        string oversized = new('x', 13);
+        P.OrchestratorAction action = field switch
+        {
+            "result" => new() { CompleteOrchestration = new P.CompleteOrchestrationAction { Result = oversized } },
+            "details" => new()
+            {
+                CompleteOrchestration = new P.CompleteOrchestrationAction { Result = "result--", Details = oversized },
+            },
+            "termination" => new() { TerminateOrchestration = new P.TerminateOrchestrationAction { Reason = oversized } },
+            "sub-orchestration" => new() { CreateSubOrchestration = new P.CreateSubOrchestrationAction { Input = oversized } },
+            "event" => new() { SendEvent = new P.SendEventAction { Data = oversized } },
+            "entity-signal" => new()
+            {
+                SendEntityMessage = new P.SendEntityMessageAction
+                {
+                    EntityOperationSignaled = new P.EntityOperationSignaledEvent { Input = oversized },
+                },
+            },
+            "entity-call" => new()
+            {
+                SendEntityMessage = new P.SendEntityMessageAction
+                {
+                    EntityOperationCalled = new P.EntityOperationCalledEvent { Input = oversized },
+                },
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(field)),
+        };
+        P.OrchestratorAction expected = action.Clone();
+        P.OrchestratorResponse response = new() { CustomStatus = "status--", Actions = { action } };
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        store.UploadCount.Should().Be(0);
+        action.Should().Be(expected);
+        P.CompleteOrchestrationAction failure = response.Actions.Should().ContainSingle().Subject.CompleteOrchestration;
+        failure.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Failed);
+        failure.FailureDetails.ErrorType.Should().Be(typeof(PayloadStorageException).FullName);
+        failure.FailureDetails.IsNonRetriable.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.EventRaised)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.EventRaised)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.TaskScheduled)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.TaskScheduled)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.TaskCompleted)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.TaskCompleted)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.EventSent)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.EventSent)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.GenericEvent)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.GenericEvent)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ContinueAsNew)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ContinueAsNew)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ExecutionResumed)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ExecutionResumed)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.ExecutionRewound)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.ExecutionRewound)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted)]
+    [InlineData(false, P.HistoryEvent.EventTypeOneofCase.HistoryState)]
+    [InlineData(true, P.HistoryEvent.EventTypeOneofCase.HistoryState)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_OversizedNestedPayloadPreflightsEntireMessage(
+        bool rewind,
+        P.HistoryEvent.EventTypeOneofCase eventType)
+    {
+        // Arrange
+        P.HistoryEvent historyEvent = CreateHistoryEventWithPayload(eventType, new string('x', 13));
+        P.OrchestratorResponse response = CreateResponseWithHistory(historyEvent, rewind);
+        response.CustomStatus = "status--";
+        P.OrchestratorAction action = response.Actions[0];
+        P.OrchestratorAction expected = action.Clone();
+        TrackingPayloadStore store = new(uploadAsync: (_, _) => throw new RequestFailedException(500, "Upload must not start."));
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert: deterministic size failure precedes even a hypothetical earlier I/O failure.
+        store.UploadCount.Should().Be(0);
+        action.Should().Be(expected);
+        P.CompleteOrchestrationAction failure = response.Actions.Should().ContainSingle().Subject.CompleteOrchestration;
+        failure.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Failed);
+        failure.FailureDetails.ErrorType.Should().Be(typeof(PayloadStorageException).FullName);
+        failure.FailureDetails.IsNonRetriable.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_OversizedLaterHistoryStateFieldDoesNotMutateTokens(
+        bool rewind,
+        bool oversizedStatus)
+    {
+        // Arrange
+        P.HistoryEvent historyEvent = new()
+        {
+            HistoryState = new P.HistoryStateEvent
+            {
+                OrchestrationState = new P.OrchestrationState
+                {
+                    Input = "input---",
+                    Output = oversizedStatus ? "output--" : new string('x', 13),
+                    CustomStatus = oversizedStatus ? new string('x', 13) : "status--",
+                },
+            },
+        };
+        P.HistoryEvent expected = historyEvent.Clone();
+        P.OrchestratorResponse response = CreateResponseWithHistory(historyEvent, rewind);
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        store.UploadCount.Should().Be(0);
+        historyEvent.Should().Be(expected);
+        response.Actions.Should().ContainSingle().Which.CompleteOrchestration.OrchestrationStatus
+            .Should().Be(P.OrchestrationStatus.Failed);
+    }
+
+    [Theory]
+    [InlineData("result", false)]
+    [InlineData("result", true)]
+    [InlineData("signal", false)]
+    [InlineData("signal", true)]
+    [InlineData("start", false)]
+    [InlineData("start", true)]
+    public async Task ExternalizeRequestPayloadsAsync_EntityBatchResult_OversizedLaterPayloadDoesNotUploadOrMutateTokens(
+        string field,
+        bool unicode)
+    {
+        // Arrange
+        string oversized = unicode ? new string('\u00e9', 7) : new string('x', 13);
+        P.EntityBatchResult result = new()
+        {
+            EntityState = "state---",
+            Results =
+            {
+                new P.OperationResult
+                {
+                    Success = new P.OperationResultSuccess { Result = field == "result" ? oversized : "result--" },
+                },
+            },
+            Actions =
+            {
+                new P.OperationAction
+                {
+                    SendSignal = new P.SendSignalAction { Input = field == "signal" ? oversized : "signal--" },
+                },
+                new P.OperationAction
+                {
+                    StartNewOrchestration = new P.StartNewOrchestrationAction { Input = field == "start" ? oversized : "start---" },
+                },
+            },
+        };
+        P.EntityBatchResult expected = result.Clone();
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+
+        // Act
+        Func<Task> act = () => ExternalizeAsync(interceptor, result, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<PayloadStorageException>();
+        store.UploadCount.Should().Be(0);
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("client")]
+    [InlineData("activity")]
+    [InlineData("orchestration")]
+    [InlineData("entity-request")]
+    [InlineData("entity-result")]
+    [InlineData("entity-v2")]
+    [InlineData("carryover")]
+    [InlineData("rewind")]
+    public async Task ExternalizeRequestPayloadsAsync_PreCancelledOversizedPayloadPreservesMessage(
+        string messageKind)
+    {
+        // Arrange
+        string oversized = new('x', 13);
+        IMessage request = messageKind switch
+        {
+            "client" => new P.CreateInstanceRequest { Input = oversized },
+            "activity" => new P.ActivityResponse { Result = oversized },
+            "orchestration" => new P.OrchestratorResponse { CustomStatus = oversized },
+            "entity-request" => new P.EntityBatchRequest
+            {
+                EntityState = oversized,
+                Operations = { new P.OperationRequest { Input = "input---" } },
+            },
+            "entity-result" => new P.EntityBatchResult { EntityState = oversized },
+            "entity-v2" => new P.EntityRequest { EntityState = oversized },
+            "carryover" => CreateResponseWithHistory(
+                CreateHistoryEventWithPayload(P.HistoryEvent.EventTypeOneofCase.ExecutionRewound, oversized),
+                rewind: false),
+            "rewind" => CreateResponseWithHistory(
+                CreateHistoryEventWithPayload(P.HistoryEvent.EventTypeOneofCase.HistoryState, oversized),
+                rewind: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(messageKind)),
+        };
+        ByteString expected = request.ToByteString();
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        // Act
+        Func<Task> act = () => ExternalizeAsync(interceptor, request, cts.Token);
+
+        // Assert
+        (await act.Should().ThrowAsync<OperationCanceledException>()).Which.CancellationToken.Should().Be(cts.Token);
+        store.UploadCount.Should().Be(0);
+        request.ToByteString().Should().Equal(expected);
+    }
+
+    [Theory]
+    [InlineData("client")]
+    [InlineData("activity")]
+    [InlineData("orchestration")]
+    [InlineData("entity-request")]
+    [InlineData("entity-result")]
+    [InlineData("entity-v2")]
+    public async Task ExternalizeRequestPayloadsAsync_PreCancelledIneligiblePayloadsIgnoreMaximumAndPerformNoWork(
+        string messageKind)
+    {
+        // Arrange: inline values exceed the maximum but not the externalization threshold.
+        TrackingPayloadStore store = new();
+        string token = store.Seed("original");
+        IMessage request = messageKind switch
+        {
+            "client" => new P.CreateInstanceRequest { Input = "inline" },
+            "activity" => new P.ActivityResponse { Result = token },
+            "orchestration" => new P.OrchestratorResponse
+            {
+                CustomStatus = "inline",
+                Actions =
+                {
+                    new P.OrchestratorAction
+                    {
+                        CompleteOrchestration = new P.CompleteOrchestrationAction
+                        {
+                            Result = token,
+                            Details = string.Empty,
+                            CarryoverEvents =
+                            {
+                                new P.HistoryEvent
+                                {
+                                    HistoryState = new P.HistoryStateEvent
+                                    {
+                                        OrchestrationState = new P.OrchestrationState { Output = "inline", CustomStatus = token },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    new P.OrchestratorAction
+                    {
+                        RewindOrchestration = new P.RewindOrchestrationAction
+                        {
+                            NewHistory =
+                            {
+                                new P.HistoryEvent { EventRaised = new P.EventRaisedEvent { Input = string.Empty } },
+                                new P.HistoryEvent { TimerFired = new P.TimerFiredEvent() },
+                            },
+                        },
+                    },
+                },
+            },
+            "entity-request" => new P.EntityBatchRequest
+            {
+                EntityState = "inline",
+                Operations = { new P.OperationRequest { Input = token }, new P.OperationRequest() },
+            },
+            "entity-result" => new P.EntityBatchResult
+            {
+                EntityState = "inline",
+                Results = { new P.OperationResult { Success = new P.OperationResultSuccess { Result = token } } },
+            },
+            "entity-v2" => new P.EntityRequest(),
+            _ => throw new ArgumentOutOfRangeException(nameof(messageKind)),
+        };
+        ByteString expected = request.ToByteString();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 4 });
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        // Act
+        await ExternalizeAsync(interceptor, request, cts.Token);
+
+        // Assert
+        store.UploadCount.Should().Be(0);
+        store.DownloadCount.Should().Be(0);
+        request.ToByteString().Should().Equal(expected);
+    }
+
+    [Theory]
+    [InlineData("orchestration", false)]
+    [InlineData("orchestration", true)]
+    [InlineData("entity-request", false)]
+    [InlineData("entity-request", true)]
+    [InlineData("entity-result", false)]
+    [InlineData("entity-result", true)]
+    public async Task ExternalizeRequestPayloadsAsync_AllValidBatchHonorsUtf8BoundariesAndExistingTokens(
+        string messageKind,
+        bool unicode)
+    {
+        // Arrange
+        string threshold = unicode ? new string('\u00e9', 4) : new string('t', 8);
+        string maximum = unicode ? new string('\u00e9', 6) : new string('m', 12);
+        TrackingPayloadStore store = new();
+        string token = store.Seed("original");
+        IMessage request = messageKind switch
+        {
+            "orchestration" => new P.OrchestratorResponse
+            {
+                CustomStatus = threshold,
+                Actions =
+                {
+                    new P.OrchestratorAction { ScheduleTask = new P.ScheduleTaskAction { Input = maximum } },
+                    new P.OrchestratorAction { SendEvent = new P.SendEventAction { Data = "inline" } },
+                    new P.OrchestratorAction { CompleteOrchestration = new P.CompleteOrchestrationAction { Result = token } },
+                },
+            },
+            "entity-request" => new P.EntityBatchRequest
+            {
+                EntityState = threshold,
+                Operations =
+                {
+                    new P.OperationRequest { Input = maximum },
+                    new P.OperationRequest { Input = "inline" },
+                    new P.OperationRequest { Input = token },
+                    new P.OperationRequest { Input = string.Empty },
+                    new P.OperationRequest(),
+                },
+            },
+            "entity-result" => new P.EntityBatchResult
+            {
+                EntityState = threshold,
+                Results =
+                {
+                    new P.OperationResult { Success = new P.OperationResultSuccess { Result = maximum } },
+                    new P.OperationResult { Success = new P.OperationResultSuccess { Result = "inline" } },
+                    new P.OperationResult { Success = new P.OperationResultSuccess { Result = token } },
+                    new P.OperationResult { Success = new P.OperationResultSuccess { Result = string.Empty } },
+                    new P.OperationResult { Success = new P.OperationResultSuccess() },
+                },
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(messageKind)),
+        };
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+
+        // Act
+        await ExternalizeAsync(interceptor, request, CancellationToken.None);
+        await ExternalizeAsync(interceptor, request, CancellationToken.None);
+
+        // Assert: exactly two token substitutions, including after a retry.
+        (string? first, string? second, string? inline, string? known) = request switch
+        {
+            P.OrchestratorResponse r => (r.CustomStatus, r.Actions[0].ScheduleTask.Input, r.Actions[1].SendEvent.Data, r.Actions[2].CompleteOrchestration.Result),
+            P.EntityBatchRequest r => (r.EntityState, r.Operations[0].Input, r.Operations[1].Input, r.Operations[2].Input),
+            P.EntityBatchResult r => (r.EntityState, r.Results[0].Success.Result, r.Results[1].Success.Result, r.Results[2].Success.Result),
+            _ => throw new InvalidOperationException(),
+        };
+        store.UploadCount.Should().Be(2);
+        store.GetUploadedValue(Assert.IsType<string>(first)).Should().Be(threshold);
+        store.GetUploadedValue(Assert.IsType<string>(second)).Should().Be(maximum);
+        inline.Should().Be("inline");
+        known.Should().Be(token);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_UsesNestedFieldSnapshotsBeforeDispatch(
+        bool rewind)
+    {
+        // Arrange
+        P.OrchestrationState state = new() { Input = "input---", Output = "output--", CustomStatus = "status--" };
+        P.HistoryEvent historyEvent = new() { HistoryState = new P.HistoryStateEvent { OrchestrationState = state } };
+        P.OrchestratorResponse response = CreateResponseWithHistory(historyEvent, rewind);
+        response.CustomStatus = "first---";
+        TrackingPayloadStore store = new(uploadAsync: (payload, _) =>
+        {
+            if (payload == "first---")
+            {
+                state.Output = new string('x', 13);
+                state.CustomStatus = new string('y', 13);
+            }
+
+            return Task.FromResult($"test-blob://{payload}");
+        });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
+
+        // Act
+        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+
+        // Assert
+        store.UploadCount.Should().Be(4);
+        response.CustomStatus.Should().Be("test-blob://first---");
+        state.Input.Should().Be("test-blob://input---");
+        state.Output.Should().Be("test-blob://output--");
+        state.CustomStatus.Should().Be("test-blob://status--");
+    }
+
     [Fact]
     public async Task ExternalizeRequestPayloadsAsync_CreateInstanceRequest_KnownTokenBypassesSizeLimits()
     {
@@ -1616,6 +2135,29 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         // Assert: cancellation did not prevent a dispatch, so successful work remains successful.
         await act.Should().NotThrowAsync();
         completedOperations.Should().Be(2);
+    }
+
+    static P.OrchestratorResponse CreateResponseWithHistory(P.HistoryEvent historyEvent, bool rewind)
+    {
+        P.OrchestratorAction action = rewind
+            ? new()
+            {
+                RewindOrchestration = new P.RewindOrchestrationAction { NewHistory = { historyEvent } },
+            }
+            : new()
+            {
+                CompleteOrchestration = new P.CompleteOrchestrationAction
+                {
+                    OrchestrationStatus = P.OrchestrationStatus.ContinuedAsNew,
+                    CarryoverEvents = { historyEvent },
+                },
+            };
+        return new()
+        {
+            InstanceId = "instance-1",
+            CompletionToken = "completion-token",
+            Actions = { action },
+        };
     }
 
     static P.HistoryEvent CreateHistoryEventWithPayload(

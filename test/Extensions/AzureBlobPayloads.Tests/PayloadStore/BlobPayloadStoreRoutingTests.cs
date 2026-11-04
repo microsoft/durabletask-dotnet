@@ -109,15 +109,19 @@ public class BlobPayloadStoreRoutingTests
     }
 
     /// <summary>
-    /// Legacy blob names must also remain within the configured container after URI normalization.
+    /// Legacy blob names must retain their identity and remain within the configured container.
     /// </summary>
     [Theory]
-    [InlineData("../old/blob", false)]
-    [InlineData("../old/blob", true)]
-    [InlineData("folder/../../old/blob", false)]
-    [InlineData("folder/../../old/blob", true)]
-    public async Task LegacyToken_OutsideContainerAfterNormalization_RejectsBeforeSendingAsync(
-        string blobName, bool allowAllContainers)
+    [InlineData("../old/blob", false, false)]
+    [InlineData("../old/blob", true, false)]
+    [InlineData("folder/../../old/blob", false, false)]
+    [InlineData("folder/../../old/blob", true, false)]
+    [InlineData("folder/../blob", false, true)]
+    [InlineData("folder/../blob", true, true)]
+    [InlineData("folder/./blob", false, true)]
+    [InlineData("folder/./blob", true, true)]
+    public async Task LegacyToken_ChangedByNormalization_RejectsBeforeSendingAsync(
+        string blobName, bool allowAllContainers, bool remainsInContainer)
     {
         // Arrange
         using RecordingHandler handler = new();
@@ -134,8 +138,17 @@ public class BlobPayloadStoreRoutingTests
         Func<Task> delete = () => store.DeleteAsync($"blob:v1:new:{blobName}", CancellationToken.None);
 
         // Assert
-        await download.Should().ThrowAsync<PayloadStorageException>();
-        await delete.Should().ThrowAsync<PayloadStorageException>();
+        if (remainsInContainer)
+        {
+            await download.Should().ThrowAsync<ArgumentException>().WithMessage("*blob name*normalization*");
+            await delete.Should().ThrowAsync<ArgumentException>().WithMessage("*blob name*normalization*");
+        }
+        else
+        {
+            await download.Should().ThrowAsync<PayloadStorageException>();
+            await delete.Should().ThrowAsync<PayloadStorageException>();
+        }
+
         handler.Requests.Should().BeEmpty();
     }
 
@@ -419,6 +432,11 @@ public class BlobPayloadStoreRoutingTests
     [InlineData("https://other.invalid", "https://other.invalid/new/%2e%2e/old/blob", "https://other.invalid/old/blob")]
     [InlineData("https://other.invalid", "https://other.invalid/old/blob?sv=2025-01-05&sig=from-token#unused", "https://other.invalid/old/blob")]
     [InlineData("https://other.invalid", "https://other.invalid/old/blob?snapshot=old&versionid=old#unused", "https://other.invalid/old/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/folder/.hidden", "https://other.invalid/old/folder/.hidden")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/folder/a..b", "https://other.invalid/old/folder/a..b")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/folder/.../blob", "https://other.invalid/old/folder/.../blob")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/folder/%252e%252e/blob", "https://other.invalid/old/folder/%252e%252e/blob")]
+    [InlineData("https://other.invalid", "https://other.invalid/old/folder%2fchild%2fblob", "https://other.invalid/old/folder/child/blob")]
     public async Task AdditionalAccount_UsesConfiguredIdentityAsync(
         string additionalAccount, string blobUri, string expectedBlobUri)
     {
@@ -514,6 +532,99 @@ public class BlobPayloadStoreRoutingTests
                 r => r.Uri.GetLeftPart(UriPartial.Path) == expectedUri && r.AuthorizationScheme == "Bearer");
             handler.Requests[2].IfMatch.Should().Be($"\"{expectedPayload}-etag\"");
         }
+    }
+
+    /// <summary>
+    /// Decoded names that normalize to another object are rejected without reading or deleting either object.
+    /// </summary>
+    [Theory]
+    [InlineData("https://account.invalid/new/folder%2f..%2fblob", false, false)]
+    [InlineData("https://account.invalid/new/folder%2f..%2fblob", true, false)]
+    [InlineData("https://account.invalid/old/folder%2f..%2fblob", false, true)]
+    [InlineData("https://account.invalid/old/folder%2f..%2fblob", true, true)]
+    [InlineData("https://archive.invalid/old/folder%2f..%2fblob", false, false)]
+    [InlineData("https://archive.invalid/old/folder%2f..%2fblob", true, false)]
+    [InlineData("https://127.0.0.1:10000/accountb/old/folder%2f..%2fblob", false, false)]
+    [InlineData("https://127.0.0.1:10000/accountb/old/folder%2f..%2fblob", true, false)]
+    [InlineData("https://archive.invalid/old/folder%2f.%2fblob", false, false)]
+    [InlineData("https://archive.invalid/old/folder%2f.%2fblob", true, false)]
+    [InlineData("https://archive.invalid/old/folder%2f%2e%2e%2fblob", false, false)]
+    [InlineData("https://archive.invalid/old/folder%2f%2e%2e%2fblob", true, false)]
+    [InlineData("https://archive.invalid/old/folder%2f%2e%2fblob", false, false)]
+    [InlineData("https://archive.invalid/old/folder%2f%2e%2fblob", true, false)]
+    [InlineData("https://archive.invalid/old//folder%2f..%2fblob/", false, false)]
+    [InlineData("https://archive.invalid/old//folder%2f..%2fblob/", true, false)]
+    public async Task BlobNameNormalization_RejectsBeforeSendingAsync(
+        string blobUri, bool delete, bool allowPrimary)
+    {
+        // Arrange
+        string referencedUri = new Uri(blobUri).GetLeftPart(UriPartial.Path);
+        string normalizedUri = new Uri(Uri.UnescapeDataString(blobUri)).GetLeftPart(UriPartial.Path);
+        Dictionary<string, string> blobs = new(StringComparer.Ordinal)
+        {
+            [referencedUri] = "referenced",
+            [normalizedUri] = "normalized",
+        };
+        Dictionary<string, string> expectedBlobs = new(blobs);
+        using RecordingHandler handler = new() { BlobPayloads = blobs };
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object)
+        {
+            AllowAllContainersInConfiguredAccount = allowPrimary,
+        };
+        options.AdditionalAccountUris.Add(new Uri("https://archive.invalid"));
+        options.AdditionalAccountUris.Add(new Uri("https://127.0.0.1:10000/accountb"));
+        BlobClientOptions clientOptions = new()
+        {
+            Transport = new HttpClientTransport(httpClient),
+            TrimBlobNameSlashes = false,
+        };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        string token = $"blob:v2:{blobUri}";
+
+        // Act
+        Func<Task> operation = delete
+            ? () => store.DeleteAsync(token, CancellationToken.None)
+            : () => store.DownloadAsync(token, CancellationToken.None);
+
+        // Assert
+        await operation.Should().ThrowAsync<ArgumentException>().WithMessage("*blob name*normalization*");
+        blobs.Should().HaveCount(2).And.BeEquivalentTo(expectedBlobs);
+        handler.Requests.Should().BeEmpty();
+        credential.Invocations.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Permanent blob-name normalization failures retain the tombstone without repeatedly polling it.
+    /// </summary>
+    [Theory]
+    [InlineData("https://archive.invalid/old/folder%2f..%2fblob")]
+    [InlineData("https://127.0.0.1:10000/accountb/old/folder%2f.%2fblob")]
+    public async Task BlobNameNormalization_PurgeQuarantinesBeforeSendingAsync(string blobUri)
+    {
+        // Arrange
+        using RecordingHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        Mock<TokenCredential> credential = CreateCredential();
+        LargePayloadStorageOptions options = new(new Uri("https://account.invalid"), credential.Object);
+        options.AdditionalAccountUris.Add(new Uri("https://archive.invalid"));
+        options.AdditionalAccountUris.Add(new Uri("https://127.0.0.1:10000/accountb"));
+        BlobClientOptions clientOptions = new() { Transport = new HttpClientTransport(httpClient) };
+        BlobContainerClient container = new(new Uri("https://account.invalid/new"), credential.Object, clientOptions);
+        BlobPayloadStore store = new(options, container, clientOptions);
+        TestLogger<DeleteExternalBlobActivity> logger = new();
+        DeleteExternalBlobActivity activity = new(store, logger);
+
+        // Act
+        List<BlobPurgeOutcome> outcomes = await activity.RunAsync(null!, [$"blob:v2:{blobUri}"]);
+
+        // Assert
+        outcomes.Should().ContainSingle().Which.Disposition.Should().Be(LargePayloadPurgeDisposition.Quarantined);
+        logger.Logs.Should().ContainSingle(l => l.Message.Contains("MalformedToken"));
+        handler.Requests.Should().BeEmpty();
+        credential.Invocations.Should().BeEmpty();
     }
 
     /// <summary>

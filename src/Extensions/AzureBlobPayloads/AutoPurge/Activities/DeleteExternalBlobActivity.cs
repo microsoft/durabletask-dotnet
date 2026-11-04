@@ -187,9 +187,8 @@ public class DeleteExternalBlobActivity(
         }
         catch (ArgumentException)
         {
-            // The prefix gate above proves this is a v2 token, so the only remaining decode failure is a v2
-            // body that does not parse. The SDK and backend control both sides of the protocol, so that
-            // indicates a producer, corruption, or compatibility bug; retrying can never fix it.
+            // The prefix gate proves this is v2. A malformed body or a blob name that changes during URI
+            // normalization needs reference correction rather than another delete attempt.
             this.logger.BlobPurgeDeleteQuarantined("MalformedToken", null);
             return new BlobPurgeOutcome(LargePayloadPurgeDisposition.Quarantined);
         }

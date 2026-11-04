@@ -26,6 +26,12 @@ the final normalized client URI before storage requests or credential acquisitio
 Blob-name escaping and literal leading or trailing slashes are preserved:
 `blob`, `/blob`, and `blob/` identify distinct objects for reads and deletion.
 A blob name that normalizes outside its selected container is rejected.
+The final decoded blob name must also match the reference's decoded name exactly.
+If client construction changes that name, for example by resolving internal dot
+segments, the reference is rejected before Storage I/O or credential acquisition
+rather than selecting another object in the same container. Such malformed
+references use the existing purge quarantine classification, which preserves the
+tombstone but requires operator action. Scope-denied references remain retryable.
 
 There is no hostname-only allowlist and no permission to follow arbitrary accounts
 merely because the configured identity has Storage permissions.
@@ -120,6 +126,10 @@ supply authentication or select snapshots or versions. Only the configured SAS
 or identity is used. Literal `#` and `?` characters in v2 blob names must be
 URL-escaped as `%23` and `%3F`. Older hand-authored tokens relying on unescaped
 fragment text as part of a name must be rewritten with that text escaped.
+Before upgrading, complete affected instances or migrate payloads and references
+whose decoded blob names contain standalone `.` or `..` segments to names that
+do not change during URI normalization. SDK-generated GUID blob names are
+unaffected.
 
 Before changing the configured account or container, complete or explicitly
 migrate existing instances and clean up their payloads. Alternatively, deliberately

@@ -212,6 +212,9 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentException">
+    /// The token is malformed or its decoded blob name changes during URI normalization.
+    /// </exception>
     /// <exception cref="PayloadStorageException">
     /// The token refers to a blob outside the configured payload access scopes.
     /// </exception>
@@ -227,6 +230,9 @@ public sealed class BlobPayloadStore : PayloadStore
     /// A 404 with an unknown or missing error code propagates as <see cref="RequestFailedException"/>,
     /// allowing auto-purge to retry instead of resolving a tombstone without confirmed absence.
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The token is malformed or its decoded blob name changes during URI normalization.
+    /// </exception>
     /// <exception cref="PayloadStorageException">
     /// The token refers to a blob outside the configured payload access scopes.
     /// </exception>
@@ -577,7 +583,9 @@ public sealed class BlobPayloadStore : PayloadStore
         BlobClient blob = destinationContainer.GetBlobClient(decoded.Name);
 
         // Client construction can normalize path segments in both container and blob names.
-        BlobUriBuilder destination = new(blob.Uri) { BlobName = string.Empty };
+        BlobUriBuilder destination = new(blob.Uri, trimBlobNameSlashes: false);
+        string finalBlobName = destination.BlobName;
+        destination.BlobName = string.Empty;
         Uri finalContainer = destination.ToUri();
         Uri expectedAccount = GetAccountUri(decoded.ContainerUri ?? this.containerClient.Uri);
         if (!IsSameEndpoint(finalContainer, destinationContainer.Uri)
@@ -585,6 +593,12 @@ public sealed class BlobPayloadStore : PayloadStore
         {
             throw new PayloadStorageException(
                 "Payload references must remain within their authorized container and storage endpoint.");
+        }
+
+        if (!string.Equals(finalBlobName, decoded.Name, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Payload reference blob names must not change during URI normalization.", nameof(token));
         }
 
         return blob;

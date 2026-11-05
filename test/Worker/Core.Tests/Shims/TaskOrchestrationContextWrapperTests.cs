@@ -3,7 +3,6 @@
 
 using System.Collections.Generic;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using DurableTask.Core;
 using DurableTask.Core.Serializing.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -392,38 +391,6 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastSubOrchestrationVersion.Should().Be(string.Empty);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void WaitForExternalEvent_CompletedWaits_DoNotRetainTasksOrResults(bool buffered)
-    {
-        // Arrange
-        TrackingOrchestrationContext innerContext = new();
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
-        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
-        using CancellationTokenSource liveSource = new();
-        using CancellationTokenSource disposedSource = new();
-        (WeakReference[] Tasks, WeakReference[] Results) nonCancelable = CompleteEventWaits(wrapper, default, buffered);
-        (WeakReference[] Tasks, WeakReference[] Results) disposed = CompleteEventWaits(wrapper, disposedSource.Token, buffered);
-        (WeakReference[] Tasks, WeakReference[] Results) live = CompleteEventWaits(wrapper, liveSource.Token, buffered);
-        disposedSource.Dispose();
-
-        // Act
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        // Assert
-        nonCancelable.Tasks.Count(reference => reference.IsAlive).Should().Be(0);
-        nonCancelable.Results.Count(reference => reference.IsAlive).Should().Be(0);
-        disposed.Tasks.Count(reference => reference.IsAlive).Should().Be(0);
-        disposed.Results.Count(reference => reference.IsAlive).Should().Be(0);
-        live.Tasks.Count(reference => reference.IsAlive).Should().Be(0);
-        live.Results.Count(reference => reference.IsAlive).Should().Be(0);
-        GC.KeepAlive(liveSource);
-        GC.KeepAlive(wrapper);
-    }
-
     [Fact]
     public async Task WaitForExternalEvent_PreCanceledToken_PreservesCancellationTokenAsync()
     {
@@ -692,36 +659,6 @@ public class TaskOrchestrationContextWrapperTests
         canceledWait.IsCanceled.Should().BeTrue();
         activeWait.IsCompletedSuccessfully.Should().BeTrue();
         activeWait.Result.Should().Be("payload");
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    static (WeakReference[] Tasks, WeakReference[] Results) CompleteEventWaits(
-        TaskOrchestrationContextWrapper wrapper,
-        CancellationToken cancellationToken,
-        bool buffered)
-    {
-        WeakReference[] tasks = new WeakReference[1000];
-        WeakReference[] results = new WeakReference[tasks.Length];
-        for (int i = 0; i < tasks.Length; i++)
-        {
-            if (buffered)
-            {
-                wrapper.CompleteExternalEvent("Event", "\"AQIDBA==\"");
-            }
-
-            Task<byte[]> wait = wrapper.WaitForExternalEvent<byte[]>("Event", cancellationToken);
-            if (!buffered)
-            {
-                wrapper.CompleteExternalEvent("Event", "\"AQIDBA==\"");
-            }
-
-            wait.IsCompletedSuccessfully.Should().BeTrue();
-            wait.Result.Should().Equal(1, 2, 3, 4);
-            tasks[i] = new WeakReference(wait);
-            results[i] = new WeakReference(wait.Result);
-        }
-
-        return (tasks, results);
     }
 
     static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)

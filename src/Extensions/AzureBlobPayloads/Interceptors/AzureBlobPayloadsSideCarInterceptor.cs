@@ -50,10 +50,6 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             response.Actions.Clear();
             response.Actions.AddRange(unlocks);
             response.CustomStatus = null;
-#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
-            response.IsPartial = false;
-            response.ChunkIndex = null;
-#pragma warning restore CS0612
             response.Actions.Add(new P.OrchestratorAction
             {
                 CompleteOrchestration = new P.CompleteOrchestrationAction

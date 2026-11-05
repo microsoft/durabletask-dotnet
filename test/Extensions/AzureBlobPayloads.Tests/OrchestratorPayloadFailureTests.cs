@@ -8,7 +8,6 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker;
-using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -76,7 +75,7 @@ public sealed class OrchestratorPayloadFailureTests
         EntityInstanceId[] entities = [new("counter", "one"), new("counter", "two")];
         string payload = failure == PayloadFailure.None
             ? "completed"
-            : new('x', GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes + 1024);
+            : new('x', 1024 * 1024 + 1024);
         string serializedPayload = JsonSerializer.Serialize(payload);
         Channel<P.WorkItem> workItems = Channel.CreateUnbounded<P.WorkItem>();
         Channel<P.HistoryChunk> history = Channel.CreateUnbounded<P.HistoryChunk>();
@@ -137,8 +136,6 @@ public sealed class OrchestratorPayloadFailureTests
             {
                 options.CallInvoker = invoker.Object;
                 options.ConfigureForAzureManaged();
-                options.CompleteOrchestrationWorkItemChunkSizeInBytes =
-                    GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes;
             });
             if (useExternalizedPayloads)
             {
@@ -146,7 +143,7 @@ public sealed class OrchestratorPayloadFailureTests
                 {
                     options.ThresholdBytes = 1024;
                     options.MaxPayloadBytes = failure == PayloadFailure.ForbiddenUpload
-                        ? 2 * GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes
+                        ? 2 * 1024 * 1024
                         : 2048;
                 });
             }
@@ -307,10 +304,6 @@ public sealed class OrchestratorPayloadFailureTests
             Assert.Equal(InstanceId, response.InstanceId);
             Assert.Equal("resumed-token", response.CompletionToken);
             Assert.Null(response.CustomStatus);
-#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
-            Assert.False(response.IsPartial);
-            Assert.Null(response.ChunkIndex);
-#pragma warning restore CS0612
             invoker.Verify(value => value.AsyncUnaryCall(
                 It.IsAny<Method<P.OrchestratorResponse, P.CompleteTaskResponse>>(),
                 It.IsAny<string>(),

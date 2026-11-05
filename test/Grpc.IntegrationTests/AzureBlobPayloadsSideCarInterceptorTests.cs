@@ -1143,10 +1143,6 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         resultAction.CompleteOrchestration.FailureDetails.ErrorType.Should().Be(typeof(PayloadStorageException).FullName);
         resultAction.CompleteOrchestration.FailureDetails.IsNonRetriable.Should().BeTrue();
         response.CustomStatus.Should().BeNullOrEmpty();
-#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
-        response.IsPartial.Should().BeFalse();
-        response.ChunkIndex.Should().BeNull();
-#pragma warning restore CS0612
     }
 
     [Theory]

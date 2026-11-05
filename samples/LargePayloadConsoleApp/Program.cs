@@ -32,9 +32,8 @@
 //   Output:   Status: Failed / PASS / Error: Payload size 16384 KB exceeds...
 //
 // [Scenario 4] 13MB activity input -> echo -> orchestration output
-//   Validates: ValidateActionsSize bypass (13MB > 3.9MB chunk limit) + ScheduleTask.Input externalization
+//   Validates: ScheduleTask.Input externalization
 //              + ActivityResponse.Result externalization + CompleteOrchestration.Result externalization
-//              + isChunkedMode: single oversized action sent as non-chunked (no ChunkIndex)
 //   Expected: Status: Completed, Output length: 13631488, PASS
 //   Output:   Status: Completed / Output length: 13631488 / PASS: 13MB activity output -> orch output externalized correctly
 //
@@ -44,7 +43,7 @@
 //   Output:   Status: Completed / PASS
 //
 // [Scenario 6] 13MB sub-orchestration input -> child returns it
-//   Validates: CreateSubOrchestration.Input externalization (>3.9MB action in orchestration completion)
+//   Validates: CreateSubOrchestration.Input externalization
 //   Expected: Status: Completed, PASS
 //   Output:   Status: Completed / PASS
 //
@@ -57,12 +56,6 @@
 //   Validates: OrchestratorResponse.CustomStatus externalization + GetInstance resolution
 //   Expected: Status: Completed, PASS
 //   Output:   Status: Completed / PASS
-//
-// [Scenario 9] 3x 13MB activity inputs (real multi-chunk LP completion)
-//   Validates: Multiple oversized ScheduleTask actions → real chunked completion with isChunkedMode=true
-//              + all 3 activities execute and return correct data
-//   Expected: Status: Completed, PASS: total=40894464
-//   Output:   Status: Completed / PASS: total=40894464
 //
 // =================================================================================================
 
@@ -180,7 +173,7 @@ builder.Services.AddDurableTaskWorker(b =>
             return Task.FromResult(new string('P', 16 * 1024 * 1024));
         });
 
-        // 13MB scenarios: validates that ValidateActionsSize does not block externalization
+        // 13MB payload examples
         tasks.AddOrchestratorFunc<object?, string>("LargeActivityIO", async (ctx, _) =>
         {
             // Send 13MB as activity input, activity echoes it back, orchestration returns it
@@ -213,16 +206,6 @@ builder.Services.AddDurableTaskWorker(b =>
         {
             ctx.SetCustomStatus(new string('C', 13 * 1024 * 1024));
             return Task.FromResult("done");
-        });
-
-        // Scenario 9: 3x 13MB activity inputs (chunked orchestration completion)
-        tasks.AddOrchestratorFunc<object?, int>("ThreeLargeActivities", async (ctx, _) =>
-        {
-            var t1 = ctx.CallActivityAsync<string>("Echo13MB", new string('A', 13 * 1024 * 1024));
-            var t2 = ctx.CallActivityAsync<string>("Echo13MB", new string('B', 13 * 1024 * 1024));
-            var t3 = ctx.CallActivityAsync<string>("Echo13MB", new string('C', 13 * 1024 * 1024));
-            string[] results = await Task.WhenAll(t1, t2, t3);
-            return results.Sum(r => r.Length);
         });
     });
 
@@ -326,7 +309,6 @@ Console.WriteLine(orchOvfResult.RuntimeStatus == OrchestrationRuntimeStatus.Fail
 if (orchOvfResult.FailureDetails != null) Console.WriteLine("  Error: " + orchOvfResult.FailureDetails.ErrorMessage);
 
 // Scenario 4: 13MB activity output + orchestration output with LP enabled
-// Tests that ValidateActionsSize bypass allows 13MB through the interceptor
 Console.WriteLine();
 Console.WriteLine("[Scenario 4] 13MB activity output -> orchestration output (round-trip)");
 string largeIOId = await client.ScheduleNewOrchestrationInstanceAsync("LargeActivityIO");
@@ -386,17 +368,6 @@ Console.WriteLine("  Status: " + csResult.RuntimeStatus);
 string? customStatus = csResult.ReadCustomStatusAs<string>();
 Console.WriteLine(csResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && customStatus?.Length == 13 * 1024 * 1024
     ? "PASS" : "FAIL: custom status length=" + (customStatus?.Length ?? 0));
-
-// Scenario 9: 3x 13MB activity inputs (chunked orchestration completion with LP)
-Console.WriteLine();
-Console.WriteLine("[Scenario 9] 3x 13MB activity inputs (chunked orch complete)");
-string threeId = await client.ScheduleNewOrchestrationInstanceAsync("ThreeLargeActivities");
-OrchestrationMetadata threeResult = await client.WaitForInstanceCompletionAsync(threeId, getInputsAndOutputs: true, cts.Token);
-Console.WriteLine("  Status: " + threeResult.RuntimeStatus);
-int totalLen = threeResult.ReadOutputAs<int>();
-Console.WriteLine(threeResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && totalLen == 3 * 13 * 1024 * 1024
-    ? "PASS: total=" + totalLen : "FAIL: total=" + totalLen);
-if (threeResult.FailureDetails != null) Console.WriteLine("  Error: " + threeResult.FailureDetails.ErrorMessage);
 
 Console.WriteLine();
 Console.WriteLine("=== ALL SCENARIOS DONE ===");

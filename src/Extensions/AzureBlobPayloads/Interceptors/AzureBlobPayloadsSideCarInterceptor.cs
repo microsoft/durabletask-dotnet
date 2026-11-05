@@ -335,7 +335,6 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
     void AddExternalizationOperation(
         List<Func<Task>> operations,
-        object message,
         string? value,
         Action<string> assign,
         CancellationToken cancellation)
@@ -344,30 +343,45 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         {
             // Validate snapshots while collecting, before dispatch can upload or mutate any field.
             this.ValidatePayloadSize(size, cancellation);
-            operations.Add(async () =>
-            {
-                string token = await this.ExternalizePayloadAsync(value!, cancellation);
-                this.BeforeSharedMessageLockForTest?.Invoke();
-                lock (message)
-                {
-                    this.SharedMessageLockAcquiredForTest?.Invoke(message);
-                    assign(token);
-                }
-            });
+            operations.Add(async () => assign(await this.ExternalizePayloadAsync(value!, cancellation)));
         }
     }
 
     async Task ExternalizeOrchestratorResponseAsync(P.OrchestratorResponse r, CancellationToken cancellation)
     {
         List<Func<Task>> operations = [];
-        this.AddExternalizationOperation(operations, r, r.CustomStatus, value => r.CustomStatus = value, cancellation);
+        this.AddExternalizationOperation(operations, r.CustomStatus, value => r.CustomStatus = value, cancellation);
 
         foreach (P.OrchestratorAction a in r.Actions)
         {
             if (a.CompleteOrchestration is { } complete)
             {
-                this.AddExternalizationOperation(operations, complete, complete.Result, value => complete.Result = value, cancellation);
-                this.AddExternalizationOperation(operations, complete, complete.Details, value => complete.Details = value, cancellation);
+                this.AddExternalizationOperation(
+                    operations,
+                    complete.Result,
+                    value =>
+                    {
+                        this.BeforeSharedMessageLockForTest?.Invoke();
+                        lock (complete)
+                        {
+                            this.SharedMessageLockAcquiredForTest?.Invoke(complete);
+                            complete.Result = value;
+                        }
+                    },
+                    cancellation);
+                this.AddExternalizationOperation(
+                    operations,
+                    complete.Details,
+                    value =>
+                    {
+                        this.BeforeSharedMessageLockForTest?.Invoke();
+                        lock (complete)
+                        {
+                            this.SharedMessageLockAcquiredForTest?.Invoke(complete);
+                            complete.Details = value;
+                        }
+                    },
+                    cancellation);
 
                 foreach (P.HistoryEvent historyEvent in complete.CarryoverEvents)
                 {
@@ -377,34 +391,34 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
             if (a.TerminateOrchestration is { } term)
             {
-                this.AddExternalizationOperation(operations, term, term.Reason, value => term.Reason = value, cancellation);
+                this.AddExternalizationOperation(operations, term.Reason, value => term.Reason = value, cancellation);
             }
 
             if (a.ScheduleTask is { } schedule)
             {
-                this.AddExternalizationOperation(operations, schedule, schedule.Input, value => schedule.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, schedule.Input, value => schedule.Input = value, cancellation);
             }
 
             if (a.CreateSubOrchestration is { } sub)
             {
-                this.AddExternalizationOperation(operations, sub, sub.Input, value => sub.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, sub.Input, value => sub.Input = value, cancellation);
             }
 
             if (a.SendEvent is { } sendEvt)
             {
-                this.AddExternalizationOperation(operations, sendEvt, sendEvt.Data, value => sendEvt.Data = value, cancellation);
+                this.AddExternalizationOperation(operations, sendEvt.Data, value => sendEvt.Data = value, cancellation);
             }
 
             if (a.SendEntityMessage is { } entityMsg)
             {
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
-                    this.AddExternalizationOperation(operations, sig, sig.Input, value => sig.Input = value, cancellation);
+                    this.AddExternalizationOperation(operations, sig.Input, value => sig.Input = value, cancellation);
                 }
 
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
-                    this.AddExternalizationOperation(operations, called, called.Input, value => called.Input = value, cancellation);
+                    this.AddExternalizationOperation(operations, called.Input, value => called.Input = value, cancellation);
                 }
             }
 
@@ -429,66 +443,66 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         switch (historyEvent.EventTypeCase)
         {
             case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted when historyEvent.ExecutionStarted is { } es:
-                this.AddExternalizationOperation(operations, es, es.Input, value => es.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, es.Input, value => es.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted when historyEvent.ExecutionCompleted is { } ec:
-                this.AddExternalizationOperation(operations, ec, ec.Result, value => ec.Result = value, cancellation);
+                this.AddExternalizationOperation(operations, ec.Result, value => ec.Result = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated when historyEvent.ExecutionTerminated is { } et:
-                this.AddExternalizationOperation(operations, et, et.Input, value => et.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, et.Input, value => et.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventRaised when historyEvent.EventRaised is { } er:
-                this.AddExternalizationOperation(operations, er, er.Input, value => er.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, er.Input, value => er.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled when historyEvent.TaskScheduled is { } ts:
-                this.AddExternalizationOperation(operations, ts, ts.Input, value => ts.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, ts.Input, value => ts.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted when historyEvent.TaskCompleted is { } tc:
-                this.AddExternalizationOperation(operations, tc, tc.Result, value => tc.Result = value, cancellation);
+                this.AddExternalizationOperation(operations, tc.Result, value => tc.Result = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated
                 when historyEvent.SubOrchestrationInstanceCreated is { } soc:
-                this.AddExternalizationOperation(operations, soc, soc.Input, value => soc.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, soc.Input, value => soc.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted
                 when historyEvent.SubOrchestrationInstanceCompleted is { } sox:
-                this.AddExternalizationOperation(operations, sox, sox.Result, value => sox.Result = value, cancellation);
+                this.AddExternalizationOperation(operations, sox.Result, value => sox.Result = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventSent when historyEvent.EventSent is { } esent:
-                this.AddExternalizationOperation(operations, esent, esent.Input, value => esent.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, esent.Input, value => esent.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent when historyEvent.GenericEvent is { } ge:
-                this.AddExternalizationOperation(operations, ge, ge.Data, value => ge.Data = value, cancellation);
+                this.AddExternalizationOperation(operations, ge.Data, value => ge.Data = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew when historyEvent.ContinueAsNew is { } can:
-                this.AddExternalizationOperation(operations, can, can.Input, value => can.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, can.Input, value => can.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended when historyEvent.ExecutionSuspended is { } esus:
-                this.AddExternalizationOperation(operations, esus, esus.Input, value => esus.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, esus.Input, value => esus.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed when historyEvent.ExecutionResumed is { } eres:
-                this.AddExternalizationOperation(operations, eres, eres.Input, value => eres.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, eres.Input, value => eres.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionRewound when historyEvent.ExecutionRewound is { } erew:
-                this.AddExternalizationOperation(operations, erew, erew.Reason, value => erew.Reason = value, cancellation);
+                this.AddExternalizationOperation(operations, erew.Reason, value => erew.Reason = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled
                 when historyEvent.EntityOperationSignaled is { } eos:
-                this.AddExternalizationOperation(operations, eos, eos.Input, value => eos.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, eos.Input, value => eos.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled
                 when historyEvent.EntityOperationCalled is { } eoc:
-                this.AddExternalizationOperation(operations, eoc, eoc.Input, value => eoc.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, eoc.Input, value => eoc.Input = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted
                 when historyEvent.EntityOperationCompleted is { } ecomp:
-                this.AddExternalizationOperation(operations, ecomp, ecomp.Output, value => ecomp.Output = value, cancellation);
+                this.AddExternalizationOperation(operations, ecomp.Output, value => ecomp.Output = value, cancellation);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.HistoryState
                 when historyEvent.HistoryState?.OrchestrationState is { } state:
-                this.AddExternalizationOperation(operations, state, state.Input, value => state.Input = value, cancellation);
-                this.AddExternalizationOperation(operations, state, state.Output, value => state.Output = value, cancellation);
-                this.AddExternalizationOperation(operations, state, state.CustomStatus, value => state.CustomStatus = value, cancellation);
+                this.AddExternalizationOperation(operations, state.Input, value => state.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, state.Output, value => state.Output = value, cancellation);
+                this.AddExternalizationOperation(operations, state.CustomStatus, value => state.CustomStatus = value, cancellation);
                 break;
         }
     }
@@ -496,7 +510,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     async Task ExternalizeEntityBatchResultAsync(P.EntityBatchResult r, CancellationToken cancellation)
     {
         List<Func<Task>> operations = [];
-        this.AddExternalizationOperation(operations, r, r.EntityState, value => r.EntityState = value, cancellation);
+        this.AddExternalizationOperation(operations, r.EntityState, value => r.EntityState = value, cancellation);
 
         if (r.Results != null)
         {
@@ -504,7 +518,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             {
                 if (result.Success is { } success)
                 {
-                    this.AddExternalizationOperation(operations, success, success.Result, value => success.Result = value, cancellation);
+                    this.AddExternalizationOperation(operations, success.Result, value => success.Result = value, cancellation);
                 }
             }
         }
@@ -515,12 +529,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             {
                 if (action.SendSignal is { } sendSig)
                 {
-                    this.AddExternalizationOperation(operations, sendSig, sendSig.Input, value => sendSig.Input = value, cancellation);
+                    this.AddExternalizationOperation(operations, sendSig.Input, value => sendSig.Input = value, cancellation);
                 }
 
                 if (action.StartNewOrchestration is { } start)
                 {
-                    this.AddExternalizationOperation(operations, start, start.Input, value => start.Input = value, cancellation);
+                    this.AddExternalizationOperation(operations, start.Input, value => start.Input = value, cancellation);
                 }
             }
         }
@@ -531,13 +545,13 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     async Task ExternalizeEntityBatchRequestAsync(P.EntityBatchRequest r, CancellationToken cancellation)
     {
         List<Func<Task>> operations = [];
-        this.AddExternalizationOperation(operations, r, r.EntityState, value => r.EntityState = value, cancellation);
+        this.AddExternalizationOperation(operations, r.EntityState, value => r.EntityState = value, cancellation);
 
         if (r.Operations != null)
         {
             foreach (P.OperationRequest op in r.Operations)
             {
-                this.AddExternalizationOperation(operations, op, op.Input, value => op.Input = value, cancellation);
+                this.AddExternalizationOperation(operations, op.Input, value => op.Input = value, cancellation);
             }
         }
 

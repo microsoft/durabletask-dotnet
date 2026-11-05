@@ -949,31 +949,181 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         bool rewind)
     {
         // Arrange
+        TaskCompletionSource<bool> firstWaveStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseUploads = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int uploadsStarted = 0;
         P.OrchestrationState state = new() { Input = "input---", Output = "output--", CustomStatus = "status--" };
         P.HistoryEvent historyEvent = new() { HistoryState = new P.HistoryStateEvent { OrchestrationState = state } };
         P.OrchestratorResponse response = CreateResponseWithHistory(historyEvent, rewind);
         response.CustomStatus = "first---";
-        TrackingPayloadStore store = new(uploadAsync: (payload, _) =>
+        for (int i = 0; i < 7; i++)
         {
-            if (payload == "first---")
+            response.Actions.Insert(i, new P.OrchestratorAction
             {
-                state.Output = new string('x', 13);
-                state.CustomStatus = new string('y', 13);
+                ScheduleTask = new P.ScheduleTaskAction { Input = $"input--{i}" },
+            });
+        }
+
+        TrackingPayloadStore store = new(uploadAsync: async (payload, cancellationToken) =>
+        {
+            if (Interlocked.Increment(ref uploadsStarted) == 8)
+            {
+                firstWaveStarted.TrySetResult(true);
             }
 
-            return Task.FromResult($"test-blob://{payload}");
+            await releaseUploads.Task.WaitAsync(cancellationToken);
+            return $"test-blob://{payload}";
         });
         AzureBlobPayloadsSideCarInterceptor interceptor = new(store, new() { ThresholdBytes = 8, MaxPayloadBytes = 12 });
 
-        // Act
-        await ExternalizeAsync(interceptor, response, CancellationToken.None);
+        // Act: nested fields are queued behind the eight in-flight uploads.
+        Task externalizeTask = ExternalizeAsync(interceptor, response, CancellationToken.None);
+        try
+        {
+            await firstWaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            state.Output = new string('x', 13);
+            state.CustomStatus = new string('y', 13);
+        }
+        finally
+        {
+            releaseUploads.TrySetResult(true);
+            await externalizeTask.WaitAsync(TimeSpan.FromSeconds(10));
+        }
 
         // Assert
-        store.UploadCount.Should().Be(4);
+        store.UploadCount.Should().Be(11);
+        store.MaxObservedConcurrency.Should().Be(8);
         response.CustomStatus.Should().Be("test-blob://first---");
         state.Input.Should().Be("test-blob://input---");
         state.Output.Should().Be("test-blob://output--");
         state.CustomStatus.Should().Be("test-blob://status--");
+        for (int i = 0; i < 7; i++)
+        {
+            response.Actions[i].ScheduleTask.Input.Should().Be($"test-blob://input--{i}");
+        }
+    }
+
+    [Theory]
+    [InlineData("orchestration")]
+    [InlineData("carryover")]
+    [InlineData("rewind")]
+    [InlineData("entity-request")]
+    [InlineData("entity-result")]
+    public async Task ExternalizeRequestPayloadsAsync_IndependentFieldsDoNotAcquireMessageMonitors(string messageKind)
+    {
+        // Arrange
+        IMessage request;
+        object[] messages;
+        switch (messageKind)
+        {
+            case "orchestration":
+                P.OrchestratorResponse response = new()
+                {
+                    CustomStatus = "payload",
+                    Actions = { new P.OrchestratorAction { ScheduleTask = new P.ScheduleTaskAction { Input = "payload" } } },
+                };
+                request = response;
+                messages = [response, response.Actions[0].ScheduleTask];
+                break;
+            case "carryover":
+            case "rewind":
+                P.HistoryEvent historyEvent = CreateHistoryEventWithPayload(
+                    P.HistoryEvent.EventTypeOneofCase.HistoryState,
+                    "payload");
+                P.OrchestratorResponse nestedResponse = CreateResponseWithHistory(historyEvent, messageKind == "rewind");
+                request = nestedResponse;
+                messages = [nestedResponse, historyEvent.HistoryState.OrchestrationState];
+                break;
+            case "entity-request":
+                P.EntityBatchRequest batch = new()
+                {
+                    EntityState = "payload",
+                    Operations = { new P.OperationRequest { Input = "payload" } },
+                };
+                request = batch;
+                messages = [batch, batch.Operations[0]];
+                break;
+            case "entity-result":
+                P.EntityBatchResult result = new()
+                {
+                    EntityState = "payload",
+                    Results = { new P.OperationResult { Success = new P.OperationResultSuccess { Result = "payload" } } },
+                    Actions =
+                    {
+                        new P.OperationAction { SendSignal = new P.SendSignalAction { Input = "payload" } },
+                        new P.OperationAction { StartNewOrchestration = new P.StartNewOrchestrationAction { Input = "payload" } },
+                    },
+                };
+                request = result;
+                messages = [result, result.Results[0].Success, result.Actions[0].SendSignal, result.Actions[1].StartNewOrchestration];
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(messageKind));
+        }
+
+        TrackingPayloadStore store = new();
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        TaskCompletionSource<bool> messageLocksHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using ManualResetEventSlim releaseMessageLocks = new();
+        Task holdMessageLocks = Task.Factory.StartNew(
+            () =>
+            {
+                int acquired = 0;
+                try
+                {
+                    foreach (object message in messages)
+                    {
+                        Monitor.Enter(message);
+                        acquired++;
+                    }
+
+                    messageLocksHeld.SetResult(true);
+                    releaseMessageLocks.Wait();
+                }
+                finally
+                {
+                    for (int i = acquired - 1; i >= 0; i--)
+                    {
+                        Monitor.Exit(messages[i]);
+                    }
+                }
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        Task externalizeTask = Task.CompletedTask;
+
+        // Act: finish externalization while another thread still owns the message monitors.
+        try
+        {
+            await messageLocksHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            externalizeTask = Task.Run(() => ExternalizeAsync(interceptor, request, CancellationToken.None));
+            await externalizeTask.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            releaseMessageLocks.Set();
+            await holdMessageLocks.WaitAsync(TimeSpan.FromSeconds(10));
+            await externalizeTask.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        // Assert
+        IReadOnlyList<string> payloads = request switch
+        {
+            P.OrchestratorResponse r when messageKind == "orchestration" =>
+                [r.CustomStatus, r.Actions[0].ScheduleTask.Input],
+            P.OrchestratorResponse r => GetHistoryEventPayloads(
+                r.Actions[0].CompleteOrchestration?.CarryoverEvents[0] ?? r.Actions[0].RewindOrchestration.NewHistory[0]),
+            P.EntityBatchRequest r => [r.EntityState, r.Operations[0].Input],
+            P.EntityBatchResult r =>
+                [r.EntityState, r.Results[0].Success.Result, r.Actions[0].SendSignal.Input, r.Actions[1].StartNewOrchestration.Input],
+            _ => throw new InvalidOperationException(),
+        };
+        store.UploadCount.Should().Be(payloads.Count);
+        foreach (string token in payloads)
+        {
+            store.GetUploadedValue(token).Should().Be("payload");
+        }
     }
 
     [Fact]
@@ -1388,8 +1538,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         response.Should().Be(expected);
     }
 
-    [Fact]
-    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_CarryoverCancellationDrainsBoundedUploads()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_NestedHistoryCancellationDrainsBoundedUploads(
+        bool rewind)
     {
         // Arrange
         TaskCompletionSource<bool> firstWaveStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1424,8 +1577,17 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         {
             InstanceId = "instance-1",
             CompletionToken = "completion-token",
-            Actions = { new P.OrchestratorAction { CompleteOrchestration = complete } },
+            Actions =
+            {
+                rewind
+                    ? new P.OrchestratorAction
+                    {
+                        RewindOrchestration = new P.RewindOrchestrationAction { NewHistory = { complete.CarryoverEvents } },
+                    }
+                    : new P.OrchestratorAction { CompleteOrchestration = complete },
+            },
         };
+        P.OrchestratorAction originalAction = response.Actions[0];
 
         // Act
         Task externalizeTask = ExternalizeAsync(interceptor, response, cts.Token);
@@ -1447,7 +1609,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         store.MaxObservedConcurrency.Should().Be(8);
         finished.Should().Be(8);
         response.Actions.Should().ContainSingle();
-        response.Actions[0].CompleteOrchestration.Should().BeSameAs(complete);
+        response.Actions[0].Should().BeSameAs(originalAction);
         complete.OrchestrationStatus.Should().Be(P.OrchestrationStatus.ContinuedAsNew);
         response.CompletionToken.Should().Be("completion-token");
         for (int i = 0; i < complete.CarryoverEvents.Count; i++)
@@ -1457,24 +1619,35 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Theory]
-    [InlineData(403)]
-    [InlineData(500)]
-    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_CarryoverFailureDrainsBeforeConvertingOrRethrowing(
-        int statusCode)
+    [InlineData(403, false)]
+    [InlineData(403, true)]
+    [InlineData(500, false)]
+    [InlineData(500, true)]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_NestedHistoryFailureDrainsBeforeConvertingOrRethrowing(
+        int statusCode,
+        bool rewind)
     {
         // Arrange
         TaskCompletionSource<bool> failureStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource<bool> releaseUpload = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int finished = 0;
         TrackingPayloadStore store = new(uploadAsync: async (payload, cancellationToken) =>
         {
-            if (payload == "slow")
+            try
             {
-                await releaseUpload.Task.WaitAsync(cancellationToken);
-                return "test-blob://slow";
-            }
+                if (payload == "slow")
+                {
+                    await releaseUpload.Task.WaitAsync(cancellationToken);
+                    return "test-blob://slow";
+                }
 
-            failureStarted.SetResult(true);
-            throw new RequestFailedException(statusCode, "Simulated carryover upload failure.");
+                failureStarted.SetResult(true);
+                throw new RequestFailedException(statusCode, "Simulated carryover upload failure.");
+            }
+            finally
+            {
+                Interlocked.Increment(ref finished);
+            }
         });
         AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
         P.CompleteOrchestrationAction complete = new()
@@ -1491,8 +1664,17 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         {
             InstanceId = "instance-1",
             CompletionToken = "completion-token",
-            Actions = { new P.OrchestratorAction { CompleteOrchestration = complete } },
+            Actions =
+            {
+                rewind
+                    ? new P.OrchestratorAction
+                    {
+                        RewindOrchestration = new P.RewindOrchestrationAction { NewHistory = { complete.CarryoverEvents } },
+                    }
+                    : new P.OrchestratorAction { CompleteOrchestration = complete },
+            },
         };
+        P.OrchestratorAction originalAction = response.Actions[0];
 
         // Act
         Task externalizeTask = ExternalizeAsync(interceptor, response, CancellationToken.None);
@@ -1500,7 +1682,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         {
             await failureStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             externalizeTask.IsCompleted.Should().BeFalse();
-            response.Actions[0].CompleteOrchestration.Should().BeSameAs(complete);
+            response.Actions[0].Should().BeSameAs(originalAction);
         }
         finally
         {
@@ -1523,11 +1705,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             Func<Task> act = () => externalizeTask;
             (await act.Should().ThrowExactlyAsync<RequestFailedException>())
                 .WithMessage("Simulated carryover upload failure.");
-            response.Actions[0].CompleteOrchestration.Should().BeSameAs(complete);
+            response.Actions[0].Should().BeSameAs(originalAction);
             complete.OrchestrationStatus.Should().Be(P.OrchestrationStatus.ContinuedAsNew);
         }
 
         store.UploadCount.Should().Be(2, "failure must stop dispatch before the queued carryover event");
+        finished.Should().Be(2, "every started upload must finish before returning or converting the response");
         complete.CarryoverEvents[0].EventRaised.Input.Should().Be("test-blob://slow");
         complete.CarryoverEvents[2].EventRaised.Input.Should().Be("queued");
         response.CompletionToken.Should().Be("completion-token");

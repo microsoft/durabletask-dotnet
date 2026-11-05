@@ -186,7 +186,8 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             return value;
         }
 
-        return await this.ExternalizePayloadAsync(value!, size, cancellation);
+        this.ValidatePayloadSize(size, cancellation);
+        return await this.ExternalizePayloadAsync(value!, cancellation);
     }
 
     /// <summary>
@@ -206,26 +207,32 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     }
 
     /// <summary>
-    /// Externalizes a payload whose UTF-8 size has already been calculated.
+    /// Externalizes a payload whose UTF-8 size has already been validated.
     /// </summary>
     /// <param name="value">The value to externalize.</param>
-    /// <param name="size">The UTF-8 size of <paramref name="value"/>.</param>
     /// <param name="cancellation">Cancellation token.</param>
     /// <returns>A task that returns the externalized token.</returns>
-    private protected async Task<string> ExternalizePayloadAsync(
+    private protected Task<string> ExternalizePayloadAsync(
         string value,
-        int size,
         CancellationToken cancellation)
     {
-        // Enforce a hard cap to prevent unbounded payload sizes
+        return this.payloadStore.UploadAsync(value, cancellation);
+    }
+
+    /// <summary>
+    /// Validates an eligible payload's UTF-8 size before starting storage operations.
+    /// </summary>
+    /// <param name="size">The UTF-8 payload size.</param>
+    /// <param name="cancellation">Cancellation token, honored before size validation.</param>
+    private protected void ValidatePayloadSize(int size, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
         if (size > this.options.MaxPayloadBytes)
         {
             throw new PayloadStorageException(
                 $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
                 "Reduce the payload size or increase the max payload size limit.");
         }
-
-        return await this.payloadStore.UploadAsync(value, cancellation);
     }
 
     /// <summary>

@@ -29,6 +29,9 @@ sealed partial class GrpcDurableTaskWorker
 {
     class Processor
     {
+        // Leave room below the default 4 MiB gRPC receive limit.
+        const int MaxInlineOrchestratorResponseSizeInBytes = 4_089_446;
+
         static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
         readonly GrpcDurableTaskWorker worker;
@@ -695,6 +698,7 @@ sealed partial class GrpcDurableTaskWorker
                     pastEvents,
                     completionToken,
                     traceActivity);
+                await this.PrepareOrchestratorResponseAsync(rewindResponse, null, cancellationToken);
                 await this.ExecuteWithRetryAsync(
                     async () => await this.client.CompleteOrchestratorTaskAsync(rewindResponse, cancellationToken: cancellationToken),
                     nameof(this.client.CompleteOrchestratorTaskAsync),
@@ -929,19 +933,11 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
-            if (this.internalOptions.PrepareOrchestratorResponseAsync is { } prepareResponse)
-            {
-                await prepareResponse(response, cancellationToken);
-            }
-
-            var completeOrchestrationAction = response.Actions.FirstOrDefault(
-                a => a.CompleteOrchestration is not null);
+            P.OrchestratorAction? completeOrchestrationAction = await this.PrepareOrchestratorResponseAsync(
+                response, entityConversionState, cancellationToken);
 
             if (completeOrchestrationAction is not null)
             {
-                // Cover direct or newly terminal responses; converter cleanup already drains its obligations.
-                entityConversionState?.InsertMissingUnlocks(response, completeOrchestrationAction);
-
                 if (completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus == P.OrchestrationStatus.Failed)
                 {
                     traceActivity?.SetStatus(
@@ -1168,6 +1164,60 @@ sealed partial class GrpcDurableTaskWorker
                 async () => await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation),
                 nameof(this.client.CompleteEntityTaskAsync),
                 cancellation);
+        }
+
+        async Task<P.OrchestratorAction?> PrepareOrchestratorResponseAsync(
+            P.OrchestratorResponse response,
+            ProtoUtils.EntityConversionState? entityConversionState,
+            CancellationToken cancellationToken)
+        {
+            if (this.internalOptions.PrepareOrchestratorResponseAsync is { } prepareResponse)
+            {
+                await prepareResponse(response, cancellationToken);
+            }
+
+            P.OrchestratorAction? completion = response.Actions.FirstOrDefault(
+                action => action.CompleteOrchestration is not null);
+            if (completion is not null)
+            {
+                entityConversionState?.InsertMissingUnlocks(response, completion);
+            }
+
+            // Measure the full response after payload uploads and entity cleanup.
+            int responseSize = response.CalculateSize();
+            if (responseSize > MaxInlineOrchestratorResponseSizeInBytes)
+            {
+                // Keep releases that were already added or sent by the orchestrator.
+                P.OrchestratorAction[] unlocks = [.. response.Actions.Where(action =>
+                    action.SendEntityMessage?.EntityUnlockSent is not null
+                    || (action.SendEvent is { Name: "release", Instance: { } instance }
+                        && DTCore.Common.Entities.IsEntityInstance(instance.InstanceId))),];
+                response.Actions.Clear();
+                response.Actions.AddRange(unlocks);
+                response.CustomStatus = null;
+                completion = new P.OrchestratorAction
+                {
+                    Id = completion?.Id ?? 0,
+                    CompleteOrchestration = new P.CompleteOrchestrationAction
+                    {
+                        OrchestrationStatus = P.OrchestrationStatus.Failed,
+                        FailureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = typeof(InvalidOperationException).FullName,
+                            ErrorMessage = $"Orchestrator response size of {responseSize / 1024.0 / 1024.0:F2} MiB " +
+                                $"exceeds the {MaxInlineOrchestratorResponseSizeInBytes / 1024.0 / 1024.0:F2} MiB inline limit. " +
+                                "Enable large-payload externalization to Azure Blob Storage or reduce the response size.",
+                            IsNonRetriable = true,
+                        },
+                    },
+                };
+                response.Actions.Add(completion);
+
+                // A newly failed response must also release any locks still held.
+                entityConversionState?.InsertMissingUnlocks(response, completion);
+            }
+
+            return completion;
         }
 
         async Task ExecuteWithRetryAsync(

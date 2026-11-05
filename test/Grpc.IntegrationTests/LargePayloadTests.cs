@@ -800,6 +800,114 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
     }
 
+    [Theory]
+    [InlineData(1, 5 * 1024 * 1024)]
+    [InlineData(5, 1024 * 1024)]
+    public async Task OversizedInlineResponse_FailsWithoutSchedulingActivities(int activityCount, int payloadBytes)
+    {
+        TaskName orchestratorName = nameof(OversizedInlineResponse_FailsWithoutSchedulingActivities);
+        TaskName activityName = "MustNotRun";
+        int activitiesRun = 0;
+        await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
+            worker.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async context =>
+                {
+                    context.SetCustomStatus("pending");
+                    Task<int>[] activities = [.. Enumerable.Range(0, activityCount).Select(_ =>
+                        context.CallActivityAsync<int>(activityName, new string('A', payloadBytes)))];
+                    return (await Task.WhenAll(activities)).Sum();
+                })
+                .AddActivityFunc<string, int>(activityName, (_, input) =>
+                {
+                    Interlocked.Increment(ref activitiesRun);
+                    return Task.FromResult(input.Length);
+                })));
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TimeoutToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, timeout.Token);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Equal(typeof(InvalidOperationException).FullName, result.FailureDetails.ErrorType);
+        Assert.Contains("inline limit", result.FailureDetails.ErrorMessage);
+        Assert.Null(result.ReadCustomStatusAs<string>());
+        Assert.Equal(0, Volatile.Read(ref activitiesRun));
+    }
+
+    [Fact]
+    public async Task LegacyChunkSize_DoesNotLimitInlineResponses()
+    {
+        const int PayloadBytes = 2 * 1024 * 1024;
+        TaskName orchestratorName = nameof(LegacyChunkSize_DoesNotLimitInlineResponses);
+        TaskName activityName = "GetInputLength";
+        await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
+        {
+#pragma warning disable CS0618 // Check that the old setting has no effect.
+            worker.UseGrpc(options => options.CompleteOrchestrationWorkItemChunkSizeInBytes = 1024 * 1024);
+#pragma warning restore CS0618
+            worker.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, context =>
+                    context.CallActivityAsync<int>(activityName, new string('A', PayloadBytes)))
+                .AddActivityFunc<string, int>(activityName, (_, input) => Task.FromResult(input.Length)));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, result.RuntimeStatus);
+        Assert.Equal(PayloadBytes, result.ReadOutputAs<int>());
+    }
+
+    // Externalization lets a 5 MiB result pass through the worker and client.
+    [Fact]
+    public async Task LargeActivityOutput_ExceedsGrpcLimit_ExternalizesSuccessfully()
+    {
+        string largeOutput = new('L', 5 * 1024 * 1024);
+        TaskName orch = nameof(LargeActivityOutput_ExceedsGrpcLimit_ExternalizesSuccessfully);
+        TaskName activity = "ProduceLarge5MB";
+
+        InMemoryPayloadStore fakeStore = new();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, string>(
+                        orch,
+                        async (ctx, _) => await ctx.CallActivityAsync<string>(activity))
+                    .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(largeOutput)));
+
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
+        string? output = completed.ReadOutputAs<string>();
+        Assert.Equal(largeOutput, output);
+    }
+
     sealed class RetryCompletionInterceptor(bool retryActivity) : Interceptor
     {
         public List<string> Payloads { get; } = [];

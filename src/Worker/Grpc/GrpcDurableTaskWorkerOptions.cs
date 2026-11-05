@@ -13,6 +13,20 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
 {
     /// <summary>
+    /// The former minimum response chunk size, in bytes.
+    /// </summary>
+    [Obsolete("Automatic response chunking is no longer supported.")]
+    public const int MinCompleteOrchestrationWorkItemChunkSizeInBytes = 1 * 1024 * 1024; // 1 MB
+
+    /// <summary>
+    /// The former maximum response chunk size, in bytes.
+    /// </summary>
+    [Obsolete("Automatic response chunking is no longer supported.")]
+    public const int MaxCompleteOrchestrationWorkItemChunkSizeInBytes = 4_089_446; // 3.9 MB
+
+    int completeOrchestrationWorkItemChunkSizeInBytes = 4_089_446;
+
+    /// <summary>
     /// Gets or sets the address of the gRPC endpoint to connect to. Default is localhost:4001.
     /// </summary>
     public string? Address { get; set; }
@@ -57,6 +71,41 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// Capabilities are announced to the backend on connection.
     /// </summary>
     public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
+
+    /// <summary>
+    /// Gets or sets the former response chunk size. The default is 3.9 MB.
+    /// </summary>
+    /// <remarks>
+    /// This value is retained for compatibility and has no effect.
+    /// Orchestration responses are sent as a single message.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the value is less than 1 MB or greater than 3.9 MB.
+    /// </exception>
+    [Obsolete("Automatic response chunking is no longer supported. This setting has no effect.")]
+    public int CompleteOrchestrationWorkItemChunkSizeInBytes
+    {
+        get
+        {
+            return this.completeOrchestrationWorkItemChunkSizeInBytes;
+        }
+        set
+        {
+            if (value < MinCompleteOrchestrationWorkItemChunkSizeInBytes ||
+                value > MaxCompleteOrchestrationWorkItemChunkSizeInBytes)
+            {
+                string message = $"{nameof(CompleteOrchestrationWorkItemChunkSizeInBytes)} must be between " +
+                    $"{MinCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (1 MB) and " +
+                    $"{MaxCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (3.9 MB), inclusive.";
+                throw new ArgumentOutOfRangeException(
+                    nameof(this.CompleteOrchestrationWorkItemChunkSizeInBytes),
+                    value,
+                    message);
+            }
+
+            this.completeOrchestrationWorkItemChunkSizeInBytes = value;
+        }
+    }
 
     /// <summary>
     /// Gets the internal protocol options. These are used to control backend-dependent features.

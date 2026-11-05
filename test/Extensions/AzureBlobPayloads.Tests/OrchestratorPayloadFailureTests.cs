@@ -26,6 +26,7 @@ public sealed class OrchestratorPayloadFailureTests
         None,
         SizeLimit,
         ForbiddenUpload,
+        InlineSizeLimit,
     }
 
     [Theory]
@@ -61,6 +62,26 @@ public sealed class OrchestratorPayloadFailureTests
             useExternalizedPayloads: useExternalizedPayloads,
             explicitlyReleaseLocks: explicitlyReleaseLocks);
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public Task InlineSizeFailure_ReleasesEntitiesBeforeSendingFailedCompletion(
+        bool completeOrchestration,
+        bool streamHistory,
+        bool explicitlyReleaseLocks)
+        => RunLockedOrchestrationAsync(
+            completeOrchestration,
+            streamHistory,
+            PayloadFailure.InlineSizeLimit,
+            useExternalizedPayloads: false,
+            explicitlyReleaseLocks: explicitlyReleaseLocks);
+
     static async Task RunLockedOrchestrationAsync(
         bool completeOrchestration,
         bool streamHistory,
@@ -73,9 +94,12 @@ public sealed class OrchestratorPayloadFailureTests
         const string ExecutionId = "execution-1";
         const string OrchestratorName = "LockedPayloadOrchestrator";
         EntityInstanceId[] entities = [new("counter", "one"), new("counter", "two")];
-        string payload = failure == PayloadFailure.None
-            ? "completed"
-            : new('x', 1024 * 1024 + 1024);
+        string payload = failure switch
+        {
+            PayloadFailure.None => "completed",
+            PayloadFailure.InlineSizeLimit => new('x', 5 * 1024 * 1024),
+            _ => new('x', 1024 * 1024 + 1024),
+        };
         string serializedPayload = JsonSerializer.Serialize(payload);
         Channel<P.WorkItem> workItems = Channel.CreateUnbounded<P.WorkItem>();
         Channel<P.HistoryChunk> history = Channel.CreateUnbounded<P.HistoryChunk>();
@@ -288,9 +312,12 @@ public sealed class OrchestratorPayloadFailureTests
             {
                 Assert.Equal(P.OrchestrationStatus.Failed, completion.OrchestrationStatus);
                 Assert.Equal(
-                    failure == PayloadFailure.ForbiddenUpload
-                        ? typeof(RequestFailedException).FullName
-                        : typeof(PayloadStorageException).FullName,
+                    failure switch
+                    {
+                        PayloadFailure.ForbiddenUpload => typeof(RequestFailedException).FullName,
+                        PayloadFailure.InlineSizeLimit => typeof(InvalidOperationException).FullName,
+                        _ => typeof(PayloadStorageException).FullName,
+                    },
                     completion.FailureDetails.ErrorType);
                 Assert.True(completion.FailureDetails.IsNonRetriable);
                 Assert.Null(completion.Result);
@@ -309,6 +336,7 @@ public sealed class OrchestratorPayloadFailureTests
             Assert.Equal(InstanceId, response.InstanceId);
             Assert.Equal("resumed-token", response.CompletionToken);
             Assert.Null(response.CustomStatus);
+            Assert.True(response.CalculateSize() < 4 * 1024 * 1024);
             invoker.Verify(value => value.AsyncUnaryCall(
                 It.IsAny<Method<P.OrchestratorResponse, P.CompleteTaskResponse>>(),
                 It.IsAny<string>(),

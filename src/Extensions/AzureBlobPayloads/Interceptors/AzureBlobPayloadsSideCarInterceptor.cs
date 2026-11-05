@@ -747,10 +747,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// bounded concurrency, instead of either awaiting them one at a time (additive latency) or
     /// firing them all at once via an unbounded <see cref="Task.WhenAll(IEnumerable{Task})"/>
     /// (creating a per-message burst for messages with many payloads). Each delegate is
-    /// expected to assign its result to a distinct protobuf field/element, so the relative
+    /// expected to assign its result to a distinct captured protobuf field/element, so the relative
     /// completion order between operations does not affect correctness. Blob I/O is concurrent,
-    /// but assignments targeting fields on the same protobuf message are serialized rather than
-    /// relying on current generated setter implementation details.
+    /// and independent field assignments can overlap. Only the pre-existing completion and
+    /// state-hydration paths retain scoped assignment locks; this helper does not serialize
+    /// message mutations.
     /// </summary>
     /// <remarks>
     /// Cancellation is honored before starting any operation not already in flight. If any

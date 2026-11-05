@@ -154,6 +154,11 @@ public sealed class OrchestratorPayloadFailureTests
                 {
                     IAsyncDisposable locks = await context.Entities.LockEntitiesAsync(entities);
                     await using IAsyncDisposable? releasedLocks = explicitlyReleaseLocks ? locks : null;
+                    if (failure == PayloadFailure.SizeLimit)
+                    {
+                        context.SetCustomStatus(new string('s', 1024));
+                    }
+
                     if (!completeOrchestration)
                     {
                         await context.Entities.CallEntityAsync(entities[0], "set", payload);

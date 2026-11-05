@@ -24,7 +24,7 @@ await using var testHost = await DurableTaskTestHost.StartAsync(registry =>
     // Class-based
     registry.AddOrchestrator<MyOrchestrator>();
     registry.AddActivity<MyActivity>();
-
+    
     // Function-based
     registry.AddOrchestratorFunc("MyFunc", (ctx, input) => Task.FromResult("done"));
     registry.AddActivityFunc("MyActivity", (ctx, input) => Task.FromResult("result"));

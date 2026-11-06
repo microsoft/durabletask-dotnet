@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Avoid allocating outcome-observation continuations for already-successful gRPC client responses while preserving transport-failure tracking and channel recreation.
 - Validate all eligible externalized payload sizes before uploading any field of an orchestration response or entity batch, including nested carryover and rewind history. Deterministic size failures now precede hypothetical upload failures and cause no uploads or partial token substitutions ([#820](https://github.com/microsoft/durabletask-dotnet/issues/820)).
 
 ## v1.28.0

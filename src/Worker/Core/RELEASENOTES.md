@@ -1,1 +1,2 @@
 - Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
+- Release cancellation registrations after external-event waits complete so live token sources do not retain completed waits and their payloads.

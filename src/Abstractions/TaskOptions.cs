@@ -222,10 +222,35 @@ public record StartOrchestrationOptions
     public TaskVersion? Version { get; init; }
 
     /// <summary>
-    /// Gets the orchestration runtime statuses that should be considered for deduplication.
+    /// Gets the runtime statuses that prevent a new orchestration from being scheduled with an existing instance ID.
     /// </summary>
     /// <remarks>
-    /// For type-safe usage, use the WithDedupeStatuses extension method.
+    /// <para>
+    /// When an orchestration with the same <see cref="InstanceId"/> exists and its runtime status is in this list,
+    /// the scheduling request fails with an <c>OrchestrationAlreadyExistsException</c>. If no such instance exists,
+    /// the request can create a new orchestration.
+    /// </para>
+    /// <para>
+    /// Statuses omitted from this list allow reuse of the instance ID, subject to backend support and configuration.
+    /// Reusing an instance ID in a non-terminal state (Pending, Running, or Suspended) can terminate the existing
+    /// orchestration before creating its replacement. Include these statuses to prevent replacement of active instances.
+    /// </para>
+    /// <para>
+    /// The default value is <see langword="null"/>, which uses the default deduplication behavior of the backend
+    /// or client implementation. An empty list requests reuse for all statuses; it does not prevent duplicate starts.
+    /// </para>
+    /// <para>
+    /// Status names are case-insensitive strings: <c>Pending</c>, <c>Running</c>, <c>Suspended</c>, <c>Completed</c>,
+    /// <c>Failed</c>, <c>Terminated</c>, and <c>Canceled</c>. The <c>Canceled</c> status is retained for compatibility.
+    /// For type-safe configuration, use the <c>WithDedupeStatuses</c> extension method in the
+    /// <c>Microsoft.DurableTask.Client</c> namespace. The
+    /// <c>StartOrchestrationOptionsExtensions.ValidDedupeStatuses</c> field lists the supported statuses.
+    /// </para>
+    /// <para>
+    /// Do not include <c>Terminated</c> while omitting any of <c>Pending</c>, <c>Running</c>, or <c>Suspended</c>.
+    /// Clients that terminate active instances before replacement reject this combination with an
+    /// <see cref="ArgumentException"/>, because termination would make the replacement conflict with this list.
+    /// </para>
     /// </remarks>
     public IReadOnlyList<string>? DedupeStatuses { get; init; }
 }

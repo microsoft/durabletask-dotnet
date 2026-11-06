@@ -200,6 +200,50 @@ For runnable DTS emulator examples that demonstrate versioning, see the [WorkerV
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
+### Prevent duplicate orchestration starts
+
+Set `StartOrchestrationOptions.InstanceId` to a stable ID and use `DedupeStatuses` to control when an existing instance prevents another start with that ID. Deduplication is based on the instance ID and the existing instance's runtime status, not its input or orchestrator name.
+
+| `DedupeStatuses` value | Scheduling behavior |
+| --- | --- |
+| `null` (default) | Uses the backend or client implementation's default deduplication behavior. |
+| A nonempty list | Rejects the start with `OrchestrationAlreadyExistsException` if an instance with the same ID has a listed status. Statuses omitted from the list allow ID reuse, subject to backend support and configuration. |
+| An empty list | Requests reuse for all statuses, including active instances. This does **not** prevent duplicate starts. |
+
+If no instance with that ID exists, the request can create a new orchestration regardless of the configured statuses. Without an explicit instance ID, the client generates a new ID, so this setting does not deduplicate repeated calls.
+
+For a singleton that must not replace an active instance but can run again after completion, failure, or termination, use the type-safe `WithDedupeStatuses` extension:
+
+```csharp
+using DurableTask.Core.Exceptions;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
+
+StartOrchestrationOptions options = new StartOrchestrationOptions("singleton-workflow")
+    .WithDedupeStatuses(
+        OrchestrationRuntimeStatus.Pending,
+        OrchestrationRuntimeStatus.Running,
+        OrchestrationRuntimeStatus.Suspended);
+
+try
+{
+    string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
+        "SingletonWorkflow", options);
+}
+catch (OrchestrationAlreadyExistsException)
+{
+    // An active instance already owns this ID; leave it running.
+}
+```
+
+`client` is a configured `DurableTaskClient`, and `"SingletonWorkflow"` is the name of a registered orchestrator. Perform this scheduling from client code, not from inside an orchestrator.
+
+The supported status names are `Pending`, `Running`, `Suspended`, `Completed`, `Failed`, `Terminated`, and `Canceled` (retained for compatibility). You can also assign these case-insensitive strings directly to `DedupeStatuses`. To prevent reuse for every supported status, pass `StartOrchestrationOptionsExtensions.ValidDedupeStatuses.ToArray()` to `WithDedupeStatuses` (requires `using System.Linq;`). Deduplication only applies while the existing instance is retained; purging it removes that protection.
+
+**Replacement caution:** omitting `Pending`, `Running`, or `Suspended` can allow an active orchestration to be terminated before its replacement starts. Do not include `Terminated` while allowing any of those active statuses to be reused. Clients that terminate before replacement reject that combination with `ArgumentException`, because the terminated instance would immediately block the replacement.
+
+Backend and host support determine whether an explicit reuse policy is honored. In particular, Durable Functions behavior also depends on the Functions extension and storage provider versions; do not assume every deployment supports the same policy.
+
 ### Blob auto-purge infrastructure integration
 
 The optional service contract is maintained in

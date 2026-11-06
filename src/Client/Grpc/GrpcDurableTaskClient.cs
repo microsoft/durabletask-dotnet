@@ -532,25 +532,42 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
             RestartWithNewInstanceId = restartWithNewInstanceId,
         };
 
-        try
+        return await this.RestartInstanceCoreAsync(request, cancellation);
+    }
+
+    /// <inheritdoc/>
+    public override async Task<string> RestartAsync(
+        string instanceId,
+        RestartOrchestrationOptions options,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+        Check.NotNull(options);
+        if (string.IsNullOrWhiteSpace(options.NewInstanceId))
         {
-            P.RestartInstanceResponse result = await this.sidecarClient.RestartInstanceAsync(
-                request, cancellationToken: cancellation);
-            return result.InstanceId;
+            throw new ArgumentException("A nonblank target instance ID is required.", nameof(options));
         }
-        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+
+        Check.NotEntity(this.options.EnableEntitySupport, options.NewInstanceId);
+        P.RestartInstanceRequest request = new()
         {
-            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
-        }
-        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+            InstanceId = instanceId,
+            RestartWithNewInstanceId = true,
+            NewInstanceId = options.NewInstanceId,
+            Version = options.Version,
+        };
+
+        string result = await this.RestartInstanceCoreAsync(request, cancellation);
+        if (!string.Equals(result, options.NewInstanceId, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"An orchestration with the instanceId {instanceId} cannot be restarted.", e);
+            throw new NotSupportedException(
+                $"The backend returned restart instance ID '{result}' instead of the requested ID "
+                + $"'{options.NewInstanceId}'. It may not support explicit restart instance IDs. "
+                + "A legacy restart may already have occurred.");
         }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
-        {
-            throw new OperationCanceledException(
-                $"The {nameof(this.RestartAsync)} operation was canceled.", e, cancellation);
-        }
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -763,6 +780,30 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
         return new(address, ChannelCredentials.Insecure);
     }
 #endif
+
+    async Task<string> RestartInstanceCoreAsync(P.RestartInstanceRequest request, CancellationToken cancellation)
+    {
+        string instanceId = request.InstanceId;
+        try
+        {
+            P.RestartInstanceResponse result = await this.sidecarClient.RestartInstanceAsync(
+                request, cancellationToken: cancellation);
+            return result.InstanceId;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException($"An orchestration with the instanceId {instanceId} cannot be restarted.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.RestartAsync)} operation was canceled.", e, cancellation);
+        }
+    }
 
     async Task<PurgeResult> PurgeInstancesCoreAsync(
         P.PurgeInstancesRequest request, CancellationToken cancellation = default)

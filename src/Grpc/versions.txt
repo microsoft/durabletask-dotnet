@@ -1,4 +1,7 @@
 # The following files were downloaded from branch main at 2026-10-20 19:46:22 UTC
+# RestartInstanceRequest patch imported from local durabletask-protobuf commit
+# 962a493037e72b5e08f07a55eff0f121c1aaae80 (not yet published upstream).
+# Base download URLs below remain unchanged; refresh after that commit is published upstream.
 https://raw.githubusercontent.com/microsoft/durabletask-protobuf/20d2aadae358d8aa526190cbf78fb6c313b0b3db/protos/orchestrator_service.proto
 https://raw.githubusercontent.com/microsoft/durabletask-protobuf/20d2aadae358d8aa526190cbf78fb6c313b0b3db/protos/durable-task-scheduler/sandbox_service.proto
 https://raw.githubusercontent.com/microsoft/durabletask-protobuf/20d2aadae358d8aa526190cbf78fb6c313b0b3db/protos/durable-task-scheduler/large_payload_purge.proto

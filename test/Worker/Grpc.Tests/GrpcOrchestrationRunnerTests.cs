@@ -498,6 +498,69 @@ public class GrpcOrchestrationRunnerTests
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("original-instance", false)]
+    [InlineData("previous-clone", false)]
+    [InlineData(null, true)]
+    [InlineData("original-instance", true)]
+    [InlineData("previous-clone", true)]
+    public void SourceInstanceId_FlowsThroughPropertiesOnExecutionAndReplay(string? source, bool replay)
+    {
+        // Arrange
+        Protobuf.HistoryEvent started = new()
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new()
+            {
+                Name = "CloneOrchestration",
+                Input = "\"original-input\"",
+                OrchestrationInstance = new()
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest request = CreateOrchestratorRequest(replay ? [] : [started]);
+        if (replay)
+        {
+            request.PastEvents.Add(started);
+        }
+
+        if (source is not null)
+        {
+            request.Properties.Add("sourceInstanceId", Value.ForString(source));
+        }
+
+        string? actualSource = null;
+        bool? actualReplay = null;
+        string? actualInput = null;
+        ITaskOrchestrator orchestrator = FuncTaskOrchestrator.Create<string, string?>((context, _) =>
+        {
+            actualSource = context.SourceInstanceId;
+            actualReplay = context.IsReplaying;
+            actualInput = context.GetInput<string>();
+            return Task.FromResult(context.SourceInstanceId);
+        });
+
+        // Act
+        string encodedResponse = GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(request.ToByteArray()), orchestrator);
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(
+            Convert.FromBase64String(encodedResponse));
+
+        // Assert
+        actualSource.Should().Be(source);
+        actualReplay.Should().Be(replay);
+        actualInput.Should().Be("original-input");
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].CompleteOrchestration.OrchestrationStatus.Should().Be(Protobuf.OrchestrationStatus.Completed);
+        response.Actions[0].CompleteOrchestration.Result.Should().Be(
+            source is null ? null : $"\"{source}\"");
+    }
+
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)
     {
         var orchestratorRequest = new Protobuf.OrchestratorRequest()

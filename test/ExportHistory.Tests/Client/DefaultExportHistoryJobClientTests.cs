@@ -16,7 +16,7 @@ public class DefaultExportHistoryJobClientTests
 {
     readonly Mock<DurableTaskClient> durableTaskClient;
     readonly Mock<DurableEntityClient> entityClient;
-    readonly ILogger logger;
+    readonly TestLogger logger;
     readonly ExportHistoryStorageOptions storageOptions;
     readonly string jobId = "test-job-123";
     readonly DefaultExportHistoryJobClient client;
@@ -249,11 +249,95 @@ public class DefaultExportHistoryJobClientTests
     }
 
     [Fact]
-    public async Task DeleteAsync_ExecutesDeleteOperation()
+    public async Task DeleteAsync_WaitsForDeleteOperationBeforeCleaningUpLinkedOrchestration()
     {
         // Arrange
         string instanceId = "test-instance";
         string orchestratorInstanceId = ExportHistoryConstants.GetOrchestratorInstanceId(this.jobId);
+        EntityInstanceId entityId = new(nameof(ExportJob), this.jobId);
+        using CancellationTokenSource cancellation = new();
+        TaskCompletionSource<OrchestrationMetadata> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        this.durableTaskClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ExecuteExportJobOperationOrchestrator)),
+                It.IsAny<ExportJobOperationRequest>(),
+                cancellation.Token))
+            .ReturnsAsync(instanceId);
+
+        this.durableTaskClient
+            .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, cancellation.Token))
+            .Returns(completion.Task);
+
+        this.durableTaskClient
+            .Setup(c => c.TerminateInstanceAsync(orchestratorInstanceId, It.IsAny<TerminateInstanceOptions>(), cancellation.Token))
+            .Returns(Task.CompletedTask);
+
+        this.durableTaskClient
+            .Setup(c => c.WaitForInstanceCompletionAsync(orchestratorInstanceId, cancellation.Token))
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExportJobOrchestrator), orchestratorInstanceId)
+            {
+                RuntimeStatus = OrchestrationRuntimeStatus.Terminated,
+            });
+
+        this.durableTaskClient
+            .Setup(c => c.PurgeInstanceAsync(orchestratorInstanceId, cancellation.Token))
+            .ReturnsAsync(new PurgeResult(1));
+
+        // Act
+        Task deleteTask = this.client.DeleteAsync(cancellation.Token);
+
+        // Assert
+        deleteTask.IsCompleted.Should().BeFalse();
+        this.durableTaskClient.Verify(
+            c => c.WaitForInstanceCompletionAsync(instanceId, true, cancellation.Token),
+            Times.Once);
+        this.durableTaskClient.Verify(
+            c => c.TerminateInstanceAsync(orchestratorInstanceId, It.IsAny<TerminateInstanceOptions>(), cancellation.Token),
+            Times.Never);
+        this.durableTaskClient.Verify(
+            c => c.PurgeInstanceAsync(orchestratorInstanceId, cancellation.Token),
+            Times.Never);
+
+        // Act
+        completion.SetResult(new OrchestrationMetadata(nameof(ExecuteExportJobOperationOrchestrator), instanceId)
+        {
+            RuntimeStatus = OrchestrationRuntimeStatus.Completed,
+        });
+        await deleteTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Assert
+        this.durableTaskClient.Verify(
+            c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ExecuteExportJobOperationOrchestrator)),
+                It.Is<ExportJobOperationRequest>(r =>
+                    r.EntityId.Name == entityId.Name &&
+                    r.EntityId.Key == entityId.Key &&
+                    r.OperationName == nameof(ExportJob.Delete)),
+                cancellation.Token),
+            Times.Once);
+        this.durableTaskClient.Verify(
+            c => c.TerminateInstanceAsync(orchestratorInstanceId, It.IsAny<TerminateInstanceOptions>(), cancellation.Token),
+            Times.Once);
+        this.durableTaskClient.Verify(
+            c => c.WaitForInstanceCompletionAsync(orchestratorInstanceId, cancellation.Token),
+            Times.Once);
+        this.durableTaskClient.Verify(
+            c => c.PurgeInstanceAsync(orchestratorInstanceId, cancellation.Token),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData(OrchestrationRuntimeStatus.Failed, "Test error message")]
+    [InlineData(OrchestrationRuntimeStatus.Terminated, null)]
+    [InlineData(OrchestrationRuntimeStatus.Pending, null)]
+    [InlineData(OrchestrationRuntimeStatus.Running, null)]
+    [InlineData(OrchestrationRuntimeStatus.Suspended, null)]
+    public async Task DeleteAsync_WhenDeleteOperationDoesNotComplete_ThrowsInvalidOperationException(
+        OrchestrationRuntimeStatus runtimeStatus, string? errorMessage)
+    {
+        // Arrange
+        string instanceId = "test-instance";
 
         this.durableTaskClient
             .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
@@ -266,34 +350,96 @@ public class DefaultExportHistoryJobClientTests
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteExportJobOperationOrchestrator), instanceId)
             {
-                RuntimeStatus = OrchestrationRuntimeStatus.Completed,
+                RuntimeStatus = runtimeStatus,
+                FailureDetails = errorMessage is null ? null : new TaskFailureDetails("TestError", errorMessage, null, null, null),
             });
-
-        this.durableTaskClient
-            .Setup(c => c.TerminateInstanceAsync(orchestratorInstanceId, It.IsAny<TerminateInstanceOptions>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        this.durableTaskClient
-            .Setup(c => c.WaitForInstanceCompletionAsync(orchestratorInstanceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExportJobOrchestrator), orchestratorInstanceId)
-            {
-                RuntimeStatus = OrchestrationRuntimeStatus.Terminated,
-            });
-
-        this.durableTaskClient
-            .Setup(c => c.PurgeInstanceAsync(orchestratorInstanceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PurgeResult(1));
 
         // Act
-        await this.client.DeleteAsync();
+        Func<Task> act = () => this.client.DeleteAsync();
 
         // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"Failed to delete export job '{this.jobId}': {errorMessage ?? string.Empty}");
+        this.logger.Logs.Should().Contain(entry => entry.Level == LogLevel.Error);
         this.durableTaskClient.Verify(
-            c => c.ScheduleNewOrchestrationInstanceAsync(
+            c => c.TerminateInstanceAsync(It.IsAny<string>(), It.IsAny<TerminateInstanceOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        this.durableTaskClient.Verify(
+            c => c.PurgeInstanceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData(StatusCode.NotFound)]
+    [InlineData(StatusCode.Unavailable)]
+    public async Task DeleteAsync_WhenDeleteOperationWaitFails_PropagatesException(StatusCode statusCode)
+    {
+        // Arrange
+        string instanceId = "test-instance";
+        RpcException exception = new(new Status(statusCode, "Delete operation wait failed"));
+
+        this.durableTaskClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteExportJobOperationOrchestrator)),
                 It.IsAny<ExportJobOperationRequest>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instanceId);
+
+        this.durableTaskClient
+            .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(exception);
+
+        // Act
+        Func<Task> act = () => this.client.DeleteAsync();
+
+        // Assert
+        await act.Should().ThrowAsync<RpcException>().Where(ex => ex == exception);
+        this.logger.Logs.Should().Contain(entry => entry.Level == LogLevel.Error);
+        this.durableTaskClient.Verify(
+            c => c.TerminateInstanceAsync(It.IsAny<string>(), It.IsAny<TerminateInstanceOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        this.durableTaskClient.Verify(
+            c => c.PurgeInstanceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenDeleteOperationWaitIsCancelled_PropagatesCancellation()
+    {
+        // Arrange
+        string instanceId = "test-instance";
+        using CancellationTokenSource cancellation = new();
+        TaskCompletionSource<OrchestrationMetadata> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        this.durableTaskClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ExecuteExportJobOperationOrchestrator)),
+                It.IsAny<ExportJobOperationRequest>(),
+                cancellation.Token))
+            .ReturnsAsync(instanceId);
+
+        this.durableTaskClient
+            .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, cancellation.Token))
+            .Returns(() => completion.Task.WaitAsync(cancellation.Token));
+
+        // Act
+        Task deleteTask = this.client.DeleteAsync(cancellation.Token);
+        cancellation.Cancel();
+        Func<Task> act = () => deleteTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>()
+            .Where(ex => ex.CancellationToken == cancellation.Token);
+        this.logger.Logs.Should().NotContain(entry => entry.Level == LogLevel.Error);
+        this.durableTaskClient.Verify(
+            c => c.WaitForInstanceCompletionAsync(instanceId, true, cancellation.Token),
             Times.Once);
+        this.durableTaskClient.Verify(
+            c => c.TerminateInstanceAsync(It.IsAny<string>(), It.IsAny<TerminateInstanceOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        this.durableTaskClient.Verify(
+            c => c.PurgeInstanceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -326,8 +472,14 @@ public class DefaultExportHistoryJobClientTests
 
         // Assert - Should not throw
         this.durableTaskClient.Verify(
+            c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()),
+            Times.Once);
+        this.durableTaskClient.Verify(
             c => c.TerminateInstanceAsync(orchestratorInstanceId, It.IsAny<TerminateInstanceOptions>(), It.IsAny<CancellationToken>()),
             Times.Once);
+        this.durableTaskClient.Verify(
+            c => c.PurgeInstanceAsync(orchestratorInstanceId, It.IsAny<CancellationToken>()),
+            Times.Never);
+        this.logger.Logs.Should().NotContain(entry => entry.Level == LogLevel.Error);
     }
 }
-

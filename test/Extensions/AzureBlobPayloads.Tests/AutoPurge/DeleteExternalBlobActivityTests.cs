@@ -102,9 +102,8 @@ public class DeleteExternalBlobActivityTests
     [Fact]
     public async Task RunAsync_WhenDeleteThrowsPayloadStorageException_Retries()
     {
-        // Arrange - the payload lives in a storage account the configured credential cannot reach. That is
-        // recoverable after a configuration or credential change, so it is deferred rather than discarded.
-        StubPayloadStore store = new(new PayloadStorageException("cross-account delete requires identity auth"));
+        // Arrange - the payload requires a store configured for its original location.
+        StubPayloadStore store = new(new PayloadStorageException("payload location is outside the configured store"));
         TestLogger<DeleteExternalBlobActivity> logger = new();
         DeleteExternalBlobActivity activity = new(store, logger);
 
@@ -115,7 +114,7 @@ public class DeleteExternalBlobActivityTests
         // Assert - the cause is what separates this from the other retryable storage failures, which the
         // contract no longer distinguishes.
         outcome.Disposition.Should().Be(LargePayloadPurgeDisposition.Retry);
-        logger.Logs.Should().ContainSingle(l => l.Message.Contains("StorageAccountUnreachable"));
+        logger.Logs.Should().ContainSingle(l => l.Message.Contains("PayloadStoreUnavailable"));
     }
 
     [Fact]

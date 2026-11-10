@@ -8,7 +8,6 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
-using Google.Protobuf;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Tracing;
@@ -30,6 +29,9 @@ sealed partial class GrpcDurableTaskWorker
 {
     class Processor
     {
+        // Leave room below the default 4 MiB gRPC receive limit.
+        const int MaxInlineOrchestratorResponseSizeInBytes = 4_089_446;
+
         static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
         readonly GrpcDurableTaskWorker worker;
@@ -657,13 +659,12 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             IReadOnlyList<P.HistoryEvent> pastEvents = materializedPastEvents ?? request.PastEvents;
-            var executionStartedEvent =
-                request
-                    .NewEvents
-                    .Concat(pastEvents)
-                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
-                    .Select(e => e.ExecutionStarted)
-                    .FirstOrDefault();
+            bool hasTraceListeners = TraceHelper.HasListeners;
+            // Rewind validation needs the start event even without tracing. Ordinary work items
+            // skip this tracing-only lookup when no listener is registered.
+            P.ExecutionStartedEvent? executionStartedEvent = isInitialRewind || hasTraceListeners
+                ? FindExecutionStartedEvent(request, pastEvents)
+                : null;
 
             if (isInitialRewind)
             {
@@ -682,110 +683,63 @@ sealed partial class GrpcDurableTaskWorker
             // A rewind starts a new orchestration span instead of continuing the failed execution's stored span.
             P.OrchestrationTraceContext? orchestrationTraceContext =
                 isInitialRewind ? null : request.OrchestrationTraceContext;
-            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
-                executionStartedEvent,
-                orchestrationTraceContext);
+            Activity? traceActivity = hasTraceListeners
+                ? TraceHelper.StartTraceActivityForOrchestrationExecution(
+                    executionStartedEvent,
+                    orchestrationTraceContext)
+                : null;
 
             if (isInitialRewind)
             {
-                await this.CompleteOrchestratorTaskWithChunkingAsync(
-                    RewindOrchestrationHandler.CreateResponse(
-                        request,
-                        pastEvents,
-                        completionToken,
-                        traceActivity),
-                    this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
+                P.OrchestratorResponse rewindResponse = RewindOrchestrationHandler.CreateResponse(
+                    request,
+                    pastEvents,
+                    completionToken,
+                    traceActivity);
+                await this.PrepareOrchestratorResponseAsync(rewindResponse, null, cancellationToken);
+                await this.ExecuteWithRetryAsync(
+                    async () => await this.client.CompleteOrchestratorTaskAsync(rewindResponse, cancellationToken: cancellationToken),
+                    nameof(this.client.CompleteOrchestratorTaskAsync),
                     cancellationToken);
                 return;
             }
 
-            if (executionStartedEvent is not null)
+            try
             {
-                P.HistoryEvent? GetSuborchestrationInstanceCreatedEvent(int eventId)
+                if (hasTraceListeners && executionStartedEvent is not null)
                 {
-                    var subOrchestrationEvent =
-                        pastEvents
-                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)
-                            .FirstOrDefault(x => x.EventId == eventId);
-
-                    return subOrchestrationEvent;
+                    TraceHelper.EmitTraceActivitiesForNewEvents(
+                        request.InstanceId, executionStartedEvent.Name, pastEvents, request.NewEvents);
                 }
+            }
+            catch
+            {
+                // Correlation failures abandon the work item before normal trace cleanup is reached.
+                traceActivity?.Dispose();
+                throw;
+            }
 
-                P.HistoryEvent? GetTaskScheduledEvent(int eventId)
+            static P.ExecutionStartedEvent? FindExecutionStartedEvent(
+                P.OrchestratorRequest request,
+                IReadOnlyList<P.HistoryEvent> pastEvents)
+            {
+                foreach (P.HistoryEvent newEvent in request.NewEvents)
                 {
-                    var taskScheduledEvent =
-                        pastEvents
-                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled)
-                            .LastOrDefault(x => x.EventId == eventId);
-
-                    return taskScheduledEvent;
-                }
-
-                foreach (var newEvent in request.NewEvents)
-                {
-                    switch (newEvent.EventTypeCase)
+                    if (newEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
                     {
-                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
-                            {
-                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                    GetSuborchestrationInstanceCreatedEvent(
-                                        newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
-                                    request.InstanceId,
-                                    subOrchestrationInstanceCreatedEvent,
-                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
-                            {
-                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                    GetSuborchestrationInstanceCreatedEvent(
-                                        newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
-                                    request.InstanceId,
-                                    subOrchestrationInstanceCreatedEvent,
-                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated,
-                                    newEvent.SubOrchestrationInstanceFailed);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
-                            {
-                                P.HistoryEvent? taskScheduledEvent =
-                                    GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForTaskCompleted(
-                                    request.InstanceId,
-                                    taskScheduledEvent,
-                                    taskScheduledEvent?.TaskScheduled);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
-                            {
-                                P.HistoryEvent? taskScheduledEvent =
-                                    GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForTaskFailed(
-                                    request.InstanceId,
-                                    taskScheduledEvent,
-                                    taskScheduledEvent?.TaskScheduled,
-                                    newEvent.TaskFailed);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.TimerFired:
-                            TraceHelper.EmitTraceActivityForTimer(
-                                request.InstanceId,
-                                executionStartedEvent.Name,
-                                newEvent.Timestamp.ToDateTime(),
-                                newEvent.TimerFired);
-                            break;
+                        return newEvent.ExecutionStarted;
                     }
                 }
+
+                foreach (P.HistoryEvent pastEvent in pastEvents)
+                {
+                    if (pastEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                    {
+                        return pastEvent.ExecutionStarted;
+                    }
+                }
+
+                return null;
             }
 
             OrchestratorExecutionResult? result = null;
@@ -977,8 +931,8 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
-            var completeOrchestrationAction = response.Actions.FirstOrDefault(
-                a => a.CompleteOrchestration is not null);
+            P.OrchestratorAction? completeOrchestrationAction = await this.PrepareOrchestratorResponseAsync(
+                response, entityConversionState, cancellationToken);
 
             if (completeOrchestrationAction is not null)
             {
@@ -1005,9 +959,9 @@ sealed partial class GrpcDurableTaskWorker
                     GetActionsListForLogging(response.Actions));
             }
 
-            await this.CompleteOrchestratorTaskWithChunkingAsync(
-                response,
-                this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
+            await this.ExecuteWithRetryAsync(
+                async () => await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken),
+                nameof(this.client.CompleteOrchestratorTaskAsync),
                 cancellationToken);
         }
 
@@ -1210,165 +1164,58 @@ sealed partial class GrpcDurableTaskWorker
                 cancellation);
         }
 
-        /// <summary>
-        /// Completes an orchestration task with automatic chunking if the response exceeds the maximum size.
-        /// </summary>
-        /// <param name="response">The orchestrator response to send.</param>
-        /// <param name="maxChunkBytes">The maximum size in bytes for each chunk.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        async Task CompleteOrchestratorTaskWithChunkingAsync(
+        async Task<P.OrchestratorAction?> PrepareOrchestratorResponseAsync(
             P.OrchestratorResponse response,
-            int maxChunkBytes,
+            ProtoUtils.EntityConversionState? entityConversionState,
             CancellationToken cancellationToken)
         {
-            // Validate that no single action exceeds the maximum chunk size
-            static P.TaskFailureDetails? ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
+            if (this.internalOptions.PrepareOrchestratorResponseAsync is { } prepareResponse)
             {
-                foreach (P.OrchestratorAction action in actions)
-                {
-                    int actionSize = action.CalculateSize();
-                    if (actionSize > maxChunkBytes)
-                    {
-                        // TODO: large payload doc is not available yet on aka.ms, add doc link to below error message
-                        string errorMessage = $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
-                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB. " +
-                            "Enable large-payload externalization to Azure Blob Storage to support oversized actions.";
-                        return new P.TaskFailureDetails
-                        {
-                            ErrorType = typeof(InvalidOperationException).FullName,
-                            ErrorMessage = errorMessage,
-                            IsNonRetriable = true,
-                        };
-                    }
-                }
-
-                return null;
+                await prepareResponse(response, cancellationToken);
             }
 
-            P.TaskFailureDetails? validationFailure = this.worker.grpcOptions.Capabilities.Contains(P.WorkerCapability.LargePayloads)
-                ? null
-                : ValidateActionsSize(response.Actions, maxChunkBytes);
-            if (validationFailure != null)
+            P.OrchestratorAction? completion = response.Actions.FirstOrDefault(
+                action => action.CompleteOrchestration is not null);
+            if (completion is not null)
             {
-                // Complete the orchestration with a failed status and failure details
-                P.OrchestratorResponse failureResponse = new()
+                entityConversionState?.InsertMissingUnlocks(response, completion);
+            }
+
+            // Measure the full response after payload uploads and entity cleanup.
+            int responseSize = response.CalculateSize();
+            if (responseSize > MaxInlineOrchestratorResponseSizeInBytes)
+            {
+                // Keep releases that were already added or sent by the orchestrator.
+                P.OrchestratorAction[] unlocks = [.. response.Actions.Where(action =>
+                    action.SendEntityMessage?.EntityUnlockSent is not null
+                    || (action.SendEvent is { Name: "release", Instance: { } instance }
+                        && DTCore.Common.Entities.IsEntityInstance(instance.InstanceId))),];
+                response.Actions.Clear();
+                response.Actions.AddRange(unlocks);
+                response.CustomStatus = null;
+                completion = new P.OrchestratorAction
                 {
-                    InstanceId = response.InstanceId,
-                    CompletionToken = response.CompletionToken,
-                    OrchestrationTraceContext = response.OrchestrationTraceContext,
-                    Actions =
+                    Id = completion?.Id ?? 0,
+                    CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
-                        new P.OrchestratorAction
+                        OrchestrationStatus = P.OrchestrationStatus.Failed,
+                        FailureDetails = new P.TaskFailureDetails
                         {
-                            CompleteOrchestration = new P.CompleteOrchestrationAction
-                            {
-                                OrchestrationStatus = P.OrchestrationStatus.Failed,
-                                FailureDetails = validationFailure,
-                            },
+                            ErrorType = typeof(InvalidOperationException).FullName,
+                            ErrorMessage = $"Orchestrator response size of {responseSize / 1024.0 / 1024.0:F2} MiB " +
+                                $"exceeds the {MaxInlineOrchestratorResponseSizeInBytes / 1024.0 / 1024.0:F2} MiB inline limit. " +
+                                "Enable large-payload externalization to Azure Blob Storage or reduce the response size.",
+                            IsNonRetriable = true,
                         },
                     },
                 };
+                response.Actions.Add(completion);
 
-                await this.ExecuteWithRetryAsync(
-                    async () => await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken),
-                    nameof(this.client.CompleteOrchestratorTaskAsync),
-                    cancellationToken);
-                return;
+                // A newly failed response must also release any locks still held.
+                entityConversionState?.InsertMissingUnlocks(response, completion);
             }
 
-            // Helper to add an action to the current chunk if it fits
-            static bool TryAddAction(
-                Google.Protobuf.Collections.RepeatedField<P.OrchestratorAction> dest,
-                P.OrchestratorAction action,
-                ref int currentSize,
-                int maxChunkBytes)
-            {
-                int actionSize = action.CalculateSize();
-                if (currentSize + actionSize > maxChunkBytes && currentSize > 0)
-                {
-                    return false;
-                }
-
-                dest.Add(action);
-                currentSize += actionSize;
-                return true;
-            }
-
-            // Check if the entire response fits in one chunk
-            int totalSize = response.CalculateSize();
-            if (totalSize <= maxChunkBytes)
-            {
-                // Response fits in one chunk, send it directly (isPartial defaults to false)
-                await this.ExecuteWithRetryAsync(
-                    async () => await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken),
-                    nameof(this.client.CompleteOrchestratorTaskAsync),
-                    cancellationToken);
-                return;
-            }
-
-            // Response is too large, split into multiple chunks
-            int actionsCompletedSoFar = 0, chunkIndex = 0;
-            List<P.OrchestratorAction> allActions = response.Actions.ToList();
-            bool isPartial = true;
-            bool isChunkedMode = false;
-
-            while (isPartial)
-            {
-                P.OrchestratorResponse chunkedResponse = new()
-                {
-                    InstanceId = response.InstanceId,
-                    CustomStatus = response.CustomStatus,
-                    CompletionToken = response.CompletionToken,
-                    RequiresHistory = response.RequiresHistory,
-                    NumEventsProcessed = 0,
-                };
-
-                int chunkPayloadSize = 0;
-
-                // Fill the chunk with actions until we reach the size limit
-                while (actionsCompletedSoFar < allActions.Count &&
-                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
-                {
-                    actionsCompletedSoFar++;
-                }
-
-                // Determine if this is a partial chunk (more actions remaining)
-#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
-                isPartial = actionsCompletedSoFar < allActions.Count;
-                chunkedResponse.IsPartial = isPartial;
-
-                // Only activate chunked mode when we actually need multiple chunks.
-                // A single oversized action that fits in one chunk (via TryAddAction allowing
-                // the first item in an empty chunk) should be sent as non-chunked to avoid
-                // backend issues with ChunkIndex=0 + IsPartial=false.
-                if (isPartial)
-                {
-                    isChunkedMode = true;
-                }
-
-                if (isChunkedMode)
-                {
-                    chunkedResponse.ChunkIndex = chunkIndex;
-                }
-#pragma warning restore CS0612
-
-                if (chunkIndex == 0)
-                {
-                    // The first chunk preserves the original response's NumEventsProcessed value (null)
-                    // When this is set to null, backend by default handles all the messages in the workitem.
-                    // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
-                    chunkedResponse.NumEventsProcessed = null;
-                    chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
-                }
-
-                chunkIndex++;
-
-                // Send the chunk
-                await this.ExecuteWithRetryAsync(
-                    async () => await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken),
-                    nameof(this.client.CompleteOrchestratorTaskAsync),
-                    cancellationToken);
-            }
+            return completion;
         }
 
         async Task ExecuteWithRetryAsync(

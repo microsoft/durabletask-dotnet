@@ -392,6 +392,159 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
+    public async Task WaitForExternalEvent_PreCanceledToken_PreservesCancellationTokenAsync()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        using CancellationTokenSource source = new();
+        source.Cancel();
+
+        // Act
+        Task<string> wait = wrapper.WaitForExternalEvent<string>("Event", source.Token);
+
+        // Assert
+        wait.IsCanceled.Should().BeTrue();
+        TaskCanceledException exception = await Assert.ThrowsAsync<TaskCanceledException>(() => wait);
+        exception.CancellationToken.Should().Be(source.Token);
+        wrapper.CompleteExternalEvent("Event", "\"payload\"");
+        Task<string> nextWait = wrapper.WaitForExternalEvent<string>("Event");
+        nextWait.IsCompletedSuccessfully.Should().BeTrue();
+        (await nextWait).Should().Be("payload");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WaitForExternalEvent_BufferedEvent_CompletesSynchronouslyBeforeCancellationAsync(bool preCanceled)
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        using CancellationTokenSource source = new();
+        wrapper.CompleteExternalEvent("Event", "\"payload\"");
+        if (preCanceled)
+        {
+            source.Cancel();
+        }
+
+        // Act
+        Task<string> wait = wrapper.WaitForExternalEvent<string>("Event", source.Token);
+        source.Cancel();
+
+        // Assert
+        wait.IsCompletedSuccessfully.Should().BeTrue();
+        (await wait).Should().Be("payload");
+    }
+
+    [Fact]
+    public async Task CompleteExternalEvent_CancelableWait_PreservesSynchronousContinuationsAsync()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        using CancellationTokenSource source = new();
+        Task<string> wait = wrapper.WaitForExternalEvent<string>("Event", source.Token);
+        Task<string> canceledWait = wrapper.WaitForExternalEvent<string>("OtherEvent", source.Token);
+        bool continuationRan = false;
+        Task continuation = wait.ContinueWith(
+            _ =>
+            {
+                continuationRan = true;
+                source.Cancel();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        // Act
+        wrapper.CompleteExternalEvent("Event", "\"payload\"");
+
+        // Assert
+        continuationRan.Should().BeTrue();
+        canceledWait.IsCanceled.Should().BeTrue();
+        wait.IsCompletedSuccessfully.Should().BeTrue();
+        (await wait).Should().Be("payload");
+        await continuation;
+    }
+
+    [Fact]
+    public async Task CompleteExternalEvent_CancelableWaiters_PreservesLifoOrderAsync()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        using CancellationTokenSource liveSource = new();
+        using CancellationTokenSource canceledSource = new();
+        Task<string> oldest = wrapper.WaitForExternalEvent<string>("Event", liveSource.Token);
+        Task<string> canceled = wrapper.WaitForExternalEvent<string>("Event", canceledSource.Token);
+        Task<string> newest = wrapper.WaitForExternalEvent<string>("Event", liveSource.Token);
+        canceledSource.Cancel();
+
+        // Act
+        wrapper.CompleteExternalEvent("Event", "\"first\"");
+        wrapper.CompleteExternalEvent("Event", "\"second\"");
+        liveSource.Cancel();
+
+        // Assert
+        canceled.IsCanceled.Should().BeTrue();
+        (await newest).Should().Be("first");
+        (await oldest).Should().Be("second");
+    }
+
+    [Fact]
+    public async Task CompleteExternalEvent_CancellationRace_DeliversOrBuffersExactlyOnceAsync()
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            // Arrange
+            TrackingOrchestrationContext innerContext = new();
+            OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+            TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+            using CancellationTokenSource source = new();
+            using Barrier start = new(2);
+            Task<string> wait = wrapper.WaitForExternalEvent<string>("Event", source.Token);
+
+            // Act
+            Task cancellation = Task.Run(() =>
+            {
+                start.SignalAndWait();
+                source.Cancel();
+            });
+            Task completion = Task.Run(() =>
+            {
+                start.SignalAndWait();
+                wrapper.CompleteExternalEvent("Event", "\"payload\"");
+            });
+            await Task.WhenAll(cancellation, completion).WaitAsync(TimeSpan.FromSeconds(30));
+
+            // Assert
+            if (wait.IsCanceled)
+            {
+                TaskCanceledException exception = await Assert.ThrowsAsync<TaskCanceledException>(() => wait);
+                exception.CancellationToken.Should().Be(source.Token);
+                Task<string> bufferedWait = wrapper.WaitForExternalEvent<string>("Event");
+                bufferedWait.IsCompletedSuccessfully.Should().BeTrue();
+                (await bufferedWait).Should().Be("payload");
+            }
+            else
+            {
+                wait.IsCompletedSuccessfully.Should().BeTrue();
+                (await wait).Should().Be("payload");
+            }
+
+            Task<string> nextWait = wrapper.WaitForExternalEvent<string>("Event");
+            nextWait.IsCompleted.Should().BeFalse();
+            wrapper.CompleteExternalEvent("Event", "\"next\"");
+            (await nextWait).Should().Be("next");
+        }
+    }
+
+    [Fact]
     public void CompleteExternalEvent_CanceledWaiter_BuffersEventForNextWaiter()
     {
         // Arrange: reproduces the sequence from Azure/azure-functions-durable-extension#1676.

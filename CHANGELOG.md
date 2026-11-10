@@ -3,7 +3,19 @@
 ## Unreleased
 
 - Isolate incoming payload hydration failures to the failed delivery, preserving the shared work-item stream and unrelated in-flight work ([#825](https://github.com/microsoft/durabletask-dotnet/issues/825)).
+- Validate all eligible externalized payload sizes before uploading any field of an orchestration response or entity batch, including nested carryover and rewind history. Deterministic size failures now precede hypothetical upload failures and cause no uploads or partial token substitutions ([#820](https://github.com/microsoft/durabletask-dotnet/issues/820)).
+
+## v1.28.0
+
+- Keep externalized payload tokens stable across completion retries and release entity locks when payload storage permanently fails an orchestration.
+- Add the worker-owned `SetOrchestratorResponsePreparation` infrastructure API for response preparation before final worker entity cleanup and chunking.
+- Restrict Azure Blob payload downloads and deletion to the configured container and storage endpoint by default, with explicit account-wide access through `AllowAllContainersInConfiguredAccount` and additional identity-authenticated account endpoints through `AdditionalAccountUris`. Preserve v1/v2 token formats. Before changing the storage location, complete or explicitly migrate existing instances and clean up their payloads, or explicitly authorize the original location.
+- Preserve exact blob-name identity during payload reads and deletion, including literal leading and trailing slashes. Reject references whose decoded names change during URI normalization; complete affected instances or migrate those payloads and references before upgrading.
 - Externalize continue-as-new carryover event payloads using the configured UTF-8 size limits, preventing oversized completion responses ([#819](https://github.com/microsoft/durabletask-dotnet/issues/819)).
+- Support opt-in unary client deadlines for gRPC and Azure Managed clients ([#826](https://github.com/microsoft/durabletask-dotnet/pull/826)).
+- Fix continuous history export skipping out-of-order orchestration completions ([#830](https://github.com/microsoft/durabletask-dotnet/pull/830)).
+- Avoid repeated orchestration-history scans when reconstructing tracing context ([#788](https://github.com/microsoft/durabletask-dotnet/pull/788)).
+- Update SDK, sample, and test dependencies within their existing major versions. Keep `Azure.Storage.Blobs` at `12.27.0`, the newest version compatible with the existing Microsoft.Extensions package majors.
 
 ## v1.27.1
 - Propagate tags from entity-started orchestrations ([#812](https://github.com/microsoft/durabletask-dotnet/pull/812))

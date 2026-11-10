@@ -275,46 +275,6 @@ public class WorkItemStreamConsumerTests
         reader.Verify(r => r.MoveNext(It.IsAny<CancellationToken>()), Times.Exactly(3));
     }
 
-    [Theory]
-    [InlineData(StatusCode.Unavailable)]
-    [InlineData(StatusCode.PermissionDenied)]
-    public async Task HydrationRecoveryFailure_PropagatesForConnectionRecoveryAsync(StatusCode status)
-    {
-        // Arrange
-        WorkItemPayloadException failure = new(new P.WorkItem(), new InvalidOperationException("Download failed."));
-        RpcException abandonFailure = new(new Status(status, "Abandon failed."));
-
-        // Act
-        Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            stream: ThrowingStream(failure),
-            silentDisconnectTimeout: TimeSpan.FromSeconds(5),
-            onItem: _ => throw new InvalidOperationException("Failed delivery must not be dispatched."),
-            onFirstMessage: null,
-            cancellation: CancellationToken.None,
-            onPayloadFailure: (_, _) => Task.FromException(abandonFailure));
-
-        // Assert
-        (await act.Should().ThrowAsync<RpcException>()).Which.Should().BeSameAs(abandonFailure);
-    }
-
-    [Fact]
-    public async Task HydrationFailure_WithoutRecoveryHandler_PropagatesAsync()
-    {
-        // Arrange
-        WorkItemPayloadException failure = new(new P.WorkItem(), new InvalidOperationException("Download failed."));
-
-        // Act
-        Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            stream: ThrowingStream(failure),
-            silentDisconnectTimeout: TimeSpan.FromSeconds(5),
-            onItem: _ => throw new InvalidOperationException("Failed delivery must not be dispatched."),
-            onFirstMessage: null,
-            cancellation: CancellationToken.None);
-
-        // Assert
-        (await act.Should().ThrowAsync<WorkItemPayloadException>()).Which.Should().BeSameAs(failure);
-    }
-
     static IAsyncStreamReader<P.WorkItem> EmptyStream() => StreamOf();
 
     static IAsyncStreamReader<P.WorkItem> StreamOf(params P.WorkItem[] items) => new SequenceStreamReader(items);

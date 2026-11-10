@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -49,7 +50,10 @@ public class PayloadHydrationFailureTests
             {
                 foreach (bool ownershipLost in new[] { false, true })
                 {
-                    yield return [kind, storageStatus, ownershipLost];
+                    foreach (bool useAzureManaged in new[] { false, true })
+                    {
+                        yield return [kind, storageStatus, ownershipLost, useAzureManaged];
+                    }
                 }
             }
         }
@@ -58,7 +62,7 @@ public class PayloadHydrationFailureTests
     [Theory]
     [MemberData(nameof(HydrationFailures))]
     public async Task HydrationFailure_AbandonsOnlyFailedDeliveryAndKeepsStreamAsync(
-        P.WorkItem.RequestOneofCase kind, int storageStatus, bool ownershipLost)
+        P.WorkItem.RequestOneofCase kind, int storageStatus, bool ownershipLost, bool useAzureManaged)
     {
         // Arrange
         using CancellationTokenSource timeout = new(TestTimeout);
@@ -81,7 +85,7 @@ public class PayloadHydrationFailureTests
             }
 
             return input;
-        });
+        }, useAzureManaged);
         IHostedService worker = Assert.Single(provider.GetServices<IHostedService>());
         await worker.StartAsync(timeout.Token);
 
@@ -309,16 +313,28 @@ public class PayloadHydrationFailureTests
         return store;
     }
 
-    static ServiceProvider CreateWorker(ScriptedSidecar sidecar, PayloadStore store, Func<string, Task<string>>? runActivity = null)
+    static ServiceProvider CreateWorker(
+        ScriptedSidecar sidecar,
+        PayloadStore store,
+        Func<string, Task<string>>? runActivity = null,
+        bool useAzureManaged = false)
     {
         ServiceCollection services = new();
         services.AddLogging(logging => logging.ClearProviders());
         services.AddSingleton(store);
         services.AddDurableTaskWorker(builder =>
         {
-            builder.UseGrpc(options =>
+            if (useAzureManaged)
             {
-                options.Address = sidecar.Address;
+                builder.UseDurableTaskScheduler($"Endpoint={sidecar.Address};TaskHub=test;Authentication=None");
+            }
+            else
+            {
+                builder.UseGrpc(sidecar.Address);
+            }
+
+            builder.Services.Configure<GrpcDurableTaskWorkerOptions>(builder.Name, options =>
+            {
                 options.Internal.TransientRetryMaxAttempts = 1;
                 options.Internal.ReconnectBackoffBase = TimeSpan.Zero;
                 options.Internal.ReconnectBackoffCap = TimeSpan.Zero;

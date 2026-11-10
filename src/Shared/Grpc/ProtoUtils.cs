@@ -442,29 +442,6 @@ static class ProtoUtils
 
                     break;
                 case OrchestratorActionType.OrchestrationComplete:
-
-                    if (entityConversionState is not null)
-                    {
-                        // as a precaution, unlock any entities that were not unlocked for some reason, before
-                        // completing the orchestration.
-                        foreach ((string target, string criticalSectionId) in entityConversionState.ResetObligations())
-                        {
-                            response.Actions.Add(new P.OrchestratorAction
-                            {
-                                Id = action.Id,
-                                SendEntityMessage = new P.SendEntityMessageAction
-                                {
-                                    EntityUnlockSent = new P.EntityUnlockSentEvent
-                                    {
-                                        CriticalSectionId = criticalSectionId,
-                                        TargetInstanceId = target,
-                                        ParentInstanceId = entityConversionState.CurrentInstance?.InstanceId,
-                                    },
-                                },
-                            });
-                        }
-                    }
-
                     var completeAction = (OrchestrationCompleteOrchestratorAction)action;
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
@@ -491,6 +468,10 @@ static class ProtoUtils
             }
 
             response.Actions.Add(protoAction);
+            if (protoAction.CompleteOrchestration is not null)
+            {
+                entityConversionState?.InsertMissingUnlocks(response, protoAction);
+            }
         }
 
         return response;
@@ -1300,6 +1281,32 @@ static class ProtoUtils
             }
 
             this.unlockObligations?.Remove(target);
+        }
+
+        /// <summary>
+        /// Inserts any outstanding entity releases before a terminal completion.
+        /// </summary>
+        /// <param name="response">The response containing the completion.</param>
+        /// <param name="completionAction">The completion action already added to the response.</param>
+        public void InsertMissingUnlocks(P.OrchestratorResponse response, P.OrchestratorAction completionAction)
+        {
+            int index = response.Actions.IndexOf(completionAction);
+            foreach ((string target, string criticalSectionId) in this.ResetObligations())
+            {
+                response.Actions.Insert(index++, new P.OrchestratorAction
+                {
+                    Id = completionAction.Id,
+                    SendEntityMessage = new P.SendEntityMessageAction
+                    {
+                        EntityUnlockSent = new P.EntityUnlockSentEvent
+                        {
+                            CriticalSectionId = criticalSectionId,
+                            TargetInstanceId = target,
+                            ParentInstanceId = this.CurrentInstance?.InstanceId,
+                        },
+                    },
+                });
+            }
         }
 
         /// <summary>

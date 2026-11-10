@@ -108,7 +108,42 @@ public sealed class LargePayloadStorageOptions
     /// <summary>
     /// Gets or sets the blob container name to use for payloads. Defaults to "durabletask-payloads".
     /// </summary>
+    /// <remarks>
+    /// Uploads always use this container. Downloads and deletion are also restricted to this container
+    /// unless an account-wide scope is explicitly configured. Before changing locations, complete or
+    /// migrate existing instances and clean up their payloads, or explicitly authorize the original
+    /// location using <see cref="AllowAllContainersInConfiguredAccount"/> or <see cref="AdditionalAccountUris"/>.
+    /// </remarks>
     public string ContainerName { get; set; } = "durabletask-payloads";
+
+    /// <summary>
+    /// Gets or sets a value indicating whether payload downloads and deletion may access all containers
+    /// in the configured storage account. Defaults to false.
+    /// </summary>
+    /// <remarks>
+    /// This relaxes only the container restriction, not the scheme, host, port, or path-style account boundary.
+    /// Operations retain the configured identity, account key, or SAS and its existing Storage permissions.
+    /// A container-scoped SAS is not granted access to other containers by enabling this option.
+    /// The scope is captured when the payload store is constructed.
+    /// </remarks>
+    public bool AllowAllContainersInConfiguredAccount { get; set; }
+
+    /// <summary>
+    /// Gets the additional storage account endpoints whose containers may be accessed for payload downloads
+    /// and deletion. The default collection is empty.
+    /// </summary>
+    /// <remarks>
+    /// Each entry must be an absolute HTTPS account endpoint without a container, blob, user information,
+    /// query, or fragment. Scheme, host, effective port, and path-style account name must match exactly;
+    /// entries are not hostname-only permissions. All containers in each listed additional account are allowed.
+    /// This requires <see cref="AccountUri"/> and <see cref="Credential"/> authentication and reuses that
+    /// credential without falling back to connection-string authentication. Storage permissions still apply.
+    /// Entries equivalent to the configured account are rejected; use
+    /// <see cref="AllowAllContainersInConfiguredAccount"/> for that account. Equivalent additional entries
+    /// are deduplicated.
+    /// Endpoints are captured when the payload store is constructed; reconstruct the store to change them.
+    /// </remarks>
+    public IList<Uri> AdditionalAccountUris { get; } = new List<Uri>();
 
     /// <summary>
     /// Gets or sets a value indicating whether payloads should be gzip-compressed when stored.

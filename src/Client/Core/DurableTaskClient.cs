@@ -470,30 +470,38 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This operation does not copy execution history. A supporting backend makes the immediate source instance ID
-    /// available through <see cref="TaskOrchestrationContext.SourceInstanceId"/> on the restarted orchestration.
-    /// The version is selected using <see cref="RestartOrchestrationOptions.Version"/>, including backend-specific
+    /// This operation does not copy execution history. When the source and target IDs differ, a supporting backend
+    /// makes the immediate source instance ID available through <see cref="TaskOrchestrationContext.SourceInstanceId"/>
+    /// on the restarted orchestration.
+    /// The version is selected using <paramref name="version"/>, including backend-specific
     /// defaults when no override is provided.
     /// </para>
     /// <para>
-    /// This overload requires a backend that supports explicit restart IDs and version overrides. Older gRPC servers
-    /// may ignore these options and perform a legacy restart with a generated instance ID instead.
+    /// This overload requires a backend that supports cloning with explicit restart IDs and version overrides.
+    /// Older gRPC servers reject the separate clone request without performing a legacy restart.
     /// Upgrade the server before using this overload; a returned instance ID cannot verify whether a version override
     /// was honored.
     /// </para>
     /// </remarks>
-    /// <param name="instanceId">The ID of the source orchestration.</param>
-    /// <param name="options">The restart options, including the required, nonblank target instance ID.</param>
+    /// <param name="instanceId">The required, nonblank ID of the source orchestration.</param>
+    /// <param name="newInstanceId">The required, nonblank ID of the restarted orchestration.</param>
+    /// <param name="version">
+    /// The version override for the restarted orchestration. A <c>null</c> value uses the backend's restart default,
+    /// which need not be the original version. An empty string explicitly selects the unversioned orchestration.
+    /// </param>
     /// <param name="cancellation">Cancels enqueueing the request, not execution once enqueued.</param>
     /// <returns>The instance ID of the restarted orchestration.</returns>
     /// <exception cref="ArgumentException">The source was not found or an instance ID is invalid.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
-    /// <exception cref="NotSupportedException">The client or backend does not support these restart options.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="instanceId"/> is <c>null</c>.</exception>
+    /// <exception cref="OrchestrationAlreadyExistsException">The target instance ID conflicts with an existing instance.</exception>
+    /// <exception cref="InvalidOperationException">The backend rejected the operation or returned an unexpected instance ID.</exception>
+    /// <exception cref="NotSupportedException">The client or backend does not support explicit restart IDs and version overrides.</exception>
     public virtual Task<string> RestartAsync(
         string instanceId,
-        RestartOrchestrationOptions options,
-        CancellationToken cancellation = default)
-        => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart options.");
+        string newInstanceId,
+        string? version,
+        CancellationToken cancellation)
+        => throw new NotSupportedException($"{this.GetType()} does not support explicit restart IDs and version overrides.");
 
     /// <summary>
     /// Rewinds the specified orchestration instance by re-executing any failed Activities, and recursively rewinding

@@ -32,6 +32,7 @@ public abstract class TaskOrchestrationContext
     /// <remarks>
     /// This is distinct from <see cref="Parent"/> and is not inherited by sub-orchestrations.
     /// Cloning a clone identifies that clone as the immediate source, not its original ancestor.
+    /// The ID is an opaque string, even when it resembles a serialized timestamp.
     /// </remarks>
     public virtual string? SourceInstanceId =>
         this.Properties.TryGetValue("sourceInstanceId", out object? source) && source is string instanceId

@@ -533,25 +533,35 @@ message PurgeInstancesResponse {
     google.protobuf.BoolValue isComplete = 2;
 }
 
-// Restarts an orchestration from the beginning with its original name and input,
-// without copying its history.
 message RestartInstanceRequest {
     string instanceId = 1;
-
-    // When newInstanceId is absent, true generates a new instance ID and false
-    // restarts using instanceId.
     bool restartWithNewInstanceId = 2;
-
-    // An explicit target instance ID. When present, takes precedence over
-    // restartWithNewInstanceId.
-    google.protobuf.StringValue newInstanceId = 3;
-
-    // Overrides the restarted orchestration's version, including an empty string.
-    // When absent, preserves the server's default restart behavior.
-    google.protobuf.StringValue version = 4;
 }
 
 message RestartInstanceResponse {
+    string instanceId = 1;
+}
+
+// Restarts an orchestration from the beginning with the source's original name
+// and input, without copying its history. When source and target IDs differ, the
+// clone's source lineage identifies sourceInstanceId (the immediate source), not
+// an earlier ancestor. Sub-orchestrations must not inherit this source lineage.
+message CloneInstanceRequest {
+    // Required, nonblank ID of the source orchestration.
+    string sourceInstanceId = 1;
+
+    // Required, nonblank target ID; may equal sourceInstanceId.
+    // Target conflicts follow the backend's existing instance-ID conflict behavior.
+    string newInstanceId = 2;
+
+    // Overrides the cloned orchestration's version when present. An explicit
+    // empty string selects an unversioned orchestration; absence preserves the
+    // backend's default restart behavior.
+    google.protobuf.StringValue version = 3;
+}
+
+message CloneInstanceResponse {
+    // The requested target instance ID.
     string instanceId = 1;
 }
 
@@ -772,6 +782,14 @@ service TaskHubSidecarService {
 
     // Restarts an orchestration instance.
     rpc RestartInstance(RestartInstanceRequest) returns (RestartInstanceResponse);
+
+    // Clones an orchestration to an explicit target instance ID.
+    // Implementations must reject invalid requests and unsupported cloning or
+    // version semantics before scheduling or creating any orchestration.
+    // Options must not be ignored, and callers and servers must not fall back
+    // to RestartInstance. Servers without this RPC return UNIMPLEMENTED without
+    // invoking RestartInstance.
+    rpc CloneInstance(CloneInstanceRequest) returns (CloneInstanceResponse);
 
     // Waits for an orchestration instance to reach a running or completion state.
     rpc WaitForInstanceStart(GetInstanceRequest) returns (GetInstanceResponse);

@@ -1,7 +1,4 @@
-# The following files were downloaded from branch main at 2026-10-20 19:46:22 UTC
-# RestartInstanceRequest patch imported from local durabletask-protobuf commit
-# 962a493037e72b5e08f07a55eff0f121c1aaae80 (not yet published upstream).
-# Base download URLs below remain unchanged; refresh after that commit is published upstream.
-https://raw.githubusercontent.com/microsoft/durabletask-protobuf/20d2aadae358d8aa526190cbf78fb6c313b0b3db/protos/orchestrator_service.proto
-https://raw.githubusercontent.com/microsoft/durabletask-protobuf/20d2aadae358d8aa526190cbf78fb6c313b0b3db/protos/durable-task-scheduler/sandbox_service.proto
-https://raw.githubusercontent.com/microsoft/durabletask-protobuf/20d2aadae358d8aa526190cbf78fb6c313b0b3db/protos/durable-task-scheduler/large_payload_purge.proto
+# The following files were downloaded from branch vabachu/orchestration-clone-protocol at 2026-11-10 05:20:38 UTC
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/4fb1fb241603166f4283a5d61842f0ff55c5da84/protos/orchestrator_service.proto
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/4fb1fb241603166f4283a5d61842f0ff55c5da84/protos/durable-task-scheduler/sandbox_service.proto
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/4fb1fb241603166f4283a5d61842f0ff55c5da84/protos/durable-task-scheduler/large_payload_purge.proto

@@ -877,9 +877,7 @@ sealed partial class GrpcDurableTaskWorker
                             _ => null,
                         };
 
-                        Dictionary<string, object?> properties = request.Properties.ToDictionary(
-                            pair => pair.Key,
-                            pair => ProtoUtils.ConvertValueToObject(pair.Value));
+                        Dictionary<string, object?> properties = ProtoUtils.ConvertOrchestrationProperties(request.Properties);
                         TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, properties, parent);
                         TaskOrchestrationExecutor executor = new(
                             runtimeState,

@@ -123,11 +123,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
         }
 
         DateTimeOffset? startAt = options?.StartAt;
-        this.logger.SchedulingOrchestration(
-            request.InstanceId ?? string.Empty,
-            orchestratorName,
-            sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
-            startAt.GetValueOrDefault(DateTimeOffset.UtcNow));
+        if (this.logger.IsEnabled(LogLevel.Information))
+        {
+            this.logger.SchedulingOrchestration(
+                request.InstanceId ?? string.Empty,
+                orchestratorName,
+                sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
+                startAt.GetValueOrDefault(DateTimeOffset.UtcNow));
+        }
 
         if (startAt.HasValue)
         {
@@ -532,42 +535,69 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
             RestartWithNewInstanceId = restartWithNewInstanceId,
         };
 
-        return await this.RestartInstanceCoreAsync(request, cancellation);
+        P.RestartInstanceResponse result = await this.InvokeRestartRpcAsync(
+            instanceId,
+            () => this.sidecarClient.RestartInstanceAsync(request, cancellationToken: cancellation).ResponseAsync,
+            cancellation);
+        return result.InstanceId;
     }
 
     /// <inheritdoc/>
     public override async Task<string> RestartAsync(
         string instanceId,
-        RestartOrchestrationOptions options,
-        CancellationToken cancellation = default)
+        string newInstanceId,
+        string? version,
+        CancellationToken cancellation)
     {
         Check.NotNullOrEmpty(instanceId);
-        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
-        Check.NotNull(options);
-        if (string.IsNullOrWhiteSpace(options.NewInstanceId))
+        if (string.IsNullOrWhiteSpace(instanceId))
         {
-            throw new ArgumentException("A nonblank target instance ID is required.", nameof(options));
+            throw new ArgumentException("A nonblank source instance ID is required.", nameof(instanceId));
         }
 
-        Check.NotEntity(this.options.EnableEntitySupport, options.NewInstanceId);
-        P.RestartInstanceRequest request = new()
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+        if (string.IsNullOrWhiteSpace(newInstanceId))
         {
-            InstanceId = instanceId,
-            RestartWithNewInstanceId = true,
-            NewInstanceId = options.NewInstanceId,
-            Version = options.Version,
+            throw new ArgumentException("A nonblank target instance ID is required.", nameof(newInstanceId));
+        }
+
+        Check.NotEntity(this.options.EnableEntitySupport, newInstanceId);
+        P.CloneInstanceRequest request = new()
+        {
+            SourceInstanceId = instanceId,
+            NewInstanceId = newInstanceId,
+            Version = version,
         };
 
-        string result = await this.RestartInstanceCoreAsync(request, cancellation);
-        if (!string.Equals(result, options.NewInstanceId, StringComparison.Ordinal))
+        P.CloneInstanceResponse response;
+        try
         {
-            throw new NotSupportedException(
-                $"The backend returned restart instance ID '{result}' instead of the requested ID "
-                + $"'{options.NewInstanceId}'. It may not support explicit restart instance IDs. "
-                + "A legacy restart may already have occurred.");
+            response = await this.InvokeRestartRpcAsync(
+                instanceId,
+                () => this.sidecarClient.CloneInstanceAsync(request, cancellationToken: cancellation).ResponseAsync,
+                cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.AlreadyExists)
+        {
+            throw new OrchestrationAlreadyExistsException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.InvalidArgument)
+        {
+            throw new ArgumentException(e.Status.Detail, e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotSupportedException("The backend does not support orchestration cloning.", e);
         }
 
-        return result;
+        if (!string.Equals(response.InstanceId, newInstanceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"The backend returned clone instance ID '{response.InstanceId}' instead of the requested ID "
+                + $"'{newInstanceId}'.");
+        }
+
+        return response.InstanceId;
     }
 
     /// <inheritdoc/>
@@ -781,14 +811,12 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient, Internal.ILargePa
     }
 #endif
 
-    async Task<string> RestartInstanceCoreAsync(P.RestartInstanceRequest request, CancellationToken cancellation)
+    async Task<TResponse> InvokeRestartRpcAsync<TResponse>(
+        string instanceId, Func<Task<TResponse>> operation, CancellationToken cancellation)
     {
-        string instanceId = request.InstanceId;
         try
         {
-            P.RestartInstanceResponse result = await this.sidecarClient.RestartInstanceAsync(
-                request, cancellationToken: cancellation);
-            return result.InstanceId;
+            return await operation();
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
         {

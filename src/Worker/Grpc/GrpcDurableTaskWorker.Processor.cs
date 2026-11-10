@@ -536,97 +536,14 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     await handler();
                 }
-                catch (PayloadResolutionException ex) when (workItem is not null)
-                {
-                    await this.OnWorkItemPayloadFailureAsync(
-                        new WorkItemPayloadException(workItem, ex.InnerException!, ex.PermanentFailure), cancellation);
-                }
                 catch (OperationCanceledException)
                 {
                     // Shutting down - ignore
                 }
                 catch (Exception ex)
                 {
-                    string instanceId =
-                        workItem?.OrchestratorRequest?.InstanceId ??
-                        workItem?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
-                        workItem?.EntityRequest?.InstanceId ??
-                        workItem?.EntityRequestV2?.InstanceId ??
-                        string.Empty;
-                    this.Logger.UnexpectedError(ex, instanceId);
-
-                    if (workItem?.OrchestratorRequest != null)
-                    {
-                        this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
-                        await this.ExecuteWithRetryAsync(
-                            async () => await this.client.AbandonTaskOrchestratorWorkItemAsync(
-                                new P.AbandonOrchestrationTaskRequest
-                                {
-                                    CompletionToken = workItem.CompletionToken,
-                                },
-                                cancellationToken: cancellation),
-                            nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
-                            cancellation);
-                        this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
-                    }
-                    else if (workItem?.ActivityRequest != null)
-                    {
-                        this.Logger.AbandoningActivityWorkItem(
-                            instanceId,
-                            workItem.ActivityRequest.Name,
-                            workItem.ActivityRequest.TaskId,
-                            workItem.CompletionToken ?? string.Empty);
-                        await this.ExecuteWithRetryAsync(
-                            async () => await this.client.AbandonTaskActivityWorkItemAsync(
-                                new P.AbandonActivityTaskRequest
-                                {
-                                    CompletionToken = workItem.CompletionToken,
-                                },
-                                cancellationToken: cancellation),
-                            nameof(this.client.AbandonTaskActivityWorkItemAsync),
-                            cancellation);
-                        this.Logger.AbandonedActivityWorkItem(
-                           instanceId,
-                           workItem.ActivityRequest.Name,
-                           workItem.ActivityRequest.TaskId,
-                           workItem.CompletionToken ?? string.Empty);
-                    }
-                    else if (workItem?.EntityRequest != null)
-                    {
-                        this.Logger.AbandoningEntityWorkItem(
-                            workItem.EntityRequest.InstanceId,
-                            workItem.CompletionToken ?? string.Empty);
-                        await this.ExecuteWithRetryAsync(
-                            async () => await this.client.AbandonTaskEntityWorkItemAsync(
-                                new P.AbandonEntityTaskRequest
-                                {
-                                    CompletionToken = workItem.CompletionToken,
-                                },
-                                cancellationToken: cancellation),
-                            nameof(this.client.AbandonTaskEntityWorkItemAsync),
-                            cancellation);
-                        this.Logger.AbandonedEntityWorkItem(
-                            workItem.EntityRequest.InstanceId,
-                            workItem.CompletionToken ?? string.Empty);
-                    }
-                    else if (workItem?.EntityRequestV2 != null)
-                    {
-                        this.Logger.AbandoningEntityWorkItem(
-                            workItem.EntityRequestV2.InstanceId,
-                            workItem.CompletionToken ?? string.Empty);
-                        await this.ExecuteWithRetryAsync(
-                            async () => await this.client.AbandonTaskEntityWorkItemAsync(
-                                new P.AbandonEntityTaskRequest
-                                {
-                                    CompletionToken = workItem.CompletionToken,
-                                },
-                                cancellationToken: cancellation),
-                            nameof(this.client.AbandonTaskEntityWorkItemAsync),
-                            cancellation);
-                        this.Logger.AbandonedEntityWorkItem(
-                            workItem.EntityRequestV2.InstanceId,
-                            workItem.CompletionToken ?? string.Empty);
-                    }
+                    this.Logger.UnexpectedError(ex, GetWorkItemInstanceId(workItem));
+                    await this.AbandonWorkItemAsync(workItem, cancellation);
                 }
             });
         }
@@ -635,33 +552,9 @@ sealed partial class GrpcDurableTaskWorker
         {
             P.WorkItem workItem = exception.WorkItem;
             this.Logger.UnexpectedError(exception, GetWorkItemInstanceId(workItem));
-            if (exception.PermanentFailure is { } failure
-                && await this.TryCompletePayloadFailureAsync(workItem, failure, cancellation))
-            {
-                return;
-            }
-
             try
             {
-                await this.ExecuteWithRetryAsync(
-                    () => workItem.RequestCase switch
-                    {
-                        P.WorkItem.RequestOneofCase.OrchestratorRequest =>
-                            this.client.AbandonTaskOrchestratorWorkItemAsync(
-                                new P.AbandonOrchestrationTaskRequest { CompletionToken = workItem.CompletionToken },
-                                cancellationToken: cancellation).ResponseAsync,
-                        P.WorkItem.RequestOneofCase.ActivityRequest =>
-                            this.client.AbandonTaskActivityWorkItemAsync(
-                                new P.AbandonActivityTaskRequest { CompletionToken = workItem.CompletionToken },
-                                cancellationToken: cancellation).ResponseAsync,
-                        P.WorkItem.RequestOneofCase.EntityRequest or P.WorkItem.RequestOneofCase.EntityRequestV2 =>
-                            this.client.AbandonTaskEntityWorkItemAsync(
-                                new P.AbandonEntityTaskRequest { CompletionToken = workItem.CompletionToken },
-                                cancellationToken: cancellation).ResponseAsync,
-                        _ => throw new InvalidOperationException($"Cannot abandon unresolved {workItem.RequestCase}."),
-                    },
-                    "AbandonUnresolvedWorkItem",
-                    cancellation);
+                await this.AbandonWorkItemAsync(workItem, cancellation);
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
             {
@@ -670,179 +563,58 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        async Task<bool> TryCompletePayloadFailureAsync(
-            P.WorkItem workItem, P.TaskFailureDetails failure, CancellationToken cancellation)
+        async Task AbandonWorkItemAsync(P.WorkItem? workItem, CancellationToken cancellation)
         {
-            bool completing = false;
-            try
+            string instanceId = GetWorkItemInstanceId(workItem);
+            if (workItem?.OrchestratorRequest != null)
             {
-                if (workItem.ActivityRequest is { } activity)
-                {
-                    if (activity.OrchestrationInstance is not { InstanceId.Length: > 0 } instance)
-                    {
-                        throw new InvalidOperationException("The activity has no owning orchestration instance.");
-                    }
-
-                    completing = true;
-                    await this.ExecuteWithRetryAsync(
-                        async () => await this.client.CompleteActivityTaskAsync(
-                            new P.ActivityResponse
-                            {
-                                InstanceId = instance.InstanceId,
-                                TaskId = activity.TaskId,
-                                CompletionToken = workItem.CompletionToken,
-                                FailureDetails = failure,
-                            },
-                            cancellationToken: cancellation),
-                        nameof(this.client.CompleteActivityTaskAsync),
-                        cancellation);
-                    return true;
-                }
-
-                if (workItem.OrchestratorRequest is not { } request)
-                {
-                    // A missing entity state cannot be replaced without losing state or operation ownership.
-                    return false;
-                }
-
-                IReadOnlyList<P.HistoryEvent> pastEvents = request.PastEvents;
-                if (request.RequiresHistoryStreaming)
-                {
-                    using AsyncServerStreamingCall<P.HistoryChunk> history = this.client.StreamInstanceHistory(
-                        new P.StreamInstanceHistoryRequest
-                        {
-                            InstanceId = request.InstanceId,
-                            ExecutionId = request.ExecutionId,
-                            ForWorkItemProcessing = true,
-                        },
-                        cancellationToken: cancellation);
-                    if (history.ResponseStream is not IPayloadStreamReader<P.HistoryChunk> payloadReader)
-                    {
-                        throw new InvalidOperationException("Unresolved history is unavailable for payload failure recovery.");
-                    }
-
-                    List<P.HistoryEvent> events = [];
-                    await foreach (P.HistoryChunk chunk in payloadReader.Inner.ReadAllAsync(cancellation))
-                    {
-                        events.AddRange(chunk.Events);
-                    }
-
-                    pastEvents = events;
-                }
-
-                ProtoUtils.EntityConversionState entities = new(insertMissingEntityUnlocks: true);
-                entities.SetOrchestrationInstance(new DTCore.OrchestrationInstance
-                {
-                    InstanceId = request.InstanceId, ExecutionId = request.ExecutionId,
-                });
-                bool foundStart = false;
-                foreach (P.HistoryEvent historyEvent in pastEvents.Concat(request.NewEvents))
-                {
-                    if (historyEvent.ExecutionStarted is { } start)
-                    {
-                        if (foundStart || string.IsNullOrEmpty(request.InstanceId) || string.IsNullOrEmpty(request.ExecutionId)
-                            || start.OrchestrationInstance?.InstanceId != request.InstanceId
-                            || start.OrchestrationInstance.ExecutionId != request.ExecutionId)
-                        {
-                            throw new InvalidOperationException("History does not identify the delivered execution.");
-                        }
-
-                        foundStart = true;
-                    }
-                    else if (historyEvent.ExecutionCompleted is not null || historyEvent.ContinueAsNew is not null)
-                    {
-                        throw new InvalidOperationException("History already contains a terminal execution event.");
-                    }
-
-                    P.SendEntityMessageAction? entityMessage = null;
-                    if (historyEvent.EventSent is { } sent && DTCore.Common.Entities.IsEntityInstance(sent.InstanceId))
-                    {
-                        entityMessage = new();
-                        EntityConversions.DecodeEntityMessageAction(sent.Name, sent.Input, sent.InstanceId, entityMessage, out _);
-                    }
-
-                    if ((historyEvent.EntityLockRequested ?? entityMessage?.EntityLockRequested) is { } acquired)
-                    {
-                        if (string.IsNullOrEmpty(acquired.CriticalSectionId) || acquired.LockSet.Any(string.IsNullOrEmpty))
-                        {
-                            throw new InvalidOperationException("History contains incomplete entity lock metadata.");
-                        }
-
-                        entities.AddUnlockObligations(acquired);
-                    }
-                    else if ((historyEvent.EntityUnlockSent ?? entityMessage?.EntityUnlockSent) is { } released)
-                    {
-                        entities.RemoveUnlockObligation(released.TargetInstanceId);
-                    }
-                }
-
-                if (!foundStart)
-                {
-                    throw new InvalidOperationException("History has no execution start for payload failure recovery.");
-                }
-
-                P.OrchestratorResponse response = new()
-                {
-                    InstanceId = request.InstanceId,
-                    CompletionToken = workItem.CompletionToken,
-                    NumEventsProcessed = request.NewEvents.Count,
-                    OrchestrationTraceContext = request.OrchestrationTraceContext,
-                    Actions =
-                    {
-                        new P.OrchestratorAction
-                        {
-                            CompleteOrchestration = new P.CompleteOrchestrationAction
-                            {
-                                OrchestrationStatus = P.OrchestrationStatus.Failed,
-                                FailureDetails = failure,
-                            },
-                        },
-                    },
-                };
-                await this.PrepareOrchestratorResponseAsync(response, entities, cancellation);
-                if (!this.internalOptions.ConvertOrchestrationEntityEvents)
-                {
-                    foreach (P.OrchestratorAction action in response.Actions)
-                    {
-                        if (action.SendEntityMessage?.EntityUnlockSent is { } unlock)
-                        {
-                            if (EntityConversions.EncodeUnlockSent(
-                                new P.HistoryEvent { EntityUnlockSent = unlock }, entities.CurrentInstance) is not EventSentEvent sent)
-                            {
-                                throw new InvalidOperationException("Entity release has no target.");
-                            }
-
-                            action.SendEvent = new P.SendEventAction
-                            {
-                                Instance = new P.OrchestrationInstance { InstanceId = sent.InstanceId },
-                                Name = sent.Name, Data = sent.Input,
-                            };
-                        }
-                    }
-                }
-
-                if (response.CalculateSize() > MaxInlineOrchestratorResponseSizeInBytes)
-                {
-                    throw new InvalidOperationException("Payload failure response exceeds the inline gRPC limit.");
-                }
-
-                completing = true;
+                this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
                 await this.ExecuteWithRetryAsync(
-                    async () => await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellation),
-                    nameof(this.client.CompleteOrchestratorTaskAsync),
+                    async () => await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                        new P.AbandonOrchestrationTaskRequest
+                        {
+                            CompletionToken = workItem.CompletionToken,
+                        },
+                        cancellationToken: cancellation),
+                    nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
                     cancellation);
-                return true;
+                this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
             }
-            catch (RpcException ex) when (completing && ex.StatusCode == StatusCode.NotFound)
+            else if (workItem?.ActivityRequest != null)
             {
-                this.Logger.WorkItemOwnershipLost(workItem.RequestCase.ToString(), workItem.CompletionToken, ex);
-                return true;
+                this.Logger.AbandoningActivityWorkItem(
+                    instanceId,
+                    workItem.ActivityRequest.Name,
+                    workItem.ActivityRequest.TaskId,
+                    workItem.CompletionToken ?? string.Empty);
+                await this.ExecuteWithRetryAsync(
+                    async () => await this.client.AbandonTaskActivityWorkItemAsync(
+                        new P.AbandonActivityTaskRequest
+                        {
+                            CompletionToken = workItem.CompletionToken,
+                        },
+                        cancellationToken: cancellation),
+                    nameof(this.client.AbandonTaskActivityWorkItemAsync),
+                    cancellation);
+                this.Logger.AbandonedActivityWorkItem(
+                   instanceId,
+                   workItem.ActivityRequest.Name,
+                   workItem.ActivityRequest.TaskId,
+                   workItem.CompletionToken ?? string.Empty);
             }
-            catch (Exception ex) when (!completing && ex is InvalidOperationException or Newtonsoft.Json.JsonException)
+            else if (workItem?.EntityRequest != null || workItem?.EntityRequestV2 != null)
             {
-                // Do not terminally settle an execution when its routing/lock metadata cannot be reconstructed.
-                this.Logger.UnexpectedError(ex, GetWorkItemInstanceId(workItem));
-                return false;
+                this.Logger.AbandoningEntityWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
+                await this.ExecuteWithRetryAsync(
+                    async () => await this.client.AbandonTaskEntityWorkItemAsync(
+                        new P.AbandonEntityTaskRequest
+                        {
+                            CompletionToken = workItem.CompletionToken,
+                        },
+                        cancellationToken: cancellation),
+                    nameof(this.client.AbandonTaskEntityWorkItemAsync),
+                    cancellation);
+                this.Logger.AbandonedEntityWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
             }
         }
 

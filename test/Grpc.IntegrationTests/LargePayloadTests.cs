@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.IO;
 using System.Text.Json;
-using Azure;
 using FluentAssertions;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
@@ -13,7 +11,6 @@ using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
-using Moq;
 using Xunit.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -21,99 +18,6 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 
 public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
 {
-    [Theory]
-    [InlineData(0, "activity")]
-    [InlineData(403, "activity")]
-    [InlineData(404, "activity")]
-    [InlineData(0, "orchestration")]
-    [InlineData(403, "orchestration")]
-    [InlineData(404, "orchestration")]
-    [InlineData(404, "suborchestration")]
-    public async Task HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync(int storageStatus, string target)
-    {
-        // Arrange
-        const string Token = "blob:v1:missing";
-        TaskName orchestration = nameof(HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync);
-        TaskName activity = "HydrationActivity";
-        TaskName child = "HydrationChild";
-        TaskCompletionSource running = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        TaskCompletionSource downloadFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        Mock<PayloadStore> store = new();
-        store.Setup(s => s.IsKnownPayloadToken(It.IsAny<string>())).Returns((string value) => value == Token);
-        store.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Token);
-        store.Setup(s => s.DownloadAsync(Token, It.IsAny<CancellationToken>())).Returns(() =>
-        {
-            downloadFailed.TrySetResult();
-            Exception failure = storageStatus == 0
-                ? new IOException("Download failed.") : new RequestFailedException(storageStatus, "Download failed.");
-            return Task.FromException<string>(failure);
-        });
-        await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
-        {
-            worker.AddTasks(tasks => tasks
-                .AddOrchestratorFunc<string, string>(orchestration, (context, input) =>
-                    input == "bad-child"
-                        ? context.CallSubOrchestratorAsync<string>(child, new string('X', 1024))
-                        : context.CallActivityAsync<string>(activity, input == "bad" ? new string('X', 1024) : input))
-                .AddOrchestratorFunc<string, string>(child, (_, input) => Task.FromResult(input))
-                .AddActivityFunc<string, string>(activity, async (_, input) =>
-                {
-                    if (input == "running")
-                    {
-                        running.TrySetResult();
-                        await release.Task.WaitAsync(this.TimeoutToken);
-                    }
-
-                    return input;
-                }));
-            worker.UseExternalizedPayloads();
-            worker.Services.AddSingleton(store.Object);
-        }, clientConfigure: client => client.UseExternalizedPayloads(),
-        servicesConfigure: services => services.AddExternalizedPayloadStore(options =>
-        {
-            options.ThresholdBytes = 16;
-            options.ConnectionString = "UseDevelopmentStorage=true";
-        }));
-
-        try
-        {
-            // Act
-            string alreadyRunning = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "running");
-            await running.Task.WaitAsync(this.TimeoutToken);
-            string failed = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, target switch
-            {
-                "orchestration" => new string('X', 1024),
-                "suborchestration" => "bad-child",
-                _ => "bad",
-            });
-            await downloadFailed.Task.WaitAsync(this.TimeoutToken);
-            string following = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "following");
-            OrchestrationMetadata followingResult = await server.Client.WaitForInstanceCompletionAsync(
-                following, getInputsAndOutputs: true, this.TimeoutToken);
-            release.TrySetResult();
-            OrchestrationMetadata runningResult = await server.Client.WaitForInstanceCompletionAsync(
-                alreadyRunning, getInputsAndOutputs: true, this.TimeoutToken);
-
-            // Assert
-            Assert.Equal(OrchestrationRuntimeStatus.Completed, followingResult.RuntimeStatus);
-            Assert.Equal("following", followingResult.ReadOutputAs<string>());
-            Assert.Equal(OrchestrationRuntimeStatus.Completed, runningResult.RuntimeStatus);
-            Assert.Equal("running", runningResult.ReadOutputAs<string>());
-            Assert.Single(this.GetLogs(), log => log.EventId.Name == "EstablishedWorkItemConnection");
-            if (storageStatus == 404)
-            {
-                OrchestrationMetadata failure = await server.Client.WaitForInstanceCompletionAsync(
-                    failed, getInputsAndOutputs: false, this.TimeoutToken);
-                Assert.Equal(OrchestrationRuntimeStatus.Failed, failure.RuntimeStatus);
-            }
-        }
-        finally
-        {
-            release.TrySetResult();
-        }
-    }
-
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

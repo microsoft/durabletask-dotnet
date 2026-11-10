@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Isolate incoming payload download failures to their deliveries. Fail activity/orchestration deliveries with confirmed missing blobs while preserving entity releases and the shared stream; retry recoverable failures without disrupting unrelated work ([#825](https://github.com/microsoft/durabletask-dotnet/issues/825)).
+- Isolate incoming payload hydration failures to the failed delivery, preserving the shared work-item stream and unrelated in-flight work ([#825](https://github.com/microsoft/durabletask-dotnet/issues/825)).
 - Validate all eligible externalized payload sizes before uploading any field of an orchestration response or entity batch, including nested carryover and rewind history. Deterministic size failures now precede hypothetical upload failures and cause no uploads or partial token substitutions ([#820](https://github.com/microsoft/durabletask-dotnet/issues/820)).
 
 ## v1.28.0

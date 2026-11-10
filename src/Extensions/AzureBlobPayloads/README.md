@@ -170,6 +170,20 @@ orphan blobs: real I/O failures, cancellation during uploads, and uncertain
 backend submission can still leave unrecorded uploads. No catch-and-delete
 rollback is performed.
 
+## Incoming work-item hydration failures
+
+If downloading an incoming work item's payload fails, the worker abandons only
+that delivery's completion token and continues reading the same work-item stream.
+This includes missing blobs, authorization failures, and transient I/O errors.
+The failed delivery is not dispatched, even if some fields were already hydrated,
+and remains retryable; this does not introduce terminal poison-payload settlement.
+
+An abandonment response of `NotFound` means ownership was already lost and does
+not disconnect the stream. Other abandonment failures retain connection-level
+recovery after the worker's existing retry policy. Worker shutdown cancellation
+is unchanged. Unary responses and streamed history still propagate hydration
+errors to their existing callers.
+
 ## SDK and dashboard boundaries
 
 The client and worker gRPC interceptors resolve orchestration inputs, external

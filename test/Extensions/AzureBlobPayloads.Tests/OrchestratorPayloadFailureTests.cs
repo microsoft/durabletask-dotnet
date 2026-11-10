@@ -27,7 +27,6 @@ public sealed class OrchestratorPayloadFailureTests
         SizeLimit,
         ForbiddenUpload,
         InlineSizeLimit,
-        MissingDownload,
     }
 
     [Theory]
@@ -64,18 +63,6 @@ public sealed class OrchestratorPayloadFailureTests
             explicitlyReleaseLocks: explicitlyReleaseLocks);
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public Task MissingPayloadDownload_ReleasesEntitiesBeforeFailingAsync(bool streamHistory, bool historyPayload)
-        => RunLockedOrchestrationAsync(
-            completeOrchestration: true,
-            streamHistory,
-            PayloadFailure.MissingDownload,
-            historyPayload: historyPayload);
-
-    [Theory]
     [InlineData(false, false, false)]
     [InlineData(false, false, true)]
     [InlineData(false, true, false)]
@@ -100,8 +87,7 @@ public sealed class OrchestratorPayloadFailureTests
         bool streamHistory,
         PayloadFailure failure,
         bool useExternalizedPayloads = true,
-        bool explicitlyReleaseLocks = true,
-        bool historyPayload = false)
+        bool explicitlyReleaseLocks = true)
     {
         // Arrange
         const string InstanceId = "locked-payload-instance";
@@ -116,7 +102,7 @@ public sealed class OrchestratorPayloadFailureTests
         };
         string serializedPayload = JsonSerializer.Serialize(payload);
         Channel<P.WorkItem> workItems = Channel.CreateUnbounded<P.WorkItem>();
-        P.HistoryChunk? streamedHistory = null;
+        Channel<P.HistoryChunk> history = Channel.CreateUnbounded<P.HistoryChunk>();
         Channel<P.OrchestratorResponse> completions = Channel.CreateUnbounded<P.OrchestratorResponse>();
         Mock<CallInvoker> invoker = new(MockBehavior.Strict);
         invoker.Setup(value => value.AsyncUnaryCall(
@@ -141,18 +127,12 @@ public sealed class OrchestratorPayloadFailureTests
                 It.IsAny<string>(),
                 It.IsAny<CallOptions>(),
                 It.IsAny<P.StreamInstanceHistoryRequest>()))
-            .Returns(() =>
-            {
-                Channel<P.HistoryChunk> replay = Channel.CreateUnbounded<P.HistoryChunk>();
-                replay.Writer.TryWrite(Assert.IsType<P.HistoryChunk>(streamedHistory).Clone());
-                replay.Writer.Complete();
-                return new AsyncServerStreamingCall<P.HistoryChunk>(
-                    new ChannelStreamReader<P.HistoryChunk>(replay.Reader),
-                    Task.FromResult(new Metadata()),
-                    () => Status.DefaultSuccess,
-                    () => new Metadata(),
-                    () => { });
-            });
+            .Returns(() => new AsyncServerStreamingCall<P.HistoryChunk>(
+                new ChannelStreamReader<P.HistoryChunk>(history.Reader),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
         invoker.Setup(value => value.AsyncUnaryCall(
                 It.IsAny<Method<P.OrchestratorResponse, P.CompleteTaskResponse>>(),
                 It.IsAny<string>(),
@@ -162,10 +142,7 @@ public sealed class OrchestratorPayloadFailureTests
                 (_, _, _, response) => completions.Writer.TryWrite(response.Clone()))
             .Returns(() => CreateUnaryCall(new P.CompleteTaskResponse()));
         Mock<PayloadStore> store = new(MockBehavior.Strict);
-        store.Setup(value => value.IsKnownPayloadToken(It.IsAny<string>()))
-            .Returns((string value) => value == "blob:v1:missing");
-        store.Setup(value => value.DownloadAsync("blob:v1:missing", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new PayloadStorageException("Payload missing.", new RequestFailedException(404, "Blob not found.")));
+        store.Setup(value => value.IsKnownPayloadToken(It.IsAny<string>())).Returns(false);
         if (failure == PayloadFailure.ForbiddenUpload)
         {
             store.Setup(value => value.UploadAsync(serializedPayload, It.IsAny<CancellationToken>()))
@@ -303,24 +280,11 @@ public sealed class OrchestratorPayloadFailureTests
                     },
                 },
             };
-            if (failure == PayloadFailure.MissingDownload)
-            {
-                if (historyPayload)
-                {
-                    resumedRequest.PastEvents.Single(e => e.ExecutionStarted is not null).ExecutionStarted.Input = "blob:v1:missing";
-                }
-                else
-                {
-                    resumedRequest.NewEvents.Add(new P.HistoryEvent
-                    {
-                        EventRaised = new P.EventRaisedEvent { Name = "missing", Input = "blob:v1:missing" },
-                    });
-                }
-            }
-
             if (streamHistory)
             {
-                streamedHistory = new P.HistoryChunk { Events = { resumedRequest.PastEvents } };
+                await history.Writer.WriteAsync(
+                    new P.HistoryChunk { Events = { resumedRequest.PastEvents } }, timeout.Token);
+                history.Writer.Complete();
                 resumedRequest.PastEvents.Clear();
                 resumedRequest.RequiresHistoryStreaming = true;
             }
@@ -381,10 +345,6 @@ public sealed class OrchestratorPayloadFailureTests
             store.Verify(
                 value => value.UploadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
                 failure == PayloadFailure.ForbiddenUpload ? Times.Once() : Times.Never());
-            if (failure == PayloadFailure.MissingDownload)
-            {
-                store.Verify(value => value.DownloadAsync("blob:v1:missing", It.IsAny<CancellationToken>()), Times.Once);
-            }
         }
         finally
         {

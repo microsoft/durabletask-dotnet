@@ -222,6 +222,59 @@ public class WorkItemStreamConsumerTests
         result.Outcome.Should().Be(WorkItemStreamOutcome.Shutdown);
     }
 
+    [Fact]
+    public async Task HydrationFailure_RearmsTimerAndRecoversBeforeReadingNextItemAsync()
+    {
+        // Arrange
+        P.WorkItem failed = new()
+        {
+            CompletionToken = "failed-token",
+            OrchestratorRequest = new P.OrchestratorRequest
+            {
+                NewEvents = { new P.HistoryEvent { EventRaised = new P.EventRaisedEvent { Input = "partially resolved" } } },
+            },
+        };
+        WorkItemPayloadException failure = new(failed, new InvalidOperationException("Download failed."));
+        P.WorkItem healthy = new() { HealthPing = new P.HealthPing() };
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new(MockBehavior.Strict);
+        reader.SetupSequence(r => r.MoveNext(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure)
+            .ReturnsAsync(true)
+            .ReturnsAsync(false);
+        reader.SetupGet(r => r.Current).Returns(healthy);
+        List<string> events = new();
+        List<P.WorkItem> dispatched = new();
+
+        // Act
+        WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+            stream: reader.Object,
+            silentDisconnectTimeout: TimeSpan.FromSeconds(5),
+            onItem: item =>
+            {
+                events.Add("dispatch");
+                dispatched.Add(item);
+            },
+            onFirstMessage: () => events.Add("first"),
+            cancellation: CancellationToken.None,
+            onSilentDisconnectTimerArmed: () => events.Add("armed"),
+            onPayloadFailure: (exception, cancellation) =>
+            {
+                Assert.Same(failure, exception);
+                Assert.Same(failed, exception.WorkItem);
+                Assert.True(cancellation.CanBeCanceled);
+                events.Add("abandon");
+                return Task.CompletedTask;
+            });
+
+        // Assert
+        Assert.Equal(WorkItemStreamOutcome.GracefulDrain, result.Outcome);
+        Assert.True(result.FirstMessageObserved);
+        Assert.Equal(new[] { "armed", "armed", "first", "abandon", "armed", "dispatch" }, events);
+        Assert.Same(healthy, Assert.Single(dispatched));
+        reader.VerifyGet(r => r.Current, Times.Once);
+        reader.Verify(r => r.MoveNext(It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
     static IAsyncStreamReader<P.WorkItem> EmptyStream() => StreamOf();
 
     static IAsyncStreamReader<P.WorkItem> StreamOf(params P.WorkItem[] items) => new SequenceStreamReader(items);

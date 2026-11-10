@@ -5,10 +5,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using Azure;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Tracing;
@@ -48,6 +50,160 @@ public class GrpcDurableTaskWorkerTests
     static readonly MethodInfo OnRunOrchestratorAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("OnRunOrchestratorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    [Theory]
+    [CombinatorialData]
+    public async Task ProcessorExecuteAsync_HydrationFailure_SettlesOnlyFailedDeliveryAsync(
+        [CombinatorialValues(P.WorkItem.RequestOneofCase.ActivityRequest, P.WorkItem.RequestOneofCase.OrchestratorRequest,
+            P.WorkItem.RequestOneofCase.EntityRequest, P.WorkItem.RequestOneofCase.EntityRequestV2)] P.WorkItem.RequestOneofCase kind,
+        [CombinatorialValues(0, 403, 404)] int storageStatus,
+        [CombinatorialValues(StatusCode.OK, StatusCode.NotFound, StatusCode.Unavailable, StatusCode.PermissionDenied)] StatusCode settlementStatus)
+    {
+        // Arrange
+        const string PayloadToken = "blob:v1:bad";
+        P.WorkItem failed = new() { CompletionToken = "failed" };
+        switch (kind)
+        {
+            case P.WorkItem.RequestOneofCase.ActivityRequest:
+                failed.ActivityRequest = new P.ActivityRequest
+                {
+                    Input = PayloadToken, OrchestrationInstance = new P.OrchestrationInstance { InstanceId = "failed-instance" },
+                };
+                break;
+            case P.WorkItem.RequestOneofCase.OrchestratorRequest:
+                failed.OrchestratorRequest = new P.OrchestratorRequest
+                {
+                    InstanceId = "failed-instance", ExecutionId = "failed-execution",
+                    PastEvents = { new P.HistoryEvent { ExecutionStarted = new P.ExecutionStartedEvent
+                    {
+                        OrchestrationInstance = new P.OrchestrationInstance { InstanceId = "failed-instance", ExecutionId = "failed-execution" },
+                    } } },
+                    NewEvents = { new P.HistoryEvent { EventRaised = new P.EventRaisedEvent { Name = "input", Input = PayloadToken } } },
+                };
+                break;
+            case P.WorkItem.RequestOneofCase.EntityRequest:
+                failed.EntityRequest = new P.EntityBatchRequest { EntityState = PayloadToken };
+                break;
+            case P.WorkItem.RequestOneofCase.EntityRequestV2:
+                failed.EntityRequestV2 = new P.EntityRequest { EntityState = PayloadToken };
+                break;
+        }
+
+        if (failed.OrchestratorRequest is { } orchestration)
+        {
+            EventSentEvent acquire = Assert.IsType<EventSentEvent>(EntityConversions.EncodeLockRequested(
+                new P.HistoryEvent
+                {
+                    EntityLockRequested = new P.EntityLockRequestedEvent
+                    {
+                        CriticalSectionId = "00000000-0000-0000-0000-000000000001",
+                        LockSet = { "@counter@one" },
+                        ParentInstanceId = orchestration.InstanceId,
+                    },
+                },
+                new OrchestrationInstance { InstanceId = orchestration.InstanceId, ExecutionId = orchestration.ExecutionId }));
+            orchestration.PastEvents.Add(new P.HistoryEvent
+            {
+                EventSent = new P.EventSentEvent { InstanceId = acquire.InstanceId, Name = acquire.Name, Input = acquire.Input },
+            });
+        }
+
+        Queue<P.WorkItem> deliveries = new([failed, new P.WorkItem { HealthPing = new P.HealthPing() }]);
+        TaskCompletionSource pingDispatched = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        P.WorkItem current = null!;
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
+        reader.SetupGet(r => r.Current).Returns(() => current);
+        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>())).Returns(async (CancellationToken cancellation) =>
+        {
+            if (deliveries.TryDequeue(out P.WorkItem? item))
+            {
+                current = item;
+                return true;
+            }
+
+            pingDispatched.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellation);
+            return false;
+        });
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken(It.IsAny<string>())).Returns((string value) => value == PayloadToken);
+        Exception failure = storageStatus == 0 ? new IOException("Download failed.") : new RequestFailedException(storageStatus, "Download failed.");
+        store.Setup(s => s.DownloadAsync(PayloadToken, It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        bool terminal = storageStatus == 404 && kind is P.WorkItem.RequestOneofCase.ActivityRequest or P.WorkItem.RequestOneofCase.OrchestratorRequest;
+        string expectedOperation = terminal
+            ? kind == P.WorkItem.RequestOneofCase.ActivityRequest ? "CompleteActivityTask" : "CompleteOrchestratorTask"
+            : kind switch
+            {
+                P.WorkItem.RequestOneofCase.ActivityRequest => "AbandonTaskActivityWorkItem",
+                P.WorkItem.RequestOneofCase.OrchestratorRequest => "AbandonTaskOrchestratorWorkItem",
+                _ => "AbandonTaskEntityWorkItem",
+            };
+        List<object> settlements = [];
+        ScriptedWorkerCallInvoker invoker = new(
+            (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
+            (_, _) => CreateServerStreamingCall(reader.Object))
+        {
+            UnaryResponse = (operation, request) =>
+            {
+                Assert.Equal(expectedOperation, operation);
+                settlements.Add(request);
+                (string Token, object Reply) result = request switch
+                {
+                    P.AbandonActivityTaskRequest r => (r.CompletionToken, new P.AbandonActivityTaskResponse()),
+                    P.AbandonOrchestrationTaskRequest r => (r.CompletionToken, new P.AbandonOrchestrationTaskResponse()),
+                    P.AbandonEntityTaskRequest r => (r.CompletionToken, new P.AbandonEntityTaskResponse()),
+                    P.ActivityResponse r => (r.CompletionToken, new P.CompleteTaskResponse()),
+                    P.OrchestratorResponse r => (r.CompletionToken, new P.CompleteTaskResponse()),
+                    _ => throw new InvalidOperationException($"Unexpected request {request.GetType()}."),
+                };
+                Assert.Equal("failed", result.Token);
+                if (settlementStatus != StatusCode.OK)
+                {
+                    throw new RpcException(new Status(settlementStatus, "Settlement failed."));
+                }
+
+                return result.Reply;
+            },
+        };
+        GrpcDurableTaskWorkerOptions options = new();
+        options.Internal.TransientRetryMaxAttempts = 1;
+        options.Internal.ReconnectBackoffBase = options.Internal.ReconnectBackoffCap = TimeSpan.Zero;
+        object processor = CreateProcessor(CreateWorker(options), new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
+            invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions()))));
+        using CancellationTokenSource shutdown = new();
+
+        // Act
+        Task<ProcessorExitReason> processing = InvokeProcessorExecuteAsync(processor, shutdown.Token);
+        try
+        {
+            await pingDispatched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            shutdown.Cancel();
+            await processing;
+        }
+
+        // Assert
+        object settlement = Assert.Single(settlements);
+        if (settlement is P.ActivityResponse activityFailure)
+        {
+            Assert.True(activityFailure.FailureDetails.IsNonRetriable);
+        }
+        else if (settlement is P.OrchestratorResponse orchestrationFailure)
+        {
+            P.OrchestratorAction release = Assert.Single(orchestrationFailure.Actions, a => a.SendEvent is not null);
+            Assert.Equal("@counter@one", release.SendEvent.Instance.InstanceId);
+            Assert.Equal("release", release.SendEvent.Name);
+            P.CompleteOrchestrationAction action = Assert.Single(orchestrationFailure.Actions, a => a.CompleteOrchestration is not null).CompleteOrchestration;
+            Assert.Equal(P.OrchestrationStatus.Failed, action.OrchestrationStatus);
+            Assert.True(action.FailureDetails.IsNonRetriable);
+        }
+
+        Assert.Equal(settlementStatus is StatusCode.OK or StatusCode.NotFound ? 1 : 2, invoker.GetWorkItemsCallCount);
+        store.Verify(s => s.DownloadAsync(PayloadToken, It.IsAny<CancellationToken>()), Times.Once);
+
+    }
 
     [Fact]
     public async Task ExecuteAsync_ConnectFailureThreshold_RecreatesConfiguredChannel()
@@ -2199,6 +2355,8 @@ public class GrpcDurableTaskWorkerTests
 
         public int GetWorkItemsCallCount => Volatile.Read(ref this.getWorkItemsCallCount);
 
+        public Func<string, object, object>? UnaryResponse { get; init; }
+
         public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
         {
             throw new NotSupportedException();
@@ -2210,6 +2368,11 @@ public class GrpcDurableTaskWorkerTests
             {
                 AsyncUnaryCall<Empty> call = this.helloFactory(Interlocked.Increment(ref this.helloCallCount), options);
                 return (AsyncUnaryCall<TResponse>)(object)call;
+            }
+
+            if (this.UnaryResponse is { } respond)
+            {
+                return CreateUnaryCall(Task.FromResult((TResponse)respond(method.Name, request)));
             }
 
             throw new NotSupportedException($"Unexpected unary method {method.FullName}.");

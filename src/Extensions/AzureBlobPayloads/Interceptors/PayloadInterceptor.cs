@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text;
+using Azure;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
 using P = Microsoft.DurableTask.Protobuf;
@@ -148,14 +149,30 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             {
                 await this.ResolveResponsePayloadsAsync(msg, ct);
             }
-            catch (Exception ex) when (msg is P.WorkItem workItem
-                && workItem.RequestCase is P.WorkItem.RequestOneofCase.ActivityRequest
-                    or P.WorkItem.RequestOneofCase.OrchestratorRequest
-                    or P.WorkItem.RequestOneofCase.EntityRequest
-                    or P.WorkItem.RequestOneofCase.EntityRequestV2
-                && !ct.IsCancellationRequested)
+            catch (Exception ex) when (!ct.IsCancellationRequested
+                && (msg is P.WorkItem
+                {
+                    RequestCase: P.WorkItem.RequestOneofCase.ActivityRequest
+                        or P.WorkItem.RequestOneofCase.OrchestratorRequest
+                        or P.WorkItem.RequestOneofCase.EntityRequest
+                        or P.WorkItem.RequestOneofCase.EntityRequestV2,
+                }
+                    || (request is P.StreamInstanceHistoryRequest { ForWorkItemProcessing: true } && msg is P.HistoryChunk)))
             {
-                throw new WorkItemPayloadException(workItem, ex);
+                // Credential/configuration failures can recover. Only confirmed missing payloads are terminal.
+                bool missing = ex is RequestFailedException { Status: 404 }
+                    or PayloadStorageException { InnerException: RequestFailedException { Status: 404 } };
+                P.TaskFailureDetails? failure = missing
+                    ? new P.TaskFailureDetails
+                    {
+                        ErrorType = typeof(PayloadStorageException).FullName,
+                        ErrorMessage = "A required external payload could not be found. The work item cannot be executed.",
+                        IsNonRetriable = true,
+                    }
+                    : null;
+                throw msg is P.WorkItem workItem
+                    ? new WorkItemPayloadException(workItem, ex, failure)
+                    : new PayloadResolutionException(ex, failure);
             }
 
             return msg;
@@ -279,12 +296,14 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
     sealed class TransformingStreamReader<T>(
         IAsyncStreamReader<T> inner,
-        Func<T, CancellationToken, ValueTask<T>> transform) : IAsyncStreamReader<T>
+        Func<T, CancellationToken, ValueTask<T>> transform) : IAsyncStreamReader<T>, IPayloadStreamReader<T>
     {
         readonly IAsyncStreamReader<T> inner = inner;
         readonly Func<T, CancellationToken, ValueTask<T>> transform = transform;
 
         public T Current { get; private set; } = default!;
+
+        public IAsyncStreamReader<T> Inner => this.inner;
 
         public async Task<bool> MoveNext(CancellationToken cancellationToken)
         {

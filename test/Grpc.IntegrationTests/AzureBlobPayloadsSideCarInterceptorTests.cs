@@ -8,6 +8,7 @@ using FluentAssertions;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -44,32 +45,18 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     [InlineData("unary")]
     public async Task ResolvePayloads_WorkerDownloadsHaveIndependentBudgetsAsync(string responseKind)
     {
-        // Arrange: advance a local clock 119 seconds per successful download. The three
-        // fields of one HistoryState operation must not share a 120-second aggregate budget.
-        TimeSpan elapsed = TimeSpan.Zero;
-        TimeSpan expires = TimeSpan.MaxValue;
-        CancellationTokenSource? active = null;
-        List<CancellationTokenSource> deadlines = [];
+        // Arrange
+        FakeTimeProvider clock = new();
+        DateTimeOffset started = clock.GetUtcNow();
+        List<CancellationToken> downloads = [];
         TrackingPayloadStore store = new(downloadAsync: (token, cancellation) =>
         {
-            elapsed += TimeSpan.FromSeconds(119);
-            if (elapsed >= expires)
-            {
-                active!.Cancel();
-            }
-
+            downloads.Add(cancellation);
+            clock.Advance(TimeSpan.FromSeconds(119));
             cancellation.ThrowIfCancellationRequested();
             return Task.FromResult(token["test-blob://".Length..]);
         });
-        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
-        typeof(PayloadInterceptor<object, object>).GetProperty("DownloadTimeoutStartedForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(interceptor, (Action<CancellationTokenSource, TimeSpan>)((source, budget) =>
-            {
-                Assert.Equal(TimeSpan.FromSeconds(120), budget);
-                active = source;
-                expires = elapsed + budget;
-                deadlines.Add(source);
-            }));
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions()) { TimeProvider = clock };
         P.OrchestrationState state = new()
         {
             Input = "test-blob://input",
@@ -111,8 +98,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         }
 
         // Assert
-        Assert.Equal(TimeSpan.FromSeconds(357), elapsed);
-        Assert.Equal(responseKind is "work-item" or "worker-history" ? 3 : 0, deadlines.Distinct().Count());
+        Assert.Equal(TimeSpan.FromSeconds(357), clock.GetUtcNow() - started);
+        Assert.Equal(responseKind is "work-item" or "worker-history" ? 3 : 1, downloads.Distinct().Count());
         Assert.Equal("input", state.Input);
         Assert.Equal("output", state.Output);
         Assert.Equal("status", state.CustomStatus);

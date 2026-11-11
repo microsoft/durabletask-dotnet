@@ -19,6 +19,8 @@ using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -159,6 +161,8 @@ public class GrpcDurableTaskWorkerTests
         using CancellationTokenSource shutdown = new();
         TaskCompletionSource<CancellationToken> pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource nextRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeTimeProvider clock = new();
         P.WorkItem failed = new()
         {
             CompletionToken = "failed",
@@ -176,6 +180,7 @@ public class GrpcDurableTaskWorkerTests
                 return true;
             }
 
+            nextRead.TrySetResult();
             await Task.Delay(Timeout.Infinite, cancellation);
             return false;
         });
@@ -209,7 +214,10 @@ public class GrpcDurableTaskWorkerTests
         GrpcDurableTaskWorkerOptions grpcOptions = new();
         grpcOptions.Internal.ChannelRecreateFailureThreshold = 1;
         grpcOptions.Internal.SilentDisconnectTimeout = resume ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(30);
-        object processor = CreateProcessor(CreateWorker(grpcOptions), new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
+        using ServiceProvider services = new ServiceCollection().AddSingleton<TimeProvider>(clock).BuildServiceProvider();
+        object processor = CreateProcessor(
+            CreateWorker(grpcOptions, new(), NullLoggerFactory.Instance, Mock.Of<IDurableTaskFactory>(), services),
+            new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
             invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions()))));
 
         // Act
@@ -219,11 +227,13 @@ public class GrpcDurableTaskWorkerTests
             CancellationToken recoveryCancellation = await pending.Task.WaitAsync(TimeSpan.FromSeconds(5));
             if (resume)
             {
-                await Task.Delay(grpcOptions.Internal.SilentDisconnectTimeout * 2);
+                clock.Advance(grpcOptions.Internal.SilentDisconnectTimeout * 2);
                 Assert.False(readCancellation.IsCancellationRequested);
                 Assert.False(recoveryCancellation.IsCancellationRequested);
                 Assert.False(processing.IsCompleted);
                 release.TrySetResult();
+                await nextRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                clock.Advance(grpcOptions.Internal.SilentDisconnectTimeout);
             }
             else
             {
@@ -254,11 +264,14 @@ public class GrpcDurableTaskWorkerTests
         }
     }
 
-    [Fact]
-    public async Task ConsumeAsync_LateMessage_DoesNotTimeOutHealthyHydrationAsync()
+    [Theory]
+    [InlineData(119)]
+    [InlineData(120)]
+    public async Task ConsumeAsync_LateMessage_DoesNotTimeOutHealthyHydrationAsync(int receiptSeconds)
     {
         // Arrange
-        TimeSpan readTimeout = TimeSpan.FromMilliseconds(500);
+        FakeTimeProvider clock = new();
+        TimeSpan readTimeout = TimeSpan.FromSeconds(120);
         TaskCompletionSource downloading = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         P.WorkItem item = new() { ActivityRequest = new P.ActivityRequest { Input = "payload-token" } };
@@ -266,15 +279,17 @@ public class GrpcDurableTaskWorkerTests
         Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
         reader.SetupGet(r => r.Current).Returns(item);
         reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>()))
-            .Returns(async (CancellationToken cancellation) =>
+            .Returns((CancellationToken cancellation) =>
             {
                 if (++reads != 1)
                 {
-                    return false;
+                    return Task.FromResult(false);
                 }
 
-                await Task.Delay(readTimeout / 2, cancellation);
-                return true;
+                // A successful read can win even when its deadline fires before its continuation runs.
+                clock.Advance(TimeSpan.FromSeconds(receiptSeconds));
+                Assert.Equal(receiptSeconds == 120, cancellation.IsCancellationRequested);
+                return Task.FromResult(true);
             });
         Mock<PayloadStore> store = new();
         store.Setup(s => s.IsKnownPayloadToken("payload-token")).Returns(true);
@@ -297,11 +312,11 @@ public class GrpcDurableTaskWorkerTests
 
         // Act
         Task<WorkItemStreamResult> consume = WorkItemStreamConsumer.ConsumeAsync(
-            call.ResponseStream, readTimeout, received.Add, () => observations++, shutdown.Token);
+            call.ResponseStream, readTimeout, received.Add, () => observations++, shutdown.Token, timeProvider: clock);
         try
         {
             await downloading.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(readTimeout);
+            clock.Advance(TimeSpan.FromSeconds(2));
             Assert.False(consume.IsCompleted);
             Assert.Equal(1, observations);
             release.TrySetResult();
@@ -324,6 +339,7 @@ public class GrpcDurableTaskWorkerTests
     public async Task ProcessorExecuteAsync_DownloadTimeout_DrainsThenAbandonsOnSameStreamAsync()
     {
         // Arrange
+        FakeTimeProvider clock = new();
         using CancellationTokenSource shutdown = new();
         TaskCompletionSource allDownloading = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource downloadCancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -372,8 +388,16 @@ public class GrpcDurableTaskWorkerTests
             {
                 if (token == "blocked-token")
                 {
-                    await drain.Task.WaitAsync(cancellation);
-                    return "\"drained\"";
+                    try
+                    {
+                        await Task.Delay(Timeout.Infinite, cancellation);
+                    }
+                    finally
+                    {
+                        await drain.Task;
+                    }
+
+                    return string.Empty;
                 }
 
                 allDownloading.TrySetResult();
@@ -388,14 +412,6 @@ public class GrpcDurableTaskWorkerTests
 
                 return string.Empty;
             });
-        AzureBlobPayloadsSideCarInterceptor interceptor = new(store.Object, new LargePayloadStorageOptions());
-        List<CancellationTokenSource> deadlines = [];
-        typeof(PayloadInterceptor<object, object>).GetProperty("DownloadTimeoutStartedForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(interceptor, (Action<CancellationTokenSource, TimeSpan>)((source, budget) =>
-            {
-                Assert.Equal(TimeSpan.FromSeconds(120), budget);
-                deadlines.Add(source);
-            }));
         int abandons = 0;
         ScriptedWorkerCallInvoker invoker = new(
             (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
@@ -415,11 +431,19 @@ public class GrpcDurableTaskWorkerTests
                 return Task.FromResult<object>(new P.AbandonOrchestrationTaskResponse());
             },
         };
-        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        ServiceCollection registrations = new();
+        registrations.AddSingleton<TimeProvider>(clock);
+        registrations.AddSingleton(store.Object);
+        DefaultDurableTaskWorkerBuilder builder = new(null, registrations);
+        builder.UseGrpc(options => options.CallInvoker = invoker);
+        builder.UseExternalizedPayloads();
+        using ServiceProvider services = registrations.BuildServiceProvider();
+        GrpcDurableTaskWorkerOptions grpcOptions = services.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(Options.DefaultName);
+        AzureBlobPayloadsSideCarInterceptor interceptor = Assert.Single(grpcOptions.Interceptors.OfType<AzureBlobPayloadsSideCarInterceptor>());
         Mock<IDurableTaskFactory> factory = new();
         ITaskActivity? activity = new TestActivity();
         factory.Setup(f => f.TryCreateActivity(It.IsAny<TaskName>(), It.IsAny<IServiceProvider>(), out activity)).Returns(true);
-        GrpcDurableTaskWorker worker = CreateWorker(new(), new(), NullLoggerFactory.Instance, factory.Object, services);
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions, new(), NullLoggerFactory.Instance, factory.Object, services);
         object processor = CreateProcessor(worker, new P.TaskHubSidecarService.TaskHubSidecarServiceClient(invoker.Intercept(interceptor)));
 
         // Act
@@ -427,8 +451,9 @@ public class GrpcDurableTaskWorkerTests
         try
         {
             await allDownloading.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal(2, deadlines.Count);
-            deadlines[1].Cancel();
+            clock.Advance(TimeSpan.FromSeconds(119));
+            Assert.False(downloadCancelled.Task.IsCompleted);
+            clock.Advance(TimeSpan.FromSeconds(1));
             await downloadCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.False(processing.IsCompleted);
             Assert.Equal(0, abandons);
@@ -441,7 +466,7 @@ public class GrpcDurableTaskWorkerTests
             Assert.Null(completed.FailureDetails);
             Assert.Equal(1, abandons);
             Assert.Equal(1, invoker.GetWorkItemsCallCount);
-            Assert.Equal("\"drained\"", failed.OrchestratorRequest.NewEvents[0].ExecutionStarted.Input);
+            Assert.Equal("blocked-token", failed.OrchestratorRequest.NewEvents[0].ExecutionStarted.Input);
             Assert.Equal("stalled-token", failed.OrchestratorRequest.NewEvents[1].EventRaised.Input);
         }
         finally
@@ -459,6 +484,7 @@ public class GrpcDurableTaskWorkerTests
     public async Task ProcessorExecuteAsync_AbandonTimeout_BoundsRpcRetriesAndBackoffAsync(int mode)
     {
         // Arrange
+        FakeTimeProvider clock = new();
         using CancellationTokenSource shutdown = new();
         TaskCompletionSource abandoning = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource reconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -508,30 +534,25 @@ public class GrpcDurableTaskWorkerTests
         grpcOptions.Internal.ReconnectBackoffBase = grpcOptions.Internal.ReconnectBackoffCap = TimeSpan.Zero;
         grpcOptions.Internal.TransientRetryBackoffBase = grpcOptions.Internal.TransientRetryBackoffCap =
             mode == 2 ? TimeSpan.FromMinutes(1) : TimeSpan.Zero;
-        object processor = CreateProcessor(CreateWorker(grpcOptions), new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
+        using ServiceProvider services = new ServiceCollection().AddSingleton<TimeProvider>(clock).BuildServiceProvider();
+        object processor = CreateProcessor(
+            CreateWorker(grpcOptions, new(), NullLoggerFactory.Instance, Mock.Of<IDurableTaskFactory>(), services),
+            new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
             invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions()))));
-        CancellationTokenSource? deadline = null;
-        int budgets = 0;
-        processor.GetType().GetProperty("AbandonTimeoutStartedForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(processor, (Action<CancellationTokenSource, TimeSpan>)((source, budget) =>
-            {
-                Assert.Equal(TimeSpan.FromSeconds(30), budget);
-                deadline = source;
-                budgets++;
-            }));
 
         // Act
-        DateTime started = DateTime.UtcNow;
+        DateTime started = clock.GetUtcNow().UtcDateTime;
         Task<ProcessorExitReason> processing = InvokeProcessorExecuteAsync(processor, shutdown.Token);
         try
         {
             await abandoning.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal(1, budgets);
             Assert.Equal(mode == 1 ? 2 : 1, attempts.Count);
             DateTime rpcDeadline = Assert.Single(attempts.Select(attempt => attempt.Deadline).Distinct())!.Value;
-            Assert.InRange(rpcDeadline, started.AddSeconds(29), DateTime.UtcNow.AddSeconds(30));
+            Assert.Equal(started.AddSeconds(30), rpcDeadline);
             Assert.Single(attempts.Select(attempt => attempt.CancellationToken).Distinct());
-            Assert.IsType<CancellationTokenSource>(deadline).Cancel();
+            clock.Advance(TimeSpan.FromSeconds(29));
+            Assert.All(attempts, attempt => Assert.False(attempt.CancellationToken.IsCancellationRequested));
+            clock.Advance(TimeSpan.FromSeconds(1));
             await reconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
             // Assert

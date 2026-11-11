@@ -135,8 +135,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     }
 
     /// <inheritdoc/>
-    protected override Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
-        => this.ResolveResponsePayloadsCoreAsync(response, workItem: response is P.WorkItem, cancellation);
+    protected override async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+        => await this.ResolveResponsePayloadsCoreAsync(response, workItem: response is P.WorkItem, cancellation);
 
     async Task ResolveResponsePayloadsCoreAsync<TResponse>(TResponse response, bool workItem, CancellationToken cancellation)
     {

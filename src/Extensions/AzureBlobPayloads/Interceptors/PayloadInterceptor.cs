@@ -4,6 +4,7 @@
 using System.Text;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
@@ -28,7 +29,10 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     readonly PayloadStore payloadStore = payloadStore;
     readonly LargePayloadStorageOptions options = options;
 
-    Action<CancellationTokenSource, TimeSpan>? DownloadTimeoutStartedForTest { get; set; }
+#if NET8_0_OR_GREATER
+    /// <summary>Gets the clock used for active worker download deadlines.</summary>
+    internal TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+#endif
 
     // Unary: externalize on request, resolve on response
 
@@ -174,20 +178,16 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         }
 
         IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(
-            call.ResponseStream, ResolveAsync, lifetime.Token);
+            call.ResponseStream, ResolveAsync, lifetime.Token, context.Options.CancellationToken);
 
         void Dispose()
         {
             if (Interlocked.Exchange(ref disposed, 1) == 0)
             {
-                try
+                using (lifetime)
+                using (call)
                 {
                     lifetime.Cancel();
-                }
-                finally
-                {
-                    lifetime.Dispose();
-                    call.Dispose();
                 }
             }
         }
@@ -271,11 +271,14 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         }
 
         TimeSpan budget = TimeSpan.FromSeconds(120);
+#if NET8_0_OR_GREATER
+        using CancellationTokenSource timeout = new(budget, this.TimeProvider);
+#else
         using CancellationTokenSource timeout = new(budget);
+#endif
         using CancellationTokenSource download = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeout.Token);
         try
         {
-            this.DownloadTimeoutStartedForTest?.Invoke(timeout, budget);
             string payload = await this.payloadStore.DownloadAsync(value!, download.Token).ConfigureAwait(false);
             download.Token.ThrowIfCancellationRequested();
             return payload;
@@ -346,31 +349,50 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     sealed class TransformingStreamReader<T>(
         IAsyncStreamReader<T> inner,
         Func<T, CancellationToken, ValueTask<T>> transform,
-        CancellationToken lifetime) : IAsyncStreamReader<T>, IWorkItemStreamReader
+        CancellationToken lifetime,
+        CancellationToken callCancellation) : IAsyncStreamReader<T>, IWorkItemStreamReader
     {
         readonly IAsyncStreamReader<T> inner = inner;
         readonly Func<T, CancellationToken, ValueTask<T>> transform = transform;
 
         public T Current { get; private set; } = default!;
 
-        public async Task<bool> MoveNext(CancellationToken cancellationToken)
+        public Task<bool> MoveNext(CancellationToken cancellationToken) =>
+            this.MoveNextAsync(null, cancellationToken, cancellationToken);
+
+        public async Task<bool> MoveNextAsync(
+            Action? onMessageReceived, CancellationToken readCancellation, CancellationToken payloadCancellation)
         {
-            bool hasNext = await this.MoveNextTransportAsync(cancellationToken);
+            bool hasNext;
+            if (this.inner is IWorkItemStreamReader payloadReader)
+            {
+                hasNext = await payloadReader.MoveNextAsync(onMessageReceived, readCancellation, payloadCancellation).ConfigureAwait(false);
+            }
+            else
+            {
+                hasNext = await this.inner.MoveNext(readCancellation).ConfigureAwait(false);
+                if (hasNext)
+                {
+                    onMessageReceived?.Invoke();
+                }
+            }
+
             if (!hasNext)
             {
                 return false;
             }
 
-            await this.ResolveCurrentAsync(cancellationToken);
+            if (!payloadCancellation.CanBeCanceled || payloadCancellation == callCancellation || payloadCancellation == lifetime)
+            {
+                this.Current = await this.transform(this.inner.Current, lifetime).ConfigureAwait(false);
+            }
+            else
+            {
+                using CancellationTokenSource resolution = CancellationTokenSource.CreateLinkedTokenSource(payloadCancellation, lifetime);
+                this.Current = await this.transform(this.inner.Current, resolution.Token).ConfigureAwait(false);
+            }
+
             return true;
-        }
-
-        public Task<bool> MoveNextTransportAsync(CancellationToken cancellation) => this.inner.MoveNext(cancellation);
-
-        public async Task ResolveCurrentAsync(CancellationToken cancellation)
-        {
-            using CancellationTokenSource resolution = CancellationTokenSource.CreateLinkedTokenSource(cancellation, lifetime);
-            this.Current = await this.transform(this.inner.Current, resolution.Token);
         }
     }
 }

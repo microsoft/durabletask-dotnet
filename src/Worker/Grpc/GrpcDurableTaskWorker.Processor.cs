@@ -38,6 +38,9 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
+#if NET8_0_OR_GREATER
+        readonly TimeProvider timeProvider;
+#endif
         readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
@@ -48,6 +51,9 @@ sealed partial class GrpcDurableTaskWorker
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
+#if NET8_0_OR_GREATER
+            this.timeProvider = worker.services.GetService<TimeProvider>() ?? TimeProvider.System;
+#endif
             this.orchestrationFilter = orchestrationFilter;
             this.exceptionPropertiesProvider = exceptionPropertiesProvider is not null
                 ? new ExceptionPropertiesProviderAdapter(exceptionPropertiesProvider)
@@ -55,8 +61,6 @@ sealed partial class GrpcDurableTaskWorker
         }
 
         ILogger Logger => this.worker.logger;
-
-        Action<CancellationTokenSource, TimeSpan>? AbandonTimeoutStartedForTest { get; set; }
 
         public async Task<ProcessorExitReason> ExecuteAsync(CancellationToken cancellation)
         {
@@ -397,6 +401,9 @@ sealed partial class GrpcDurableTaskWorker
                 workItem => this.DispatchWorkItem(workItem, cancellation),
                 onFirstMessage,
                 cancellation,
+#if NET8_0_OR_GREATER
+                timeProvider: this.timeProvider,
+#endif
                 onPayloadFailure: this.OnWorkItemPayloadFailureAsync);
 
             switch (result.Outcome)
@@ -632,12 +639,16 @@ sealed partial class GrpcDurableTaskWorker
                 string.Empty;
             this.Logger.UnexpectedError(exception, instanceId);
             TimeSpan budget = TimeSpan.FromSeconds(30);
+#if NET8_0_OR_GREATER
+            DateTime deadline = this.timeProvider.GetUtcNow().UtcDateTime.Add(budget);
+            using CancellationTokenSource timeout = new(budget, this.timeProvider);
+#else
             DateTime deadline = DateTime.UtcNow.Add(budget);
             using CancellationTokenSource timeout = new(budget);
+#endif
             using CancellationTokenSource abandon = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeout.Token);
             try
             {
-                this.AbandonTimeoutStartedForTest?.Invoke(timeout, budget);
                 await this.ExecuteWithRetryAsync(
                     () => workItem.RequestCase switch
                     {
@@ -1318,7 +1329,11 @@ sealed partial class GrpcDurableTaskWorker
 
                     try
                     {
+#if NET8_0_OR_GREATER
+                        await Task.Delay(backoff, this.timeProvider, cancellationToken);
+#else
                         await Task.Delay(backoff, cancellationToken);
+#endif
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {

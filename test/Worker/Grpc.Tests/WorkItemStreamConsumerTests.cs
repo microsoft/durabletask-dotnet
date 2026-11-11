@@ -3,6 +3,7 @@
 
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Grpc;
+using Microsoft.Extensions.Time.Testing;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -137,55 +138,37 @@ public class WorkItemStreamConsumerTests
     [Fact]
     public async Task PerItem_HeartbeatReset_KeepsTimerAlive()
     {
-        // Proves the per-item timer reset -- not just a single arm at loop start -- is what keeps the
-        // stream alive. Earlier versions of this test tried to prove the reset by racing real per-item
-        // delays (each comfortably under the timeout) against the real silent-disconnect timeout (so
-        // their sum comfortably exceeded it). That was still flaky under CI scheduling pressure: any
-        // continuation between the "item processed" signal and the next write could be delayed by the
-        // thread pool/scheduler, silently inflating an intended-short gap past the timeout even though
-        // production was correct.
-        //
-        // This version removes wall-clock timing from the assertion entirely. ConsumeAsync exposes a
-        // test-only observability hook that fires every time the silent-disconnect timer is (re-)armed:
-        // once before the read loop starts, and once per item, immediately before that item is
-        // dispatched to onItem. By recording the exact interleaving of "armed" and "item" events, the
-        // test proves the structural guarantee directly -- an arm precedes every item, and the total arm
-        // count is itemCount + 1 -- instead of inferring it from elapsed real time. A regression that
-        // only arms the timer once at loop start (and never re-arms it per item) fails this assertion
-        // deterministically, with no dependency on scheduler timing.
-        const int itemCount = 5;
-        List<string> events = new();
-        int itemIndex = 0;
-
-        P.WorkItem[] items = new P.WorkItem[itemCount];
-        for (int i = 0; i < itemCount; i++)
+        // Arrange
+        FakeTimeProvider clock = new();
+        int remaining = 5;
+        int received = 0;
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
+        reader.SetupGet(r => r.Current).Returns(new P.WorkItem { HealthPing = new P.HealthPing() });
+        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>())).Returns((CancellationToken cancellation) =>
         {
-            items[i] = new P.WorkItem { HealthPing = new P.HealthPing() };
-        }
+            if (remaining-- == 0)
+            {
+                return Task.FromResult(false);
+            }
 
+            clock.Advance(TimeSpan.FromSeconds(119));
+            cancellation.ThrowIfCancellationRequested();
+            return Task.FromResult(true);
+        });
+
+        // Act
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: StreamOf(items),
-            silentDisconnectTimeout: TimeSpan.FromMilliseconds(500),
-            onItem: _ => events.Add($"item{itemIndex++}"),
+            stream: reader.Object,
+            silentDisconnectTimeout: TimeSpan.FromSeconds(120),
+            onItem: _ => received++,
             onFirstMessage: null,
             cancellation: CancellationToken.None,
-            onSilentDisconnectTimerArmed: () => events.Add("armed"));
+            timeProvider: clock);
 
+        // Assert
         result.Outcome.Should().Be(WorkItemStreamOutcome.GracefulDrain);
         result.FirstMessageObserved.Should().BeTrue();
-
-        // 1 initial arm (before the loop starts) + 1 re-arm per item.
-        events.Count(e => e == "armed").Should().Be(itemCount + 1);
-
-        // Every item must be immediately preceded by its own re-arm, and the very first event overall
-        // is the initial pre-loop arm.
-        events[0].Should().Be("armed");
-        for (int i = 0; i < itemCount; i++)
-        {
-            int armedIndex = 1 + (i * 2);
-            events[armedIndex].Should().Be("armed", "item {0} must be preceded by a timer re-arm", i);
-            events[armedIndex + 1].Should().Be($"item{i}");
-        }
+        received.Should().Be(5);
     }
 
     [Fact]

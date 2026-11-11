@@ -4,6 +4,7 @@
 using System.Text;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -18,6 +19,108 @@ public class PayloadInterceptorTests
         "TestMethod",
         StringMarshaller,
         StringMarshaller);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AsyncServerStreamingCall_ExternalSubclass_UsesExistingResolveOverrideAsync(bool history)
+    {
+        // Arrange: this test assembly is not a friend of AzureBlobPayloads.
+        int resolved = 0;
+        TestPayloadInterceptor interceptor = CreateInterceptor(onResolve: async (_, _) =>
+        {
+            await Task.Yield();
+            resolved++;
+        });
+
+        // Act
+        if (history)
+        {
+            using AsyncServerStreamingCall<P.HistoryChunk> call = CreateStreamingCall(
+                interceptor,
+                new P.StreamInstanceHistoryRequest { ForWorkItemProcessing = true },
+                new P.HistoryChunk());
+            Assert.True(await call.ResponseStream.MoveNext(default));
+        }
+        else
+        {
+            using AsyncServerStreamingCall<P.WorkItem> call = CreateStreamingCall(
+                interceptor, new P.GetWorkItemsRequest(), new P.WorkItem());
+            Assert.True(await call.ResponseStream.MoveNext(default));
+        }
+
+        // Assert
+        Assert.Equal(1, resolved);
+    }
+
+    [Fact]
+    public async Task AsyncServerStreamingCall_CommonCallToken_ReusesResolutionLifetimeAsync()
+    {
+        // Arrange
+        using CancellationTokenSource cancellation = new();
+        List<CancellationToken> tokens = [];
+        TestPayloadInterceptor interceptor = CreateInterceptor(onResolve: (_, token) =>
+        {
+            tokens.Add(token);
+            return Task.CompletedTask;
+        });
+        using AsyncServerStreamingCall<P.WorkItem> call = CreateStreamingCall(
+            interceptor, new P.GetWorkItemsRequest(), new P.WorkItem(), cancellation.Token, count: 2);
+
+        // Act
+        Assert.True(await call.ResponseStream.MoveNext(cancellation.Token));
+        Assert.True(await call.ResponseStream.MoveNext(cancellation.Token));
+        cancellation.Cancel();
+
+        // Assert
+        Assert.Equal(2, tokens.Count);
+        Assert.Single(tokens.Distinct());
+        Assert.All(tokens, token => Assert.True(token.IsCancellationRequested));
+    }
+
+    [Fact]
+    public async Task AsyncServerStreamingCall_DistinctReadToken_CancelsCustomResolutionAsync()
+    {
+        // Arrange
+        using CancellationTokenSource callCancellation = new();
+        using CancellationTokenSource readCancellation = new();
+        TaskCompletionSource resolving = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TestPayloadInterceptor interceptor = CreateInterceptor(onResolve: async (_, cancellation) =>
+        {
+            resolving.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellation);
+        });
+        using AsyncServerStreamingCall<P.WorkItem> call = CreateStreamingCall(
+            interceptor, new P.GetWorkItemsRequest(), new P.WorkItem(), callCancellation.Token);
+
+        // Act
+        Task<bool> next = call.ResponseStream.MoveNext(readCancellation.Token);
+        await resolving.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        readCancellation.Cancel();
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.False(callCancellation.IsCancellationRequested);
+    }
+
+    static AsyncServerStreamingCall<TResponse> CreateStreamingCall<TRequest, TResponse>(
+        TestPayloadInterceptor interceptor, TRequest request, TResponse response, CancellationToken cancellation = default, int count = 1)
+        where TRequest : class, new()
+        where TResponse : class, new()
+    {
+        Mock<IAsyncStreamReader<TResponse>> reader = new();
+        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>())).ReturnsAsync(() => count-- > 0);
+        reader.SetupGet(r => r.Current).Returns(response);
+        Method<TRequest, TResponse> method = new(
+            MethodType.ServerStreaming, "test", "Read",
+            Marshallers.Create<TRequest>(_ => [], _ => new()),
+            Marshallers.Create<TResponse>(_ => [], _ => new()));
+        return interceptor.AsyncServerStreamingCall(
+            request,
+            new ClientInterceptorContext<TRequest, TResponse>(method, null, new CallOptions(cancellationToken: cancellation)),
+            (_, _) => new AsyncServerStreamingCall<TResponse>(
+                reader.Object, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => new Metadata(), () => { }));
+    }
 
     [Fact]
     public void AsyncUnaryCall_SynchronousExternalization_RunsInlineWithoutThreadHop()

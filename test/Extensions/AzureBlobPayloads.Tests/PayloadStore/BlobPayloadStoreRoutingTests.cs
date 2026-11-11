@@ -254,7 +254,8 @@ public class BlobPayloadStoreRoutingTests
         }
         else
         {
-            (await moveNext.Should().ThrowAsync<Exception>()).Which.InnerException.Should().BeOfType<PayloadStorageException>();
+            (await moveNext.Should().ThrowAsync<Microsoft.DurableTask.Worker.Grpc.Internal.WorkItemPayloadException>())
+                .Which.InnerException.Should().BeOfType<PayloadStorageException>();
             workItem.OrchestratorRequest.NewEvents[0].ExecutionStarted.Input.Should().Be(token);
             handler.Requests.Should().BeEmpty();
         }

@@ -56,6 +56,8 @@ sealed partial class GrpcDurableTaskWorker
 
         ILogger Logger => this.worker.logger;
 
+        Action<CancellationTokenSource, TimeSpan>? AbandonTimeoutStartedForTest { get; set; }
+
         public async Task<ProcessorExitReason> ExecuteAsync(CancellationToken cancellation)
         {
             // Tracks consecutive failures against the same channel. Reset only after the stream
@@ -629,29 +631,43 @@ sealed partial class GrpcDurableTaskWorker
                 workItem.EntityRequestV2?.InstanceId ??
                 string.Empty;
             this.Logger.UnexpectedError(exception, instanceId);
+            TimeSpan budget = TimeSpan.FromSeconds(30);
+            DateTime deadline = DateTime.UtcNow.Add(budget);
+            using CancellationTokenSource timeout = new(budget);
+            using CancellationTokenSource abandon = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeout.Token);
             try
             {
+                this.AbandonTimeoutStartedForTest?.Invoke(timeout, budget);
                 await this.ExecuteWithRetryAsync(
                     () => workItem.RequestCase switch
                     {
                         P.WorkItem.RequestOneofCase.OrchestratorRequest =>
                             this.client.AbandonTaskOrchestratorWorkItemAsync(
                                 new P.AbandonOrchestrationTaskRequest { CompletionToken = workItem.CompletionToken },
-                                cancellationToken: cancellation).ResponseAsync,
+                                deadline: deadline,
+                                cancellationToken: abandon.Token).ResponseAsync,
                         P.WorkItem.RequestOneofCase.ActivityRequest =>
                             this.client.AbandonTaskActivityWorkItemAsync(
                                 new P.AbandonActivityTaskRequest { CompletionToken = workItem.CompletionToken },
-                                cancellationToken: cancellation).ResponseAsync,
+                                deadline: deadline,
+                                cancellationToken: abandon.Token).ResponseAsync,
                         P.WorkItem.RequestOneofCase.EntityRequest or P.WorkItem.RequestOneofCase.EntityRequestV2 =>
                             this.client.AbandonTaskEntityWorkItemAsync(
                                 new P.AbandonEntityTaskRequest { CompletionToken = workItem.CompletionToken },
-                                cancellationToken: cancellation).ResponseAsync,
+                                deadline: deadline,
+                                cancellationToken: abandon.Token).ResponseAsync,
                         _ => throw new InvalidOperationException($"Cannot abandon unresolved {workItem.RequestCase}."),
                     },
                     "AbandonUnresolvedWorkItem",
-                    cancellation);
+                    abandon.Token);
+                abandon.Token.ThrowIfCancellationRequested();
             }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
+            catch (Exception ex) when (timeout.IsCancellationRequested && !cancellation.IsCancellationRequested
+                && ex is OperationCanceledException or RpcException)
+            {
+                throw new TimeoutException("Payload failure abandonment exceeded its total 30-second budget.", ex);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound && !cancellation.IsCancellationRequested)
             {
                 // Ownership loss is delivery-local; other abandon failures must reach the reconnect loop.
                 this.Logger.WorkItemOwnershipLost(workItem.RequestCase.ToString(), workItem.CompletionToken, ex);

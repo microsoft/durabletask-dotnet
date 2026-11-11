@@ -6,6 +6,9 @@ using System.Text;
 using Azure;
 using FluentAssertions;
 using Google.Protobuf;
+using Grpc.Core;
+using Grpc.Core.Interceptors;
+using Moq;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
@@ -33,6 +36,116 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
     static readonly PropertyInfo SharedMessageLockAcquiredForTestProperty = typeof(AzureBlobPayloadsSideCarInterceptor)
         .GetProperty("SharedMessageLockAcquiredForTest", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    [Theory]
+    [InlineData("work-item")]
+    [InlineData("worker-history")]
+    [InlineData("management-history")]
+    [InlineData("unary")]
+    public async Task ResolvePayloads_WorkerDownloadsHaveIndependentBudgetsAsync(string responseKind)
+    {
+        // Arrange: advance a local clock 119 seconds per successful download. The three
+        // fields of one HistoryState operation must not share a 120-second aggregate budget.
+        TimeSpan elapsed = TimeSpan.Zero;
+        TimeSpan expires = TimeSpan.MaxValue;
+        CancellationTokenSource? active = null;
+        List<CancellationTokenSource> deadlines = [];
+        TrackingPayloadStore store = new(downloadAsync: (token, cancellation) =>
+        {
+            elapsed += TimeSpan.FromSeconds(119);
+            if (elapsed >= expires)
+            {
+                active!.Cancel();
+            }
+
+            cancellation.ThrowIfCancellationRequested();
+            return Task.FromResult(token["test-blob://".Length..]);
+        });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        typeof(PayloadInterceptor<object, object>).GetProperty("DownloadTimeoutStartedForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(interceptor, (Action<CancellationTokenSource, TimeSpan>)((source, budget) =>
+            {
+                Assert.Equal(TimeSpan.FromSeconds(120), budget);
+                active = source;
+                expires = elapsed + budget;
+                deadlines.Add(source);
+            }));
+        P.OrchestrationState state = new()
+        {
+            Input = "test-blob://input",
+            Output = "test-blob://output",
+            CustomStatus = "test-blob://status",
+        };
+        P.HistoryEvent historyEvent = new() { HistoryState = new P.HistoryStateEvent { OrchestrationState = state } };
+
+        // Act
+        if (responseKind == "work-item")
+        {
+            using AsyncServerStreamingCall<P.WorkItem> call = CreateStreamingCall(interceptor, new P.GetWorkItemsRequest(), new P.WorkItem
+            {
+                OrchestratorRequest = new P.OrchestratorRequest { PastEvents = { historyEvent } },
+            });
+            Assert.True(await call.ResponseStream.MoveNext(default));
+        }
+        else if (responseKind == "unary")
+        {
+            Method<P.GetInstanceRequest, P.GetInstanceResponse> method = new(
+                MethodType.Unary, "test", "GetInstance",
+                Marshallers.Create<P.GetInstanceRequest>(_ => [], _ => new()),
+                Marshallers.Create<P.GetInstanceResponse>(_ => [], _ => new()));
+            using AsyncUnaryCall<P.GetInstanceResponse> call = interceptor.AsyncUnaryCall(
+                new P.GetInstanceRequest(),
+                new ClientInterceptorContext<P.GetInstanceRequest, P.GetInstanceResponse>(method, null, default),
+                (_, _) => new AsyncUnaryCall<P.GetInstanceResponse>(
+                    Task.FromResult(new P.GetInstanceResponse { OrchestrationState = state }),
+                    Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => new Metadata(), () => { }));
+            await call.ResponseAsync;
+        }
+        else
+        {
+            using AsyncServerStreamingCall<P.HistoryChunk> call = CreateStreamingCall(
+                interceptor,
+                new P.StreamInstanceHistoryRequest { ForWorkItemProcessing = responseKind == "worker-history" },
+                new P.HistoryChunk { Events = { historyEvent } });
+            Assert.True(await call.ResponseStream.MoveNext(default));
+        }
+
+        // Assert
+        Assert.Equal(TimeSpan.FromSeconds(357), elapsed);
+        Assert.Equal(responseKind is "work-item" or "worker-history" ? 3 : 0, deadlines.Distinct().Count());
+        Assert.Equal("input", state.Input);
+        Assert.Equal("output", state.Output);
+        Assert.Equal("status", state.CustomStatus);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamingCall_DisposeCancelsActiveHydrationAsync(bool workerHistory)
+    {
+        // Arrange
+        TaskCompletionSource downloading = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TrackingPayloadStore store = new(downloadAsync: async (_, cancellation) =>
+        {
+            downloading.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellation);
+            return string.Empty;
+        });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        using AsyncServerStreamingCall<P.HistoryChunk> call = CreateStreamingCall(
+            interceptor,
+            new P.StreamInstanceHistoryRequest { ForWorkItemProcessing = workerHistory },
+            new P.HistoryChunk { Events = { new P.HistoryEvent { ExecutionStarted = new P.ExecutionStartedEvent { Input = "test-blob://input" } } } });
+
+        // Act
+        Task<bool> next = call.ResponseStream.MoveNext(default);
+        await downloading.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        call.Dispose();
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, store.DownloadCount);
+    }
 
     [Fact]
     public async Task ResolveResponsePayloadsAsync_HistoryChunk_ResolvesEventsInOrderWithBoundedConcurrency()
@@ -2444,6 +2557,25 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     static LargePayloadStorageOptions CreateOptions() => new() { ThresholdBytes = 1 };
+
+    static AsyncServerStreamingCall<TResponse> CreateStreamingCall<TRequest, TResponse>(
+        AzureBlobPayloadsSideCarInterceptor interceptor, TRequest request, TResponse response)
+        where TRequest : class, new()
+        where TResponse : class, new()
+    {
+        Mock<IAsyncStreamReader<TResponse>> reader = new();
+        reader.SetupSequence(r => r.MoveNext(It.IsAny<CancellationToken>())).ReturnsAsync(true).ReturnsAsync(false);
+        reader.SetupGet(r => r.Current).Returns(response);
+        Method<TRequest, TResponse> method = new(
+            MethodType.ServerStreaming, "test", "Read",
+            Marshallers.Create<TRequest>(_ => [], _ => new()),
+            Marshallers.Create<TResponse>(_ => [], _ => new()));
+        return interceptor.AsyncServerStreamingCall(
+            request,
+            new ClientInterceptorContext<TRequest, TResponse>(method, null, default),
+            (_, _) => new AsyncServerStreamingCall<TResponse>(
+                reader.Object, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => new Metadata(), () => { }));
+    }
 
     static Task ExternalizeAsync<TRequest>(AzureBlobPayloadsSideCarInterceptor interceptor, TRequest request, CancellationToken cancellation)
         => (Task)ExternalizeMethodDefinition.MakeGenericMethod(typeof(TRequest)).Invoke(interceptor, [request, cancellation])!;

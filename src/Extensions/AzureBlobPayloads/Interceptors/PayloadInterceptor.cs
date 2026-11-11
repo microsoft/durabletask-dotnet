@@ -28,6 +28,8 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     readonly PayloadStore payloadStore = payloadStore;
     readonly LargePayloadStorageOptions options = options;
 
+    Action<CancellationTokenSource, TimeSpan>? DownloadTimeoutStartedForTest { get; set; }
+
     // Unary: externalize on request, resolve on response
 
     /// <inheritdoc/>
@@ -141,12 +143,22 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     {
         // For streaming, request externalization is not needed currently
         AsyncServerStreamingCall<TResponse> call = continuation(request, context);
+        CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.Options.CancellationToken);
+        bool workerPayloads = request is P.GetWorkItemsRequest or P.StreamInstanceHistoryRequest { ForWorkItemProcessing: true };
+        int disposed = 0;
 
-        IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(call.ResponseStream, async (msg, ct) =>
+        async ValueTask<TResponse> ResolveAsync(TResponse msg, CancellationToken ct)
         {
             try
             {
-                await this.ResolveResponsePayloadsAsync(msg, ct);
+                if (workerPayloads)
+                {
+                    await this.ResolveWorkItemPayloadsAsync(msg, ct);
+                }
+                else
+                {
+                    await this.ResolveResponsePayloadsAsync(msg, ct);
+                }
             }
             catch (Exception ex) when (msg is P.WorkItem workItem
                 && workItem.RequestCase is P.WorkItem.RequestOneofCase.ActivityRequest
@@ -159,15 +171,42 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             }
 
             return msg;
-        });
+        }
+
+        IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(
+            call.ResponseStream, ResolveAsync, lifetime.Token);
+
+        void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0)
+            {
+                try
+                {
+                    lifetime.Cancel();
+                }
+                finally
+                {
+                    lifetime.Dispose();
+                    call.Dispose();
+                }
+            }
+        }
 
         return new AsyncServerStreamingCall<TResponse>(
             wrapped,
             call.ResponseHeadersAsync,
             call.GetStatus,
             call.GetTrailers,
-            call.Dispose);
+            Dispose);
     }
+
+    /// <summary>Resolves worker response payloads with per-download timeout handling.</summary>
+    /// <typeparam name="TResponse">The response type.</typeparam>
+    /// <param name="response">The received worker response.</param>
+    /// <param name="cancellation">Worker shutdown and call-disposal cancellation.</param>
+    /// <returns>The payload resolution task.</returns>
+    internal virtual Task ResolveWorkItemPayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+        => this.ResolveResponsePayloadsAsync(response, cancellation);
 
     /// <summary>
     /// Externalizes large payloads in request messages.
@@ -218,6 +257,33 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         }
 
         return await this.payloadStore.DownloadAsync(value!, cancellation);
+    }
+
+    /// <summary>Resolves one worker payload with an independent budget that begins at download dispatch.</summary>
+    /// <param name="value">The value to resolve.</param>
+    /// <param name="cancellation">Worker shutdown and call-disposal cancellation.</param>
+    /// <returns>The resolved value, or the unchanged value when it is not a token.</returns>
+    private protected async Task<string?> MaybeResolveWorkItemAsync(string? value, CancellationToken cancellation)
+    {
+        if (!this.RequiresResolution(value))
+        {
+            return value;
+        }
+
+        TimeSpan budget = TimeSpan.FromSeconds(120);
+        using CancellationTokenSource timeout = new(budget);
+        using CancellationTokenSource download = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeout.Token);
+        try
+        {
+            this.DownloadTimeoutStartedForTest?.Invoke(timeout, budget);
+            string payload = await this.payloadStore.DownloadAsync(value!, download.Token).ConfigureAwait(false);
+            download.Token.ThrowIfCancellationRequested();
+            return payload;
+        }
+        catch (OperationCanceledException ex) when (timeout.IsCancellationRequested && !cancellation.IsCancellationRequested)
+        {
+            throw new TimeoutException("Work-item payload download exceeded its 120-second budget.", ex);
+        }
     }
 
     /// <summary>
@@ -279,7 +345,8 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
     sealed class TransformingStreamReader<T>(
         IAsyncStreamReader<T> inner,
-        Func<T, CancellationToken, ValueTask<T>> transform) : IAsyncStreamReader<T>
+        Func<T, CancellationToken, ValueTask<T>> transform,
+        CancellationToken lifetime) : IAsyncStreamReader<T>, IWorkItemStreamReader
     {
         readonly IAsyncStreamReader<T> inner = inner;
         readonly Func<T, CancellationToken, ValueTask<T>> transform = transform;
@@ -288,14 +355,22 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
         public async Task<bool> MoveNext(CancellationToken cancellationToken)
         {
-            bool hasNext = await this.inner.MoveNext(cancellationToken);
+            bool hasNext = await this.MoveNextTransportAsync(cancellationToken);
             if (!hasNext)
             {
                 return false;
             }
 
-            this.Current = await this.transform(this.inner.Current, cancellationToken);
+            await this.ResolveCurrentAsync(cancellationToken);
             return true;
+        }
+
+        public Task<bool> MoveNextTransportAsync(CancellationToken cancellation) => this.inner.MoveNext(cancellation);
+
+        public async Task ResolveCurrentAsync(CancellationToken cancellation)
+        {
+            using CancellationTokenSource resolution = CancellationTokenSource.CreateLinkedTokenSource(cancellation, lifetime);
+            this.Current = await this.transform(this.inner.Current, resolution.Token);
         }
     }
 }

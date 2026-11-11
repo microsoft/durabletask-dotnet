@@ -68,6 +68,10 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     }
 
     /// <inheritdoc/>
+    internal override Task ResolveWorkItemPayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+        => this.ResolveResponsePayloadsCoreAsync(response, workItem: true, cancellation);
+
+    /// <inheritdoc/>
     protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
         // Client -> sidecar
@@ -131,7 +135,10 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     }
 
     /// <inheritdoc/>
-    protected override async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+    protected override Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+        => this.ResolveResponsePayloadsCoreAsync(response, workItem: response is P.WorkItem, cancellation);
+
+    async Task ResolveResponsePayloadsCoreAsync<TResponse>(TResponse response, bool workItem, CancellationToken cancellation)
     {
         // Sidecar -> client/worker
         switch (response)
@@ -151,7 +158,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     {
                         if (this.RequiresEventPayloadResolution(e))
                         {
-                            operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                            operations.Add(() => this.ResolveEventPayloadsAsync(e, workItem, cancellation));
                         }
                     }
 
@@ -200,7 +207,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         string? input = ar.Input;
                         if (this.RequiresResolution(input))
                         {
-                            operations.Add(async () => ar.Input = await this.MaybeResolveAsync(input, cancellation));
+                            operations.Add(async () => ar.Input = await this.ResolvePayloadAsync(input, workItem, cancellation));
                         }
                     }
 
@@ -211,7 +218,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         {
                             if (this.RequiresEventPayloadResolution(e))
                             {
-                                operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                                operations.Add(() => this.ResolveEventPayloadsAsync(e, workItem, cancellation));
                             }
                         }
 
@@ -219,7 +226,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         {
                             if (this.RequiresEventPayloadResolution(e))
                             {
-                                operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                                operations.Add(() => this.ResolveEventPayloadsAsync(e, workItem, cancellation));
                             }
                         }
                     }
@@ -230,7 +237,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         string? entityState = er1.EntityState;
                         if (this.RequiresResolution(entityState))
                         {
-                            operations.Add(async () => er1.EntityState = await this.MaybeResolveAsync(entityState, cancellation));
+                            operations.Add(async () => er1.EntityState = await this.ResolvePayloadAsync(entityState, workItem, cancellation));
                         }
 
                         if (er1.Operations != null)
@@ -240,7 +247,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                                 string? input = op.Input;
                                 if (this.RequiresResolution(input))
                                 {
-                                    operations.Add(async () => op.Input = await this.MaybeResolveAsync(input, cancellation));
+                                    operations.Add(async () => op.Input = await this.ResolvePayloadAsync(input, workItem, cancellation));
                                 }
                             }
                         }
@@ -252,7 +259,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                         string? entityState = er2.EntityState;
                         if (this.RequiresResolution(entityState))
                         {
-                            operations.Add(async () => er2.EntityState = await this.MaybeResolveAsync(entityState, cancellation));
+                            operations.Add(async () => er2.EntityState = await this.ResolvePayloadAsync(entityState, workItem, cancellation));
                         }
 
                         if (er2.OperationRequests != null)
@@ -261,7 +268,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                             {
                                 if (this.RequiresEventPayloadResolution(opEvt))
                                 {
-                                    operations.Add(() => this.ResolveEventPayloadsAsync(opEvt, cancellation));
+                                    operations.Add(() => this.ResolveEventPayloadsAsync(opEvt, workItem, cancellation));
                                 }
                             }
                         }
@@ -601,126 +608,129 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         };
     }
 
-    async Task ResolveEventPayloadsAsync(P.HistoryEvent e, CancellationToken cancellation)
+    Task<string?> ResolvePayloadAsync(string? value, bool workItem, CancellationToken cancellation)
+        => workItem ? this.MaybeResolveWorkItemAsync(value, cancellation) : this.MaybeResolveAsync(value, cancellation);
+
+    async Task ResolveEventPayloadsAsync(P.HistoryEvent e, bool workItem, CancellationToken cancellation)
     {
         switch (e.EventTypeCase)
         {
             case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted:
                 if (e.ExecutionStarted is { } es)
                 {
-                    es.Input = await this.MaybeResolveAsync(es.Input, cancellation);
+                    es.Input = await this.ResolvePayloadAsync(es.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
                 if (e.ExecutionCompleted is { } ec)
                 {
-                    ec.Result = await this.MaybeResolveAsync(ec.Result, cancellation);
+                    ec.Result = await this.ResolvePayloadAsync(ec.Result, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventRaised:
                 if (e.EventRaised is { } er)
                 {
-                    er.Input = await this.MaybeResolveAsync(er.Input, cancellation);
+                    er.Input = await this.ResolvePayloadAsync(er.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
                 if (e.TaskScheduled is { } ts)
                 {
-                    ts.Input = await this.MaybeResolveAsync(ts.Input, cancellation);
+                    ts.Input = await this.ResolvePayloadAsync(ts.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 if (e.TaskCompleted is { } tc)
                 {
-                    tc.Result = await this.MaybeResolveAsync(tc.Result, cancellation);
+                    tc.Result = await this.ResolvePayloadAsync(tc.Result, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 if (e.SubOrchestrationInstanceCreated is { } soc)
                 {
-                    soc.Input = await this.MaybeResolveAsync(soc.Input, cancellation);
+                    soc.Input = await this.ResolvePayloadAsync(soc.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
                 if (e.SubOrchestrationInstanceCompleted is { } sox)
                 {
-                    sox.Result = await this.MaybeResolveAsync(sox.Result, cancellation);
+                    sox.Result = await this.ResolvePayloadAsync(sox.Result, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventSent:
                 if (e.EventSent is { } esent)
                 {
-                    esent.Input = await this.MaybeResolveAsync(esent.Input, cancellation);
+                    esent.Input = await this.ResolvePayloadAsync(esent.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
                 if (e.GenericEvent is { } ge)
                 {
-                    ge.Data = await this.MaybeResolveAsync(ge.Data, cancellation);
+                    ge.Data = await this.ResolvePayloadAsync(ge.Data, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew:
                 if (e.ContinueAsNew is { } can)
                 {
-                    can.Input = await this.MaybeResolveAsync(can.Input, cancellation);
+                    can.Input = await this.ResolvePayloadAsync(can.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 if (e.ExecutionTerminated is { } et)
                 {
-                    et.Input = await this.MaybeResolveAsync(et.Input, cancellation);
+                    et.Input = await this.ResolvePayloadAsync(et.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
                 if (e.ExecutionSuspended is { } esus)
                 {
-                    esus.Input = await this.MaybeResolveAsync(esus.Input, cancellation);
+                    esus.Input = await this.ResolvePayloadAsync(esus.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
                 if (e.ExecutionResumed is { } eres)
                 {
-                    eres.Input = await this.MaybeResolveAsync(eres.Input, cancellation);
+                    eres.Input = await this.ResolvePayloadAsync(eres.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionRewound:
                 if (e.ExecutionRewound is { } erew)
                 {
-                    erew.Reason = await this.MaybeResolveAsync(erew.Reason, cancellation);
+                    erew.Reason = await this.ResolvePayloadAsync(erew.Reason, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled:
                 if (e.EntityOperationSignaled is { } eos)
                 {
-                    eos.Input = await this.MaybeResolveAsync(eos.Input, cancellation);
+                    eos.Input = await this.ResolvePayloadAsync(eos.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled:
                 if (e.EntityOperationCalled is { } eoc)
                 {
-                    eoc.Input = await this.MaybeResolveAsync(eoc.Input, cancellation);
+                    eoc.Input = await this.ResolvePayloadAsync(eoc.Input, workItem, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
                 if (e.EntityOperationCompleted is { } ecomp)
                 {
-                    ecomp.Output = await this.MaybeResolveAsync(ecomp.Output, cancellation);
+                    ecomp.Output = await this.ResolvePayloadAsync(ecomp.Output, workItem, cancellation);
                 }
 
                 break;
@@ -729,9 +739,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 {
                     // A HistoryState event is one bounded operation, so its three fields remain
                     // sequential. Concurrent history operations always target different messages.
-                    os.Input = await this.MaybeResolveAsync(os.Input, cancellation);
-                    os.Output = await this.MaybeResolveAsync(os.Output, cancellation);
-                    os.CustomStatus = await this.MaybeResolveAsync(os.CustomStatus, cancellation);
+                    os.Input = await this.ResolvePayloadAsync(os.Input, workItem, cancellation);
+                    os.Output = await this.ResolvePayloadAsync(os.Output, workItem, cancellation);
+                    os.CustomStatus = await this.ResolvePayloadAsync(os.CustomStatus, workItem, cancellation);
                 }
 
                 break;

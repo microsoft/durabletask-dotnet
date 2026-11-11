@@ -178,6 +178,14 @@ entity payloads through `PayloadStore.DownloadAsync`. `BlobPayloadStore` enforce
 the same policy there and in direct `DeleteAsync` calls and auto-purge activities.
 Uploads are unaffected by broader read/delete scopes.
 
+For worker deliveries, the receive watchdog times only transport reads. Each
+active payload download has its own 120-second budget, not an aggregate limit
+for the message or history. Receive-loop abandonment has one 30-second budget
+across all attempts and backoff; expiry reconnects the stream. Failed deliveries
+remain retryable. Worker shutdown and call disposal cancel active downloads.
+Custom stores must honor cancellation; started downloads are always drained.
+Management unary/history reads retain their existing cancellation behavior.
+
 Custom `PayloadStore` implementations own their own access policy; these options
 govern `BlobPayloadStore`. This package does not implement a Storage proxy service
 or a dashboard. Dashboard reads using the signed-in user's delegated Storage

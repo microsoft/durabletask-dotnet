@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
@@ -17,4 +18,14 @@ internal sealed class WorkItemPayloadException(P.WorkItem workItem, Exception in
     /// Gets the failed delivery. Its payload fields may be partially resolved.
     /// </summary>
     public P.WorkItem WorkItem { get; } = workItem;
+}
+
+/// <summary>Separates transport receipt from payload hydration on a worker stream.</summary>
+internal interface IWorkItemStreamReader
+{
+    /// <summary>Reads the next transport message without hydrating it.</summary>
+    Task<bool> MoveNextTransportAsync(CancellationToken cancellation);
+
+    /// <summary>Hydrates the received message before exposing it as the current item.</summary>
+    Task ResolveCurrentAsync(CancellationToken cancellation);
 }

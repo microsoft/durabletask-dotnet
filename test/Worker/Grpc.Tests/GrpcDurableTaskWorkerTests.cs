@@ -255,6 +255,298 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
+    public async Task ConsumeAsync_LateMessage_DoesNotTimeOutHealthyHydrationAsync()
+    {
+        // Arrange
+        TimeSpan readTimeout = TimeSpan.FromMilliseconds(500);
+        TaskCompletionSource downloading = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        P.WorkItem item = new() { ActivityRequest = new P.ActivityRequest { Input = "payload-token" } };
+        int reads = 0;
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
+        reader.SetupGet(r => r.Current).Returns(item);
+        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>()))
+            .Returns(async (CancellationToken cancellation) =>
+            {
+                if (++reads != 1)
+                {
+                    return false;
+                }
+
+                await Task.Delay(readTimeout / 2, cancellation);
+                return true;
+            });
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken("payload-token")).Returns(true);
+        store.Setup(s => s.DownloadAsync("payload-token", It.IsAny<CancellationToken>()))
+            .Returns(async (string _, CancellationToken cancellation) =>
+            {
+                downloading.TrySetResult();
+                await release.Task.WaitAsync(cancellation);
+                return "\"hydrated\"";
+            });
+        ScriptedWorkerCallInvoker invoker = new(
+            (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
+            (_, _) => CreateServerStreamingCall(reader.Object));
+        P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(invoker.Intercept(
+            new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions())));
+        using CancellationTokenSource shutdown = new();
+        using AsyncServerStreamingCall<P.WorkItem> call = client.GetWorkItems(new(), cancellationToken: shutdown.Token);
+        List<P.WorkItem> received = [];
+        int observations = 0;
+
+        // Act
+        Task<WorkItemStreamResult> consume = WorkItemStreamConsumer.ConsumeAsync(
+            call.ResponseStream, readTimeout, received.Add, () => observations++, shutdown.Token);
+        try
+        {
+            await downloading.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(readTimeout);
+            Assert.False(consume.IsCompleted);
+            Assert.Equal(1, observations);
+            release.TrySetResult();
+            WorkItemStreamResult result = await consume.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.Equal(WorkItemStreamOutcome.GracefulDrain, result.Outcome);
+            Assert.Equal("\"hydrated\"", Assert.Single(received).ActivityRequest.Input);
+            Assert.Equal(1, invoker.GetWorkItemsCallCount);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            release.TrySetResult();
+            await consume;
+        }
+    }
+
+    [Fact]
+    public async Task ProcessorExecuteAsync_DownloadTimeout_DrainsThenAbandonsOnSameStreamAsync()
+    {
+        // Arrange
+        using CancellationTokenSource shutdown = new();
+        TaskCompletionSource allDownloading = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource downloadCancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource drain = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<P.ActivityResponse> healthyCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        P.WorkItem failed = new()
+        {
+            CompletionToken = "failed",
+            OrchestratorRequest = new P.OrchestratorRequest
+            {
+                NewEvents =
+                {
+                    new P.HistoryEvent { ExecutionStarted = new P.ExecutionStartedEvent { Input = "blocked-token" } },
+                    new P.HistoryEvent { EventRaised = new P.EventRaisedEvent { Input = "stalled-token" } },
+                },
+            },
+        };
+        P.WorkItem healthy = new()
+        {
+            CompletionToken = "healthy",
+            ActivityRequest = new P.ActivityRequest
+            {
+                Name = "MyActivity", Input = "\"healthy\"",
+                OrchestrationInstance = new P.OrchestrationInstance { InstanceId = "instance", ExecutionId = "execution" },
+            },
+        };
+        Queue<P.WorkItem> deliveries = new([failed, healthy]);
+        P.WorkItem current = null!;
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
+        reader.SetupGet(r => r.Current).Returns(() => current);
+        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>())).Returns(async (CancellationToken cancellation) =>
+        {
+            if (deliveries.TryDequeue(out P.WorkItem? item))
+            {
+                current = item;
+                return true;
+            }
+
+            await Task.Delay(Timeout.Infinite, cancellation);
+            return false;
+        });
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken(It.IsAny<string>())).Returns((string value) => value.EndsWith("-token"));
+        store.Setup(s => s.DownloadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string token, CancellationToken cancellation) =>
+            {
+                if (token == "blocked-token")
+                {
+                    await drain.Task.WaitAsync(cancellation);
+                    return "\"drained\"";
+                }
+
+                allDownloading.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, cancellation);
+                }
+                finally
+                {
+                    downloadCancelled.TrySetResult();
+                }
+
+                return string.Empty;
+            });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store.Object, new LargePayloadStorageOptions());
+        List<CancellationTokenSource> deadlines = [];
+        typeof(PayloadInterceptor<object, object>).GetProperty("DownloadTimeoutStartedForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(interceptor, (Action<CancellationTokenSource, TimeSpan>)((source, budget) =>
+            {
+                Assert.Equal(TimeSpan.FromSeconds(120), budget);
+                deadlines.Add(source);
+            }));
+        int abandons = 0;
+        ScriptedWorkerCallInvoker invoker = new(
+            (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
+            (_, _) => CreateServerStreamingCall(reader.Object))
+        {
+            UnaryResponse = (operation, request, _) =>
+            {
+                if (operation == "CompleteActivityTask")
+                {
+                    healthyCompleted.TrySetResult(Assert.IsType<P.ActivityResponse>(request));
+                    return Task.FromResult<object>(new P.CompleteTaskResponse());
+                }
+
+                Assert.Equal("AbandonTaskOrchestratorWorkItem", operation);
+                Assert.Equal("failed", Assert.IsType<P.AbandonOrchestrationTaskRequest>(request).CompletionToken);
+                abandons++;
+                return Task.FromResult<object>(new P.AbandonOrchestrationTaskResponse());
+            },
+        };
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        Mock<IDurableTaskFactory> factory = new();
+        ITaskActivity? activity = new TestActivity();
+        factory.Setup(f => f.TryCreateActivity(It.IsAny<TaskName>(), It.IsAny<IServiceProvider>(), out activity)).Returns(true);
+        GrpcDurableTaskWorker worker = CreateWorker(new(), new(), NullLoggerFactory.Instance, factory.Object, services);
+        object processor = CreateProcessor(worker, new P.TaskHubSidecarService.TaskHubSidecarServiceClient(invoker.Intercept(interceptor)));
+
+        // Act
+        Task<ProcessorExitReason> processing = InvokeProcessorExecuteAsync(processor, shutdown.Token);
+        try
+        {
+            await allDownloading.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(2, deadlines.Count);
+            deadlines[1].Cancel();
+            await downloadCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(processing.IsCompleted);
+            Assert.Equal(0, abandons);
+            drain.TrySetResult();
+            P.ActivityResponse completed = await healthyCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.Equal("healthy", completed.CompletionToken);
+            Assert.Equal("\"healthy\"", completed.Result);
+            Assert.Null(completed.FailureDetails);
+            Assert.Equal(1, abandons);
+            Assert.Equal(1, invoker.GetWorkItemsCallCount);
+            Assert.Equal("\"drained\"", failed.OrchestratorRequest.NewEvents[0].ExecutionStarted.Input);
+            Assert.Equal("stalled-token", failed.OrchestratorRequest.NewEvents[1].EventRaised.Input);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            drain.TrySetResult();
+            await processing.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ProcessorExecuteAsync_AbandonTimeout_BoundsRpcRetriesAndBackoffAsync(int mode)
+    {
+        // Arrange
+        using CancellationTokenSource shutdown = new();
+        TaskCompletionSource abandoning = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource reconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken("payload-token")).Returns(true);
+        store.Setup(s => s.DownloadAsync("payload-token", It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("Download failed."));
+        List<CallOptions> attempts = [];
+        ScriptedWorkerCallInvoker invoker = new(
+            (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
+            (number, _) =>
+            {
+                if (number == 1)
+                {
+                    return CreateServerStreamingCall(new SequenceAsyncStreamReader<P.WorkItem>(new P.WorkItem
+                    {
+                        CompletionToken = "failed",
+                        ActivityRequest = new P.ActivityRequest { Input = "payload-token" },
+                    }));
+                }
+
+                reconnected.TrySetResult();
+                return CreateServerStreamingCall(new HangingAsyncStreamReader<P.WorkItem>(throwAsRpc: false));
+            })
+        {
+            UnaryResponse = async (operation, request, options) =>
+            {
+                Assert.Equal("AbandonTaskActivityWorkItem", operation);
+                Assert.Equal("failed", Assert.IsType<P.AbandonActivityTaskRequest>(request).CompletionToken);
+                attempts.Add(options);
+                if (mode == 2 || (mode == 1 && attempts.Count == 1))
+                {
+                    if (mode == 2)
+                    {
+                        abandoning.TrySetResult();
+                    }
+
+                    throw new RpcException(new Status(StatusCode.Unavailable, "Retry abandon."));
+                }
+
+                abandoning.TrySetResult();
+                await Task.Delay(Timeout.Infinite, options.CancellationToken);
+                return new P.AbandonActivityTaskResponse();
+            },
+        };
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.Internal.SilentDisconnectTimeout = TimeSpan.Zero;
+        grpcOptions.Internal.ReconnectBackoffBase = grpcOptions.Internal.ReconnectBackoffCap = TimeSpan.Zero;
+        grpcOptions.Internal.TransientRetryBackoffBase = grpcOptions.Internal.TransientRetryBackoffCap =
+            mode == 2 ? TimeSpan.FromMinutes(1) : TimeSpan.Zero;
+        object processor = CreateProcessor(CreateWorker(grpcOptions), new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
+            invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions()))));
+        CancellationTokenSource? deadline = null;
+        int budgets = 0;
+        processor.GetType().GetProperty("AbandonTimeoutStartedForTest", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(processor, (Action<CancellationTokenSource, TimeSpan>)((source, budget) =>
+            {
+                Assert.Equal(TimeSpan.FromSeconds(30), budget);
+                deadline = source;
+                budgets++;
+            }));
+
+        // Act
+        DateTime started = DateTime.UtcNow;
+        Task<ProcessorExitReason> processing = InvokeProcessorExecuteAsync(processor, shutdown.Token);
+        try
+        {
+            await abandoning.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(1, budgets);
+            Assert.Equal(mode == 1 ? 2 : 1, attempts.Count);
+            DateTime rpcDeadline = Assert.Single(attempts.Select(attempt => attempt.Deadline).Distinct())!.Value;
+            Assert.InRange(rpcDeadline, started.AddSeconds(29), DateTime.UtcNow.AddSeconds(30));
+            Assert.Single(attempts.Select(attempt => attempt.CancellationToken).Distinct());
+            Assert.IsType<CancellationTokenSource>(deadline).Cancel();
+            await reconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.All(attempts, attempt => Assert.True(attempt.CancellationToken.IsCancellationRequested));
+            Assert.Equal(mode == 1 ? 2 : 1, attempts.Count);
+            Assert.Equal(2, invoker.GetWorkItemsCallCount);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            await processing.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ConnectFailureThreshold_RecreatesConfiguredChannel()
     {
         // Arrange

@@ -101,6 +101,7 @@ internal static class WorkItemStreamConsumer
             cancellation, timeoutSource.Token);
 
         bool firstMessageObserved = false;
+        IWorkItemStreamReader? payloadReader = stream as IWorkItemStreamReader;
 
         void ObserveMessage()
         {
@@ -117,14 +118,24 @@ internal static class WorkItemStreamConsumer
             {
                 try
                 {
-                    if (!await stream.MoveNext(tokenSource.Token).ConfigureAwait(false))
+                    bool hasNext = payloadReader is null
+                        ? await stream.MoveNext(tokenSource.Token).ConfigureAwait(false)
+                        : await payloadReader.MoveNextTransportAsync(tokenSource.Token).ConfigureAwait(false);
+                    if (!hasNext)
                     {
                         break;
+                    }
+
+                    // The read watchdog measures only transport inactivity, never storage work.
+                    timeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);
+                    ObserveMessage();
+                    if (payloadReader is not null)
+                    {
+                        await payloadReader.ResolveCurrentAsync(cancellation).ConfigureAwait(false);
                     }
                 }
                 catch (WorkItemPayloadException ex) when (onPayloadFailure is not null)
                 {
-                    // No reads can consume health pings while abandonment is pending.
                     timeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);
                     ObserveMessage();
                     await onPayloadFailure(ex, cancellation).ConfigureAwait(false);
@@ -133,7 +144,6 @@ internal static class WorkItemStreamConsumer
                 }
 
                 ArmSilentDisconnectTimer();
-                ObserveMessage();
 
                 onItem(stream.Current);
             }

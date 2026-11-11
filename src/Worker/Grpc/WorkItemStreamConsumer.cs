@@ -66,8 +66,8 @@ internal static class WorkItemStreamConsumer
     /// detection.
     /// </param>
     /// <param name="onPayloadFailure">
-    /// Optional delivery-local recovery for a payload resolution failure. Exceptions from recovery
-    /// propagate to the caller for connection-level handling.
+    /// Optional delivery-local recovery outside the read watchdog, using the worker shutdown token.
+    /// Exceptions from recovery propagate to the caller for connection-level handling.
     /// </param>
     /// <returns>The classified outcome plus whether any message was observed.</returns>
     public static async Task<WorkItemStreamResult> ConsumeAsync(
@@ -104,8 +104,6 @@ internal static class WorkItemStreamConsumer
 
         void ObserveMessage()
         {
-            ArmSilentDisconnectTimer();
-
             if (!firstMessageObserved)
             {
                 firstMessageObserved = true;
@@ -126,11 +124,15 @@ internal static class WorkItemStreamConsumer
                 }
                 catch (WorkItemPayloadException ex) when (onPayloadFailure is not null)
                 {
+                    // No reads can consume health pings while abandonment is pending.
+                    timeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);
                     ObserveMessage();
-                    await onPayloadFailure(ex, tokenSource.Token).ConfigureAwait(false);
+                    await onPayloadFailure(ex, cancellation).ConfigureAwait(false);
+                    ArmSilentDisconnectTimer();
                     continue;
                 }
 
+                ArmSilentDisconnectTimer();
                 ObserveMessage();
 
                 onItem(stream.Current);

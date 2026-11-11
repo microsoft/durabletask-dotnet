@@ -28,6 +28,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
     public async Task HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync(int storageStatus)
     {
         // Arrange
+        using GrpcSidecarFixture isolatedSidecar = new();
         string token = $"test-blob://missing-{Guid.NewGuid():N}";
         TaskName orchestration = nameof(HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync);
         TaskName activity = "HydrationActivity";
@@ -46,6 +47,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         });
         await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
         {
+            worker.UseGrpc(isolatedSidecar.Channel);
             worker.AddTasks(tasks => tasks
                 .AddOrchestratorFunc<string, string>(orchestration, (context, input) =>
                     context.CallActivityAsync<string>(activity, input == "bad" ? new string('X', 1024) : input))
@@ -61,7 +63,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 }));
             worker.UseExternalizedPayloads();
             worker.Services.AddSingleton(store.Object);
-        }, servicesConfigure: services => services.AddExternalizedPayloadStore(options =>
+        }, client => client.UseGrpc(isolatedSidecar.Channel), services => services.AddExternalizedPayloadStore(options =>
         {
             options.ThresholdBytes = 16;
             options.ConnectionString = "UseDevelopmentStorage=true";
@@ -74,12 +76,14 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             await running.Task.WaitAsync(this.TimeoutToken);
             await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "bad");
             await downloadFailed.Task.WaitAsync(this.TimeoutToken);
-            string following = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "following");
-            OrchestrationMetadata followingResult = await server.Client.WaitForInstanceCompletionAsync(
-                following, getInputsAndOutputs: true, this.TimeoutToken);
+
+            // The test sidecar does not settle abandoned activities; free the healthy slot before starting another.
             release.TrySetResult();
             OrchestrationMetadata runningResult = await server.Client.WaitForInstanceCompletionAsync(
                 alreadyRunning, getInputsAndOutputs: true, this.TimeoutToken);
+            string following = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "following");
+            OrchestrationMetadata followingResult = await server.Client.WaitForInstanceCompletionAsync(
+                following, getInputsAndOutputs: true, this.TimeoutToken);
 
             // Assert
             Assert.Equal(OrchestrationRuntimeStatus.Completed, followingResult.RuntimeStatus);

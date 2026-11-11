@@ -104,7 +104,7 @@ public class GrpcDurableTaskWorkerTests
             (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
             (_, _) => CreateServerStreamingCall(reader.Object))
         {
-            UnaryResponse = (operation, request) =>
+            UnaryResponse = (operation, request, _) =>
             {
                 Assert.Equal(expectedOperation, operation);
                 (string Token, object Reply) result = request switch
@@ -120,7 +120,7 @@ public class GrpcDurableTaskWorkerTests
                     throw new RpcException(new Status(abandonStatus, "Abandon failed."));
                 }
 
-                return result.Reply;
+                return Task.FromResult(result.Reply);
             },
         };
         GrpcDurableTaskWorkerOptions options = new();
@@ -146,6 +146,112 @@ public class GrpcDurableTaskWorkerTests
         Assert.Equal(new[] { "failed" }, abandoned);
         Assert.Equal(abandonStatus is StatusCode.OK or StatusCode.NotFound ? 1 : 2, invoker.GetWorkItemsCallCount);
         store.Verify(s => s.DownloadAsync(Token, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ProcessorExecuteAsync_PendingPayloadRecovery_PreservesShutdownAndReadTimeoutAsync(
+        bool pendingAbandon, bool resume)
+    {
+        // Arrange
+        using CancellationTokenSource shutdown = new();
+        TaskCompletionSource<CancellationToken> pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        P.WorkItem failed = new()
+        {
+            CompletionToken = "failed",
+            ActivityRequest = new P.ActivityRequest { Input = "payload-token" },
+        };
+        int reads = 0;
+        CancellationToken readCancellation = default;
+        Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
+        reader.SetupGet(r => r.Current).Returns(failed);
+        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>())).Returns(async (CancellationToken cancellation) =>
+        {
+            readCancellation = cancellation;
+            if (++reads == 1)
+            {
+                return true;
+            }
+
+            await Task.Delay(Timeout.Infinite, cancellation);
+            return false;
+        });
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken("payload-token")).Returns(true);
+        store.Setup(s => s.DownloadAsync("payload-token", It.IsAny<CancellationToken>()))
+            .Returns(async (string _, CancellationToken cancellation) =>
+            {
+                if (pendingAbandon)
+                {
+                    throw new IOException("Download failed.");
+                }
+
+                await WaitForReleaseAsync(cancellation);
+                return "\"input\"";
+            });
+        int abandons = 0;
+        ScriptedWorkerCallInvoker invoker = new(
+            (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
+            (_, _) => CreateServerStreamingCall(reader.Object))
+        {
+            UnaryResponse = async (operation, request, options) =>
+            {
+                Assert.Equal("AbandonTaskActivityWorkItem", operation);
+                Assert.Equal("failed", Assert.IsType<P.AbandonActivityTaskRequest>(request).CompletionToken);
+                abandons++;
+                await WaitForReleaseAsync(options.CancellationToken);
+                return new P.AbandonActivityTaskResponse();
+            },
+        };
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.Internal.ChannelRecreateFailureThreshold = 1;
+        grpcOptions.Internal.SilentDisconnectTimeout = resume ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(30);
+        object processor = CreateProcessor(CreateWorker(grpcOptions), new P.TaskHubSidecarService.TaskHubSidecarServiceClient(
+            invoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions()))));
+
+        // Act
+        Task<ProcessorExitReason> processing = InvokeProcessorExecuteAsync(processor, shutdown.Token);
+        try
+        {
+            CancellationToken recoveryCancellation = await pending.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (resume)
+            {
+                await Task.Delay(grpcOptions.Internal.SilentDisconnectTimeout * 2);
+                Assert.False(readCancellation.IsCancellationRequested);
+                Assert.False(recoveryCancellation.IsCancellationRequested);
+                Assert.False(processing.IsCompleted);
+                release.TrySetResult();
+            }
+            else
+            {
+                shutdown.Cancel();
+            }
+
+            ProcessorExitReason reason = await processing.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.Equal(resume ? ProcessorExitReason.ChannelRecreateRequested : ProcessorExitReason.Shutdown, reason);
+            Assert.Equal(resume ? 2 : 1, reads);
+            Assert.Equal(pendingAbandon ? 1 : 0, abandons);
+            Assert.Equal(1, invoker.GetWorkItemsCallCount);
+            reader.VerifyGet(r => r.Current, Times.Once);
+            store.Verify(s => s.DownloadAsync("payload-token", It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            release.TrySetResult();
+            await processing.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        async Task WaitForReleaseAsync(CancellationToken cancellation)
+        {
+            pending.TrySetResult(cancellation);
+            await release.Task.WaitAsync(cancellation);
+        }
     }
 
     [Fact]
@@ -2298,7 +2404,7 @@ public class GrpcDurableTaskWorkerTests
 
         public int GetWorkItemsCallCount => Volatile.Read(ref this.getWorkItemsCallCount);
 
-        public Func<string, object, object>? UnaryResponse { get; init; }
+        public Func<string, object, CallOptions, Task<object>>? UnaryResponse { get; init; }
 
         public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
         {
@@ -2315,7 +2421,9 @@ public class GrpcDurableTaskWorkerTests
 
             if (this.UnaryResponse is { } respond)
             {
-                return CreateUnaryCall(Task.FromResult((TResponse)respond(method.Name, request)));
+                return CreateUnaryCall(ResponseAsync());
+
+                async Task<TResponse> ResponseAsync() => (TResponse)await respond(method.Name, request, options);
             }
 
             throw new NotSupportedException($"Unexpected unary method {method.FullName}.");

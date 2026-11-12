@@ -126,9 +126,7 @@ public static class GrpcOrchestrationRunner
 
         List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
-        Dictionary<string, object?> properties = request.Properties.ToDictionary(
-                pair => pair.Key,
-                pair => ProtoUtils.ConvertValueToObject(pair.Value));
+        Dictionary<string, object?> properties = ProtoUtils.ConvertOrchestrationProperties(request.Properties);
 
         OrchestratorExecutionResult? result = null;
 

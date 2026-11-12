@@ -281,6 +281,34 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task RestartAsync_ExplicitInstanceId_UnsupportedServer_DoesNotRestartOrCreateInstance()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+        string source = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false, cancellation: this.TimeoutToken);
+        await server.Client.WaitForInstanceStartAsync(source, this.TimeoutToken);
+        await server.Client.RaiseEventAsync(source, "event", cancellation: this.TimeoutToken);
+        OrchestrationMetadata original = await server.Client.WaitForInstanceCompletionAsync(source, this.TimeoutToken);
+        List<OrchestrationMetadata> before = await server.Client.GetAllInstancesAsync().ToListAsync(this.TimeoutToken);
+        string target = Guid.NewGuid().ToString("N");
+
+        // Act
+        Func<Task> act = () => server.Client.RestartAsync(
+            source, target, null, this.TimeoutToken);
+
+        // Assert
+        await act.Should().ThrowAsync<NotSupportedException>();
+        List<OrchestrationMetadata> after = await server.Client.GetAllInstancesAsync().ToListAsync(this.TimeoutToken);
+        after.Select(instance => instance.InstanceId).Should().BeEquivalentTo(before.Select(instance => instance.InstanceId));
+        (await server.Client.GetInstanceAsync(target, cancellation: this.TimeoutToken)).Should().BeNull();
+        OrchestrationMetadata? sourceAfter = await server.Client.GetInstanceAsync(source, cancellation: this.TimeoutToken);
+        sourceAfter.Should().NotBeNull();
+        sourceAfter!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        sourceAfter.CreatedAt.Should().Be(original.CreatedAt);
+    }
+
+    [Fact]
     public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // 1-minute timeout

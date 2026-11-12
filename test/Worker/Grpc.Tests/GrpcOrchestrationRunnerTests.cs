@@ -4,6 +4,7 @@
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -496,6 +497,80 @@ public class GrpcOrchestrationRunnerTests
         Assert.Single(response.Actions);
         Assert.NotNull(response.Actions[0].CompleteOrchestration);
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("original-instance", false)]
+    [InlineData("previous-clone", false)]
+    [InlineData("dt:2026-01-01T00:00:00.0000000Z", false)]
+    [InlineData("dto:2026-01-01T00:00:00.0000000+00:00", false)]
+    [InlineData(null, true)]
+    [InlineData("original-instance", true)]
+    [InlineData("previous-clone", true)]
+    [InlineData("dt:2026-01-01T00:00:00.0000000Z", true)]
+    [InlineData("dto:2026-01-01T00:00:00.0000000+00:00", true)]
+    public void SourceInstanceId_FlowsThroughPropertiesOnExecutionAndReplay(string? source, bool replay)
+    {
+        // Arrange
+        Protobuf.HistoryEvent started = new()
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new()
+            {
+                Name = "CloneOrchestration",
+                Input = "\"original-input\"",
+                OrchestrationInstance = new()
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest request = CreateOrchestratorRequest(replay ? [] : [started]);
+        if (replay)
+        {
+            request.PastEvents.Add(started);
+        }
+
+        if (source is not null)
+        {
+            request.Properties.Add("sourceInstanceId", Value.ForString(source));
+        }
+
+        request.Properties.Add("dateTime", Value.ForString("dt:2026-01-01T00:00:00.0000000Z"));
+        request.Properties.Add("dateTimeOffset", Value.ForString("dto:2026-01-01T00:00:00.0000000+00:00"));
+        string? actualSource = null;
+        bool? actualReplay = null;
+        string? actualInput = null;
+        object? actualDateTime = null;
+        object? actualDateTimeOffset = null;
+        ITaskOrchestrator orchestrator = FuncTaskOrchestrator.Create<string, string?>((context, _) =>
+        {
+            actualSource = context.SourceInstanceId;
+            actualReplay = context.IsReplaying;
+            actualInput = context.GetInput<string>();
+            actualDateTime = context.Properties["dateTime"];
+            actualDateTimeOffset = context.Properties["dateTimeOffset"];
+            return Task.FromResult(context.SourceInstanceId);
+        });
+
+        // Act
+        string encodedResponse = GrpcOrchestrationRunner.LoadAndRun(
+            Convert.ToBase64String(request.ToByteArray()), orchestrator);
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(
+            Convert.FromBase64String(encodedResponse));
+
+        // Assert
+        actualSource.Should().Be(source);
+        actualReplay.Should().Be(replay);
+        actualInput.Should().Be("original-input");
+        actualDateTime.Should().BeOfType<DateTime>().Which.Should().Be(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        actualDateTimeOffset.Should().BeOfType<DateTimeOffset>().Which.Should().Be(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].CompleteOrchestration.OrchestrationStatus.Should().Be(Protobuf.OrchestrationStatus.Completed);
+        JsonDataConverter.Default.Deserialize<string>(response.Actions[0].CompleteOrchestration.Result).Should().Be(source);
     }
 
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)

@@ -26,6 +26,20 @@ public abstract class TaskOrchestrationContext
     public abstract string InstanceId { get; }
 
     /// <summary>
+    /// Gets the immediate source instance ID when this orchestration was restarted as a clone, or <c>null</c>
+    /// when no source lineage was supplied by the backend.
+    /// </summary>
+    /// <remarks>
+    /// This is distinct from <see cref="Parent"/> and is not inherited by sub-orchestrations.
+    /// Cloning a clone identifies that clone as the immediate source, not its original ancestor.
+    /// The ID is an opaque string, even when it resembles a serialized timestamp.
+    /// </remarks>
+    public virtual string? SourceInstanceId =>
+        this.Properties.TryGetValue("sourceInstanceId", out object? source) && source is string instanceId
+            ? instanceId
+            : null;
+
+    /// <summary>
     /// Gets the parent instance or <c>null</c> if there is no parent orchestration.
     /// </summary>
     public abstract ParentOrchestrationInstance? Parent { get; }

@@ -10,6 +10,7 @@ using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Tracing;
 using Microsoft.DurableTask.Worker;
@@ -48,6 +49,84 @@ public class GrpcDurableTaskWorkerTests
     static readonly MethodInfo OnRunOrchestratorAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("OnRunOrchestratorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("original-instance")]
+    [InlineData("previous-clone")]
+    [InlineData("dt:2026-01-01T00:00:00.0000000Z")]
+    [InlineData("dto:2026-01-01T00:00:00.0000000+00:00")]
+    public async Task OnRunOrchestratorAsync_Properties_ExposeImmediateSource(string? source)
+    {
+        // Arrange
+        P.OrchestratorRequest request = new()
+        {
+            InstanceId = "clone",
+            ExecutionId = "clone-execution",
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+                    ExecutionStarted = new P.ExecutionStartedEvent
+                    {
+                        Name = "CloneOrchestration",
+                        OrchestrationInstance = new P.OrchestrationInstance
+                        {
+                            InstanceId = "clone",
+                            ExecutionId = "clone-execution",
+                        },
+                    },
+                },
+            },
+        };
+        if (source is not null)
+        {
+            request.Properties.Add("sourceInstanceId", Value.ForString(source));
+        }
+
+        request.Properties.Add("dateTime", Value.ForString("dt:2026-01-01T00:00:00.0000000Z"));
+        request.Properties.Add("dateTimeOffset", Value.ForString("dto:2026-01-01T00:00:00.0000000+00:00"));
+        P.OrchestratorResponse? completed = null;
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict, new object[] { Mock.Of<CallInvoker>() });
+        clientMock.Setup(client => client.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(), It.IsAny<Metadata>(), It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<P.OrchestratorResponse, Metadata, DateTime?, CancellationToken>(
+                (response, _, _, _) => completed = response)
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        object? actualDateTime = null;
+        object? actualDateTimeOffset = null;
+        ITaskOrchestrator? orchestrator = FuncTaskOrchestrator.Create<object?, string?>((context, _) =>
+        {
+            actualDateTime = context.Properties["dateTime"];
+            actualDateTimeOffset = context.Properties["dateTimeOffset"];
+            return Task.FromResult(context.SourceInstanceId);
+        });
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        factoryMock.Setup(factory => factory.TryCreateOrchestrator(
+                new TaskName("CloneOrchestration"), It.IsAny<IServiceProvider>(), out orchestrator))
+            .Returns(true);
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(), new DurableTaskWorkerOptions(), NullLoggerFactory.Instance,
+            factoryMock.Object, services);
+
+        // Act
+        await InvokeOnRunOrchestratorAsync(
+            CreateProcessor(worker, clientMock.Object), request, "completion-token", CancellationToken.None);
+
+        // Assert
+        completed.Should().NotBeNull();
+        completed!.Actions.Should().ContainSingle();
+        completed.Actions[0].CompleteOrchestration.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Completed);
+        JsonDataConverter.Default.Deserialize<string>(completed.Actions[0].CompleteOrchestration.Result).Should().Be(source);
+        actualDateTime.Should().BeOfType<DateTime>().Which.Should().Be(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        actualDateTimeOffset.Should().BeOfType<DateTimeOffset>().Which.Should().Be(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        clientMock.VerifyAll();
+        factoryMock.VerifyAll();
+    }
 
     [Fact]
     public async Task ExecuteAsync_ConnectFailureThreshold_RecreatesConfiguredChannel()

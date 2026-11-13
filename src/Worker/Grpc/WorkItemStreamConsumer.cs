@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Grpc.Internal;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -41,114 +40,109 @@ internal static class WorkItemStreamConsumer
     // values are still treated as "effectively infinite" without depending on framework-specific edge cases.
     static readonly TimeSpan MaxSupportedCancelAfterTimeout = TimeSpan.FromMilliseconds(int.MaxValue - 1d);
 
-#if NET8_0_OR_GREATER
-    /// <summary>Consumes a work-item stream until shutdown, silent disconnect, or graceful drain.</summary>
-    /// <param name="stream">The response reader.</param>
-    /// <param name="silentDisconnectTimeout">Transport inactivity timeout; non-positive values disable detection.</param>
-    /// <param name="onItem">Synchronous dispatch after successful payload resolution.</param>
-    /// <param name="onFirstMessage">Invoked once on the first successful transport receipt.</param>
-    /// <param name="cancellation">Worker shutdown cancellation.</param>
-    /// <param name="timeProvider">Clock used for read deadlines.</param>
-    /// <param name="onPayloadFailure">Delivery recovery using worker cancellation; its errors propagate to the caller.</param>
-    /// <returns>The termination outcome and whether a message was received.</returns>
-#else
-    /// <summary>Consumes a work-item stream until shutdown, silent disconnect, or graceful drain.</summary>
-    /// <param name="stream">The response reader.</param>
-    /// <param name="silentDisconnectTimeout">Transport inactivity timeout; non-positive values disable detection.</param>
-    /// <param name="onItem">Synchronous dispatch after successful payload resolution.</param>
-    /// <param name="onFirstMessage">Invoked once on the first successful transport receipt.</param>
-    /// <param name="cancellation">Worker shutdown cancellation.</param>
-    /// <param name="onPayloadFailure">Delivery recovery using worker cancellation; its errors propagate to the caller.</param>
-    /// <returns>The termination outcome and whether a message was received.</returns>
-#endif
+    /// <summary>
+    /// Consume a work-item stream until shutdown, silent disconnect, or graceful drain.
+    /// </summary>
+    /// <param name="openStream">
+    /// Factory that opens the stream with the supplied linked-cancellation token. Production passes
+    /// <c>ct => stream.ResponseStream.ReadAllAsync(ct)</c>; tests pass arbitrary fakes.
+    /// </param>
+    /// <param name="silentDisconnectTimeout">
+    /// How long to wait between successive items (or health pings) before treating the stream as
+    /// silently disconnected. Non-positive values disable detection entirely.
+    /// </param>
+    /// <param name="onItem">
+    /// Synchronous per-item dispatch. Invoked once per delivered work item, after the silent-disconnect
+    /// timer has been re-armed.
+    /// </param>
+    /// <param name="onFirstMessage">
+    /// Optional callback invoked exactly once when the first message is observed. Used by callers to
+    /// reset retry counters that should only count consecutive transport failures.
+    /// </param>
+    /// <param name="cancellation">Outer worker cancellation token.</param>
+    /// <param name="onSilentDisconnectTimerArmed">
+    /// Test-only observability hook invoked synchronously every time the silent-disconnect timer is
+    /// (re-)armed -- once before the read loop starts, and once per item, immediately before that
+    /// item is dispatched. Always <see langword="null"/> in production; lets tests prove the
+    /// per-item reset actually happens (and in what order relative to dispatch) without depending on
+    /// real elapsed time. Never invoked when <paramref name="silentDisconnectTimeout"/> disables
+    /// detection.
+    /// </param>
+    /// <returns>The classified outcome plus whether any message was observed.</returns>
     public static async Task<WorkItemStreamResult> ConsumeAsync(
-        IAsyncStreamReader<P.WorkItem> stream,
+        Func<CancellationToken, IAsyncEnumerable<P.WorkItem>> openStream,
         TimeSpan silentDisconnectTimeout,
         Action<P.WorkItem> onItem,
         Action? onFirstMessage,
         CancellationToken cancellation,
-#if NET8_0_OR_GREATER
-        TimeProvider? timeProvider = null,
-#endif
-        Func<WorkItemPayloadException, CancellationToken, Task>? onPayloadFailure = null)
+        Action? onSilentDisconnectTimerArmed = null)
     {
         bool silentDisconnectEnabled = silentDisconnectTimeout > TimeSpan.Zero;
 
-        // Use a fresh deadline for each read. Successful transport receipt wins even if its
-        // timeout fires before the awaiting continuation runs; it must not poison later reads.
+        // Clamp enormous values once up-front so the timer-reset path can simply re-arm the same window.
         TimeSpan effectiveTimeout = ClampCancelAfterTimeout(silentDisconnectTimeout);
 
-        bool firstMessageObserved = false;
-        IWorkItemStreamReader? payloadReader = stream as IWorkItemStreamReader;
-
-        void ObserveMessage()
+        using CancellationTokenSource timeoutSource = new();
+        void ArmSilentDisconnectTimer()
         {
-            if (!firstMessageObserved)
+            if (silentDisconnectEnabled)
             {
-                firstMessageObserved = true;
-                onFirstMessage?.Invoke();
+                timeoutSource.CancelAfter(effectiveTimeout);
+                onSilentDisconnectTimerArmed?.Invoke();
             }
         }
 
+        // Arm once before reading so the initial gap before the first message is also bounded.
+        ArmSilentDisconnectTimer();
+
+        using CancellationTokenSource tokenSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellation, timeoutSource.Token);
+
+        bool firstMessageObserved = false;
+
         try
         {
-            while (true)
+            await foreach (P.WorkItem workItem in openStream(tokenSource.Token).ConfigureAwait(false))
             {
-#if NET8_0_OR_GREATER
-                using CancellationTokenSource timeoutSource = new(
-                    silentDisconnectEnabled ? effectiveTimeout : Timeout.InfiniteTimeSpan,
-                    timeProvider ?? TimeProvider.System);
-#else
-                using CancellationTokenSource timeoutSource = new(
-                    silentDisconnectEnabled ? effectiveTimeout : Timeout.InfiniteTimeSpan);
-#endif
-                using CancellationTokenSource tokenSource = CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellation, timeoutSource.Token);
-                void OnMessageReceived()
+                ArmSilentDisconnectTimer();
+
+                if (!firstMessageObserved)
                 {
-                    timeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);
-                    ObserveMessage();
+                    firstMessageObserved = true;
+                    onFirstMessage?.Invoke();
                 }
 
-                try
-                {
-                    bool hasNext = payloadReader is null
-                        ? await stream.MoveNext(tokenSource.Token).ConfigureAwait(false)
-                        : await payloadReader.MoveNextAsync(OnMessageReceived, tokenSource.Token, cancellation).ConfigureAwait(false);
-                    if (!hasNext)
-                    {
-                        break;
-                    }
-
-                    OnMessageReceived();
-                }
-                catch (WorkItemPayloadException ex) when (onPayloadFailure is not null)
-                {
-                    OnMessageReceived();
-                    await onPayloadFailure(ex, cancellation).ConfigureAwait(false);
-                    continue;
-                }
-                catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested && !cancellation.IsCancellationRequested)
-                {
-                    return new WorkItemStreamResult(WorkItemStreamOutcome.SilentDisconnect, firstMessageObserved);
-                }
-                catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled
-                    && timeoutSource.IsCancellationRequested && !cancellation.IsCancellationRequested)
-                {
-                    return new WorkItemStreamResult(WorkItemStreamOutcome.SilentDisconnect, firstMessageObserved);
-                }
-
-                onItem(stream.Current);
+                onItem(workItem);
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
             // Worker is shutting down.
         }
+        catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+        {
+            // Silent-disconnect timer fired and grpc-dotnet surfaced cancellation as OCE
+            // (when GrpcChannelOptions.ThrowOperationCanceledOnCancellation == true).
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled
+            && timeoutSource.IsCancellationRequested
+            && !cancellation.IsCancellationRequested)
+        {
+            // Silent-disconnect timer fired mid-MoveNext. By default
+            // (GrpcChannelOptions.ThrowOperationCanceledOnCancellation == false), grpc-dotnet
+            // surfaces the linked cancellation as RpcException(Cancelled) rather than OCE.
+            // Without this catch the exception would propagate past the silent-disconnect
+            // branch and the recreate path would never fire.
+        }
 
         if (cancellation.IsCancellationRequested)
         {
             return new WorkItemStreamResult(WorkItemStreamOutcome.Shutdown, firstMessageObserved);
+        }
+
+        if (timeoutSource.IsCancellationRequested)
+        {
+            return new WorkItemStreamResult(WorkItemStreamOutcome.SilentDisconnect, firstMessageObserved);
         }
 
         return new WorkItemStreamResult(WorkItemStreamOutcome.GracefulDrain, firstMessageObserved);

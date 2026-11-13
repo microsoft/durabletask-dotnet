@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Runtime.CompilerServices;
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Grpc;
-using Microsoft.Extensions.Time.Testing;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -16,7 +16,7 @@ public class WorkItemStreamConsumerTests
     public async Task EmptyStream_ReturnsGracefulDrain()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: EmptyStream(),
+            openStream: _ => EmptyStream(),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
             onFirstMessage: () => throw new InvalidOperationException("onFirstMessage should not be invoked"),
@@ -35,7 +35,7 @@ public class WorkItemStreamConsumerTests
         int firstMessageCount = 0;
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: StreamOf(item1, item2),
+            openStream: _ => StreamOf(item1, item2),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: received.Add,
             onFirstMessage: () => firstMessageCount++,
@@ -51,7 +51,7 @@ public class WorkItemStreamConsumerTests
     public async Task VeryLargeSilentDisconnectTimeout_IsClamped_AndStreamCanStillComplete()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: EmptyStream(),
+            openStream: _ => EmptyStream(),
             silentDisconnectTimeout: TimeSpan.FromDays(365),
             onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
             onFirstMessage: null,
@@ -65,7 +65,7 @@ public class WorkItemStreamConsumerTests
     public async Task HangingStream_SurfacingOce_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: new HangingStreamReader(throwAsRpc: false),
+            openStream: ct => HangingStream(ct, throwAsRpc: false),
             silentDisconnectTimeout: ShortTimeout,
             onItem: _ => { },
             onFirstMessage: null,
@@ -85,7 +85,7 @@ public class WorkItemStreamConsumerTests
     public async Task HangingStream_SurfacingRpcCancelled_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: new HangingStreamReader(throwAsRpc: true),
+            openStream: ct => HangingStream(ct, throwAsRpc: true),
             silentDisconnectTimeout: ShortTimeout,
             onItem: _ => { },
             onFirstMessage: null,
@@ -104,7 +104,7 @@ public class WorkItemStreamConsumerTests
         outer.CancelAfter(ShortTimeout);
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: new HangingStreamReader(throwAsRpc: false),
+            openStream: ct => HangingStream(ct, throwAsRpc: false),
             silentDisconnectTimeout: TimeSpan.FromSeconds(30),
             onItem: _ => { },
             onFirstMessage: null,
@@ -126,7 +126,7 @@ public class WorkItemStreamConsumerTests
         outer.CancelAfter(ShortTimeout);
 
         Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            stream: new HangingStreamReader(throwAsRpc: true),
+            openStream: ct => HangingStream(ct, throwAsRpc: true),
             silentDisconnectTimeout: TimeSpan.FromSeconds(30),
             onItem: _ => { },
             onFirstMessage: null,
@@ -138,44 +138,62 @@ public class WorkItemStreamConsumerTests
     [Fact]
     public async Task PerItem_HeartbeatReset_KeepsTimerAlive()
     {
-        // Arrange
-        FakeTimeProvider clock = new();
-        int remaining = 5;
-        int received = 0;
-        Mock<IAsyncStreamReader<P.WorkItem>> reader = new();
-        reader.SetupGet(r => r.Current).Returns(new P.WorkItem { HealthPing = new P.HealthPing() });
-        reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>())).Returns((CancellationToken cancellation) =>
+        // Proves the per-item timer reset -- not just a single arm at loop start -- is what keeps the
+        // stream alive. Earlier versions of this test tried to prove the reset by racing real per-item
+        // delays (each comfortably under the timeout) against the real silent-disconnect timeout (so
+        // their sum comfortably exceeded it). That was still flaky under CI scheduling pressure: any
+        // continuation between the "item processed" signal and the next write could be delayed by the
+        // thread pool/scheduler, silently inflating an intended-short gap past the timeout even though
+        // production was correct.
+        //
+        // This version removes wall-clock timing from the assertion entirely. ConsumeAsync exposes a
+        // test-only observability hook that fires every time the silent-disconnect timer is (re-)armed:
+        // once before the read loop starts, and once per item, immediately before that item is
+        // dispatched to onItem. By recording the exact interleaving of "armed" and "item" events, the
+        // test proves the structural guarantee directly -- an arm precedes every item, and the total arm
+        // count is itemCount + 1 -- instead of inferring it from elapsed real time. A regression that
+        // only arms the timer once at loop start (and never re-arms it per item) fails this assertion
+        // deterministically, with no dependency on scheduler timing.
+        const int itemCount = 5;
+        List<string> events = new();
+        int itemIndex = 0;
+
+        P.WorkItem[] items = new P.WorkItem[itemCount];
+        for (int i = 0; i < itemCount; i++)
         {
-            if (remaining-- == 0)
-            {
-                return Task.FromResult(false);
-            }
+            items[i] = new P.WorkItem { HealthPing = new P.HealthPing() };
+        }
 
-            clock.Advance(TimeSpan.FromSeconds(119));
-            cancellation.ThrowIfCancellationRequested();
-            return Task.FromResult(true);
-        });
-
-        // Act
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: reader.Object,
-            silentDisconnectTimeout: TimeSpan.FromSeconds(120),
-            onItem: _ => received++,
+            openStream: _ => StreamOf(items),
+            silentDisconnectTimeout: TimeSpan.FromMilliseconds(500),
+            onItem: _ => events.Add($"item{itemIndex++}"),
             onFirstMessage: null,
             cancellation: CancellationToken.None,
-            timeProvider: clock);
+            onSilentDisconnectTimerArmed: () => events.Add("armed"));
 
-        // Assert
         result.Outcome.Should().Be(WorkItemStreamOutcome.GracefulDrain);
         result.FirstMessageObserved.Should().BeTrue();
-        received.Should().Be(5);
+
+        // 1 initial arm (before the loop starts) + 1 re-arm per item.
+        events.Count(e => e == "armed").Should().Be(itemCount + 1);
+
+        // Every item must be immediately preceded by its own re-arm, and the very first event overall
+        // is the initial pre-loop arm.
+        events[0].Should().Be("armed");
+        for (int i = 0; i < itemCount; i++)
+        {
+            int armedIndex = 1 + (i * 2);
+            events[armedIndex].Should().Be("armed", "item {0} must be preceded by a timer re-arm", i);
+            events[armedIndex + 1].Should().Be($"item{i}");
+        }
     }
 
     [Fact]
     public async Task UnrelatedRpcException_Propagates()
     {
         Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            stream: ThrowingStream(new RpcException(new Status(StatusCode.Unavailable, "boom"))),
+            openStream: _ => ThrowingStream(new RpcException(new Status(StatusCode.Unavailable, "boom"))),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: _ => { },
             onFirstMessage: null,
@@ -195,7 +213,7 @@ public class WorkItemStreamConsumerTests
 
         // Act
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            stream: new HangingStreamReader(throwAsRpc: false),
+            openStream: ct => HangingStream(ct, throwAsRpc: false),
             silentDisconnectTimeout: TimeSpan.FromMilliseconds(timeoutMilliseconds),
             onItem: _ => { },
             onFirstMessage: null,
@@ -205,45 +223,55 @@ public class WorkItemStreamConsumerTests
         result.Outcome.Should().Be(WorkItemStreamOutcome.Shutdown);
     }
 
-    static IAsyncStreamReader<P.WorkItem> EmptyStream() => StreamOf();
-
-    static IAsyncStreamReader<P.WorkItem> StreamOf(params P.WorkItem[] items) => new SequenceStreamReader(items);
-
-    static IAsyncStreamReader<P.WorkItem> ThrowingStream(Exception ex) => new ThrowingStreamReader(ex);
-
-    sealed class SequenceStreamReader(P.WorkItem[] items) : IAsyncStreamReader<P.WorkItem>
+#pragma warning disable CS1998 // Async method lacks 'await' operators
+    static async IAsyncEnumerable<P.WorkItem> EmptyStream()
     {
-        int index = -1;
-
-        public P.WorkItem Current => items[this.index];
-
-        public Task<bool> MoveNext(CancellationToken cancellationToken) => Task.FromResult(++this.index < items.Length);
+        yield break;
     }
 
-    sealed class HangingStreamReader(bool throwAsRpc) : IAsyncStreamReader<P.WorkItem>
+    static async IAsyncEnumerable<P.WorkItem> StreamOf(params P.WorkItem[] items)
     {
-        public P.WorkItem Current => throw new InvalidOperationException("No item is available for a hanging stream.");
-
-        public async Task<bool> MoveNext(CancellationToken cancellationToken)
+        foreach (P.WorkItem item in items)
         {
-            try
-            {
-                await Task.Delay(Timeout.Infinite, cancellationToken);
-            }
-            catch (OperationCanceledException) when (throwAsRpc)
-            {
-                // Mimic grpc-dotnet's default surface shape for linked-token cancellation.
-                throw new RpcException(new Status(StatusCode.Cancelled, "stream cancelled"));
-            }
-
-            return false;
+            yield return item;
         }
     }
 
-    sealed class ThrowingStreamReader(Exception exception) : IAsyncStreamReader<P.WorkItem>
+    static IAsyncEnumerable<P.WorkItem> ThrowingStream(Exception ex) => new ThrowingAsyncEnumerable(ex);
+#pragma warning restore CS1998
+
+    static async IAsyncEnumerable<P.WorkItem> HangingStream(
+        [EnumeratorCancellation] CancellationToken ct,
+        bool throwAsRpc)
     {
+        try
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+        }
+        catch (OperationCanceledException) when (throwAsRpc)
+        {
+            // Mimic grpc-dotnet's default surface shape for linked-token cancellation.
+            throw new RpcException(new Status(StatusCode.Cancelled, "stream cancelled"));
+        }
+
+        yield break;
+    }
+
+    sealed class ThrowingAsyncEnumerable : IAsyncEnumerable<P.WorkItem>, IAsyncEnumerator<P.WorkItem>
+    {
+        readonly Exception exception;
+
+        public ThrowingAsyncEnumerable(Exception exception)
+        {
+            this.exception = exception;
+        }
+
         public P.WorkItem Current => throw new InvalidOperationException("No current item is available for a throwing stream.");
 
-        public Task<bool> MoveNext(CancellationToken cancellationToken) => Task.FromException<bool>(exception);
+        public IAsyncEnumerator<P.WorkItem> GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
+
+        public ValueTask DisposeAsync() => default;
+
+        public ValueTask<bool> MoveNextAsync() => ValueTask.FromException<bool>(this.exception);
     }
 }

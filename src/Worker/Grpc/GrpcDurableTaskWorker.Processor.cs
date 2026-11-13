@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
@@ -38,9 +39,6 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
-#if NET8_0_OR_GREATER
-        readonly TimeProvider timeProvider;
-#endif
         readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
@@ -51,9 +49,6 @@ sealed partial class GrpcDurableTaskWorker
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
-#if NET8_0_OR_GREATER
-            this.timeProvider = worker.services.GetService<TimeProvider>() ?? TimeProvider.System;
-#endif
             this.orchestrationFilter = orchestrationFilter;
             this.exceptionPropertiesProvider = exceptionPropertiesProvider is not null
                 ? new ExceptionPropertiesProviderAdapter(exceptionPropertiesProvider)
@@ -393,18 +388,14 @@ sealed partial class GrpcDurableTaskWorker
             // window. If that fires we treat the stream as silently disconnected and reconnect.
             TimeSpan silentDisconnectTimeout = this.internalOptions.SilentDisconnectTimeout;
 
-            // Read directly so a delivery-local hydration failure does not terminate a ReadAllAsync
-            // iterator. A false MoveNext still ends consumption permanently (no drain tight-spin).
+            // Catch delivery failures inside the iterator; a faulted ReadAllAsync cannot be resumed.
+            // A false transport read still ends this stream permanently.
             WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-                stream.ResponseStream,
+                ct => this.ReadWorkItemsAsync(stream.ResponseStream, ct),
                 silentDisconnectTimeout,
                 workItem => this.DispatchWorkItem(workItem, cancellation),
                 onFirstMessage,
-                cancellation,
-#if NET8_0_OR_GREATER
-                timeProvider: this.timeProvider,
-#endif
-                onPayloadFailure: this.OnWorkItemPayloadFailureAsync);
+                cancellation);
 
             switch (result.Outcome)
             {
@@ -435,6 +426,70 @@ sealed partial class GrpcDurableTaskWorker
                     }
 
                     return;
+            }
+        }
+
+        async IAsyncEnumerable<P.WorkItem> ReadWorkItemsAsync(
+            IAsyncStreamReader<P.WorkItem> reader,
+            [EnumeratorCancellation] CancellationToken cancellation)
+        {
+            while (true)
+            {
+                bool hasNext;
+                try
+                {
+                    hasNext = await reader.MoveNext(cancellation).ConfigureAwait(false);
+                }
+                catch (WorkItemPayloadException ex)
+                {
+                    await this.AbandonUnresolvedWorkItemAsync(ex, cancellation).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (!hasNext)
+                {
+                    yield break;
+                }
+
+                yield return reader.Current;
+            }
+        }
+
+        async Task AbandonUnresolvedWorkItemAsync(WorkItemPayloadException exception, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            P.WorkItem workItem = exception.WorkItem;
+            string instanceId = workItem.OrchestratorRequest?.InstanceId
+                ?? workItem.ActivityRequest?.OrchestrationInstance?.InstanceId
+                ?? workItem.EntityRequest?.InstanceId
+                ?? workItem.EntityRequestV2?.InstanceId
+                ?? string.Empty;
+            this.Logger.UnexpectedError(exception, instanceId);
+            try
+            {
+                await this.ExecuteWithRetryAsync(
+                    () => workItem.RequestCase switch
+                    {
+                        P.WorkItem.RequestOneofCase.OrchestratorRequest =>
+                            this.client.AbandonTaskOrchestratorWorkItemAsync(
+                                new P.AbandonOrchestrationTaskRequest { CompletionToken = workItem.CompletionToken },
+                                cancellationToken: cancellation).ResponseAsync,
+                        P.WorkItem.RequestOneofCase.ActivityRequest =>
+                            this.client.AbandonTaskActivityWorkItemAsync(
+                                new P.AbandonActivityTaskRequest { CompletionToken = workItem.CompletionToken },
+                                cancellationToken: cancellation).ResponseAsync,
+                        P.WorkItem.RequestOneofCase.EntityRequest or P.WorkItem.RequestOneofCase.EntityRequestV2 =>
+                            this.client.AbandonTaskEntityWorkItemAsync(
+                                new P.AbandonEntityTaskRequest { CompletionToken = workItem.CompletionToken },
+                                cancellationToken: cancellation).ResponseAsync,
+                        _ => throw new InvalidOperationException($"Cannot abandon unresolved {workItem.RequestCase}."),
+                    },
+                    "AbandonUnresolvedWorkItem",
+                    cancellation);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound && !cancellation.IsCancellationRequested)
+            {
+                this.Logger.WorkItemOwnershipLost(workItem.RequestCase.ToString(), workItem.CompletionToken, ex);
             }
         }
 
@@ -626,63 +681,6 @@ sealed partial class GrpcDurableTaskWorker
                     }
                 }
             });
-        }
-
-        async Task OnWorkItemPayloadFailureAsync(WorkItemPayloadException exception, CancellationToken cancellation)
-        {
-            P.WorkItem workItem = exception.WorkItem;
-            string instanceId =
-                workItem.OrchestratorRequest?.InstanceId ??
-                workItem.ActivityRequest?.OrchestrationInstance?.InstanceId ??
-                workItem.EntityRequest?.InstanceId ??
-                workItem.EntityRequestV2?.InstanceId ??
-                string.Empty;
-            this.Logger.UnexpectedError(exception, instanceId);
-            TimeSpan budget = TimeSpan.FromSeconds(30);
-#if NET8_0_OR_GREATER
-            DateTime deadline = this.timeProvider.GetUtcNow().UtcDateTime.Add(budget);
-            using CancellationTokenSource timeout = new(budget, this.timeProvider);
-#else
-            DateTime deadline = DateTime.UtcNow.Add(budget);
-            using CancellationTokenSource timeout = new(budget);
-#endif
-            using CancellationTokenSource abandon = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeout.Token);
-            try
-            {
-                await this.ExecuteWithRetryAsync(
-                    () => workItem.RequestCase switch
-                    {
-                        P.WorkItem.RequestOneofCase.OrchestratorRequest =>
-                            this.client.AbandonTaskOrchestratorWorkItemAsync(
-                                new P.AbandonOrchestrationTaskRequest { CompletionToken = workItem.CompletionToken },
-                                deadline: deadline,
-                                cancellationToken: abandon.Token).ResponseAsync,
-                        P.WorkItem.RequestOneofCase.ActivityRequest =>
-                            this.client.AbandonTaskActivityWorkItemAsync(
-                                new P.AbandonActivityTaskRequest { CompletionToken = workItem.CompletionToken },
-                                deadline: deadline,
-                                cancellationToken: abandon.Token).ResponseAsync,
-                        P.WorkItem.RequestOneofCase.EntityRequest or P.WorkItem.RequestOneofCase.EntityRequestV2 =>
-                            this.client.AbandonTaskEntityWorkItemAsync(
-                                new P.AbandonEntityTaskRequest { CompletionToken = workItem.CompletionToken },
-                                deadline: deadline,
-                                cancellationToken: abandon.Token).ResponseAsync,
-                        _ => throw new InvalidOperationException($"Cannot abandon unresolved {workItem.RequestCase}."),
-                    },
-                    "AbandonUnresolvedWorkItem",
-                    abandon.Token);
-                abandon.Token.ThrowIfCancellationRequested();
-            }
-            catch (Exception ex) when (timeout.IsCancellationRequested && !cancellation.IsCancellationRequested
-                && ex is OperationCanceledException or RpcException)
-            {
-                throw new TimeoutException("Payload failure abandonment exceeded its total 30-second budget.", ex);
-            }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound && !cancellation.IsCancellationRequested)
-            {
-                // Ownership loss is delivery-local; other abandon failures must reach the reconnect loop.
-                this.Logger.WorkItemOwnershipLost(workItem.RequestCase.ToString(), workItem.CompletionToken, ex);
-            }
         }
 
         async Task OnRunOrchestratorAsync(
@@ -1329,11 +1327,7 @@ sealed partial class GrpcDurableTaskWorker
 
                     try
                     {
-#if NET8_0_OR_GREATER
-                        await Task.Delay(backoff, this.timeProvider, cancellationToken);
-#else
                         await Task.Delay(backoff, cancellationToken);
-#endif
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {

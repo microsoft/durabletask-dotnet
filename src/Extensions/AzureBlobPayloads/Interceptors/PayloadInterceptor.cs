@@ -29,11 +29,6 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     readonly PayloadStore payloadStore = payloadStore;
     readonly LargePayloadStorageOptions options = options;
 
-#if NET8_0_OR_GREATER
-    /// <summary>Gets the clock used for active worker download deadlines.</summary>
-    internal TimeProvider TimeProvider { get; init; } = TimeProvider.System;
-#endif
-
     // Unary: externalize on request, resolve on response
 
     /// <inheritdoc/>
@@ -147,66 +142,20 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
     {
         // For streaming, request externalization is not needed currently
         AsyncServerStreamingCall<TResponse> call = continuation(request, context);
-        CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.Options.CancellationToken);
-        bool workerPayloads = request is P.GetWorkItemsRequest or P.StreamInstanceHistoryRequest { ForWorkItemProcessing: true };
-        int disposed = 0;
 
-        async ValueTask<TResponse> ResolveAsync(TResponse msg, CancellationToken ct)
+        IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(call.ResponseStream, async (msg, ct) =>
         {
-            try
-            {
-                if (workerPayloads)
-                {
-                    await this.ResolveWorkItemPayloadsAsync(msg, ct);
-                }
-                else
-                {
-                    await this.ResolveResponsePayloadsAsync(msg, ct);
-                }
-            }
-            catch (Exception ex) when (msg is P.WorkItem workItem
-                && workItem.RequestCase is P.WorkItem.RequestOneofCase.ActivityRequest
-                    or P.WorkItem.RequestOneofCase.OrchestratorRequest
-                    or P.WorkItem.RequestOneofCase.EntityRequest
-                    or P.WorkItem.RequestOneofCase.EntityRequestV2
-                && !ct.IsCancellationRequested)
-            {
-                throw new WorkItemPayloadException(workItem, ex);
-            }
-
+            await this.ResolveResponsePayloadsAsync(msg, ct);
             return msg;
-        }
-
-        IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(
-            call.ResponseStream, ResolveAsync, lifetime.Token, context.Options.CancellationToken);
-
-        void Dispose()
-        {
-            if (Interlocked.Exchange(ref disposed, 1) == 0)
-            {
-                using (lifetime)
-                using (call)
-                {
-                    lifetime.Cancel();
-                }
-            }
-        }
+        });
 
         return new AsyncServerStreamingCall<TResponse>(
             wrapped,
             call.ResponseHeadersAsync,
             call.GetStatus,
             call.GetTrailers,
-            Dispose);
+            call.Dispose);
     }
-
-    /// <summary>Resolves worker response payloads with per-download timeout handling.</summary>
-    /// <typeparam name="TResponse">The response type.</typeparam>
-    /// <param name="response">The received worker response.</param>
-    /// <param name="cancellation">Worker shutdown and call-disposal cancellation.</param>
-    /// <returns>The payload resolution task.</returns>
-    internal virtual Task ResolveWorkItemPayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
-        => this.ResolveResponsePayloadsAsync(response, cancellation);
 
     /// <summary>
     /// Externalizes large payloads in request messages.
@@ -257,36 +206,6 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         }
 
         return await this.payloadStore.DownloadAsync(value!, cancellation);
-    }
-
-    /// <summary>Resolves one worker payload with an independent budget that begins at download dispatch.</summary>
-    /// <param name="value">The value to resolve.</param>
-    /// <param name="cancellation">Worker shutdown and call-disposal cancellation.</param>
-    /// <returns>The resolved value, or the unchanged value when it is not a token.</returns>
-    private protected async Task<string?> MaybeResolveWorkItemAsync(string? value, CancellationToken cancellation)
-    {
-        if (!this.RequiresResolution(value))
-        {
-            return value;
-        }
-
-        TimeSpan budget = TimeSpan.FromSeconds(120);
-#if NET8_0_OR_GREATER
-        using CancellationTokenSource timeout = new(budget, this.TimeProvider);
-#else
-        using CancellationTokenSource timeout = new(budget);
-#endif
-        using CancellationTokenSource download = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeout.Token);
-        try
-        {
-            string payload = await this.payloadStore.DownloadAsync(value!, download.Token).ConfigureAwait(false);
-            download.Token.ThrowIfCancellationRequested();
-            return payload;
-        }
-        catch (OperationCanceledException ex) when (timeout.IsCancellationRequested && !cancellation.IsCancellationRequested)
-        {
-            throw new TimeoutException("Work-item payload download exceeded its 120-second budget.", ex);
-        }
     }
 
     /// <summary>
@@ -348,48 +267,33 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
     sealed class TransformingStreamReader<T>(
         IAsyncStreamReader<T> inner,
-        Func<T, CancellationToken, ValueTask<T>> transform,
-        CancellationToken lifetime,
-        CancellationToken callCancellation) : IAsyncStreamReader<T>, IWorkItemStreamReader
+        Func<T, CancellationToken, ValueTask<T>> transform) : IAsyncStreamReader<T>
     {
         readonly IAsyncStreamReader<T> inner = inner;
         readonly Func<T, CancellationToken, ValueTask<T>> transform = transform;
 
         public T Current { get; private set; } = default!;
 
-        public Task<bool> MoveNext(CancellationToken cancellationToken) =>
-            this.MoveNextAsync(null, cancellationToken, cancellationToken);
-
-        public async Task<bool> MoveNextAsync(
-            Action? onMessageReceived, CancellationToken readCancellation, CancellationToken payloadCancellation)
+        public async Task<bool> MoveNext(CancellationToken cancellationToken)
         {
-            bool hasNext;
-            if (this.inner is IWorkItemStreamReader payloadReader)
-            {
-                hasNext = await payloadReader.MoveNextAsync(onMessageReceived, readCancellation, payloadCancellation).ConfigureAwait(false);
-            }
-            else
-            {
-                hasNext = await this.inner.MoveNext(readCancellation).ConfigureAwait(false);
-                if (hasNext)
-                {
-                    onMessageReceived?.Invoke();
-                }
-            }
-
+            bool hasNext = await this.inner.MoveNext(cancellationToken);
             if (!hasNext)
             {
                 return false;
             }
 
-            if (!payloadCancellation.CanBeCanceled || payloadCancellation == callCancellation || payloadCancellation == lifetime)
+            try
             {
-                this.Current = await this.transform(this.inner.Current, lifetime).ConfigureAwait(false);
+                this.Current = await this.transform(this.inner.Current, cancellationToken);
             }
-            else
+            catch (Exception ex) when (this.inner.Current is P.WorkItem workItem
+                && workItem.RequestCase is P.WorkItem.RequestOneofCase.ActivityRequest
+                    or P.WorkItem.RequestOneofCase.OrchestratorRequest
+                    or P.WorkItem.RequestOneofCase.EntityRequest
+                    or P.WorkItem.RequestOneofCase.EntityRequestV2
+                && !cancellationToken.IsCancellationRequested)
             {
-                using CancellationTokenSource resolution = CancellationTokenSource.CreateLinkedTokenSource(payloadCancellation, lifetime);
-                this.Current = await this.transform(this.inner.Current, resolution.Token).ConfigureAwait(false);
+                throw new WorkItemPayloadException(workItem, ex);
             }
 
             return true;

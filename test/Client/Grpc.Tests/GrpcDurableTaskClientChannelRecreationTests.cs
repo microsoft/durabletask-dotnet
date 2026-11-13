@@ -33,6 +33,128 @@ public class GrpcDurableTaskClientChannelRecreationTests
     static readonly MethodInfo ToStopwatchTicksMethod = typeof(ChannelRecreatingCallInvoker)
         .GetMethod("ToStopwatchTicks", BindingFlags.Static | BindingFlags.NonPublic)!;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ObserveOutcome_CompletedSuccess_DoesNotAllocatePerCall(bool cancellable)
+    {
+        // Arrange
+        using GrpcChannel channel = GrpcChannel.ForAddress("http://completed.client.test");
+        await using ChannelRecreatingCallInvoker invoker = new(
+            channel, (current, _) => Task.FromResult(current), int.MaxValue,
+            TimeSpan.Zero, ownsChannel: false, NullLogger.Instance);
+        using CancellationTokenSource cancellation = new();
+        CancellationToken token = cancellable ? cancellation.Token : default;
+        Task<string> response = Task.FromResult("pong");
+
+        // Isolate the production observer from HTTP, serialization, and reflection allocations.
+        Action<Task, string, CancellationToken> observe = typeof(ChannelRecreatingCallInvoker)
+            .GetMethod("ObserveOutcome", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .CreateDelegate<Action<Task, string, CancellationToken>>(invoker);
+        for (int i = 0; i < 10_000; i++)
+        {
+            observe(response, TestMethod.FullName, token);
+        }
+
+        // Act
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++)
+        {
+            observe(response, TestMethod.FullName, token);
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        // Assert
+        allocated.Should().Be(0, "observing an already-successful response needs no continuation or boxed state");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AsyncUnaryCall_CompletedOrPendingSuccess_ResetsFailureCount(bool pending)
+    {
+        // Arrange
+        TaskCompletionSource<HttpResponseMessage> success = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int callIndex = 0;
+        CallbackHttpMessageHandler handler = new((request, cancellationToken) =>
+            Interlocked.Increment(ref callIndex) == 2
+                ? success.Task
+                : Task.FromResult(CreateFailureResponse(StatusCode.Unavailable, "transport failure")));
+        using GrpcChannel channel = CreateChannel("http://success-outcome.client.test", handler);
+        GrpcDurableTaskClientOptions options = new() { Channel = channel };
+        options.Internal.ChannelRecreateFailureThreshold = 2;
+        int recreatorCalls = 0;
+        options.SetChannelRecreator((current, _) =>
+        {
+            Interlocked.Increment(ref recreatorCalls);
+            return Task.FromResult(current);
+        });
+        (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
+        await using AsyncDisposable cleanup = disposable;
+        using CancellationTokenSource cancellation = new();
+        await AssertRpcFailureAsync(callInvoker);
+
+        if (!pending)
+        {
+            success.SetResult(CreateSuccessResponse("pong"));
+        }
+
+        // Act
+        using AsyncUnaryCall<string> call = callInvoker.AsyncUnaryCall(
+            TestMethod, host: null, new CallOptions(cancellationToken: cancellation.Token), request: "ping");
+        call.ResponseAsync.IsCompleted.Should().Be(!pending);
+        if (pending)
+        {
+            GetConsecutiveFailures(callInvoker).Should().Be(1);
+            success.SetResult(CreateSuccessResponse("pong"));
+        }
+
+        string response = await call.ResponseAsync.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        response.Should().Be("pong");
+        SpinWait.SpinUntil(() => GetConsecutiveFailures(callInvoker) == 0, TimeSpan.FromSeconds(5))
+            .Should().BeTrue();
+        await AssertRpcFailureAsync(callInvoker);
+        GetConsecutiveFailures(callInvoker).Should().Be(1);
+        recreatorCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AsyncUnaryCall_PendingTransportFailure_StillTriggersRecreate()
+    {
+        // Arrange
+        TaskCompletionSource<HttpResponseMessage> response = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        CallbackHttpMessageHandler handler = new((request, cancellationToken) => response.Task);
+        using GrpcChannel channel = CreateChannel("http://pending-failure.client.test", handler);
+        GrpcDurableTaskClientOptions options = new() { Channel = channel };
+        options.Internal.ChannelRecreateFailureThreshold = 1;
+        options.Internal.MinRecreateInterval = TimeSpan.Zero;
+        TaskCompletionSource<GrpcChannel> recreateRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        options.SetChannelRecreator((current, _) =>
+        {
+            recreateRequested.TrySetResult(current);
+            return Task.FromResult(current);
+        });
+        (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
+        await using AsyncDisposable cleanup = disposable;
+        using CancellationTokenSource cancellation = new();
+        using AsyncUnaryCall<string> call = callInvoker.AsyncUnaryCall(
+            TestMethod, host: null, new CallOptions(cancellationToken: cancellation.Token), request: "ping");
+        call.ResponseAsync.IsCompleted.Should().BeFalse();
+
+        // Act
+        response.SetResult(CreateFailureResponse(StatusCode.Unavailable, "transport failure"));
+        RpcException error = await Assert.ThrowsAsync<RpcException>(
+            () => call.ResponseAsync.WaitAsync(TimeSpan.FromSeconds(5)));
+        GrpcChannel recreated = await recreateRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        error.StatusCode.Should().Be(StatusCode.Unavailable);
+        recreated.Should().BeSameAs(channel);
+    }
+
     [Fact]
     public async Task GetCallInvoker_WithProvidedChannel_RecreatesTransportAfterUnaryFailure()
     {

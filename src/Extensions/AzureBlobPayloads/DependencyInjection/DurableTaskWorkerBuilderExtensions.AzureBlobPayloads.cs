@@ -101,12 +101,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 // Register an interceptor rather than moving Channel onto an intercepted CallInvoker.
                 // Clearing Channel would disable the worker's gRPC channel recreation, and requiring a
                 // pre-built Channel/CallInvoker would rule out the Address-only configuration.
-                AzureBlobPayloadsSideCarInterceptor interceptor = new(store, opts)
-                {
-#if NET8_0_OR_GREATER
-                    TimeProvider = services.GetService<TimeProvider>() ?? TimeProvider.System,
-#endif
-                };
+                AzureBlobPayloadsSideCarInterceptor interceptor = new(store, opts);
                 opt.Interceptors.Add(interceptor);
 
                 // Storage failures must become terminal responses before the worker releases entity locks.

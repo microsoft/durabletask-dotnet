@@ -63,6 +63,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 }));
             worker.UseExternalizedPayloads();
             worker.Services.AddSingleton(store.Object);
+            worker.Services.PostConfigure<GrpcDurableTaskWorkerOptions>(
+                options => options.Interceptors.Insert(0, new ForwardingStreamInterceptor()));
         }, client => client.UseGrpc(isolatedSidecar.Channel), services => services.AddExternalizedPayloadStore(options =>
         {
             options.ThresholdBytes = 16;
@@ -986,6 +988,23 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
         string? output = completed.ReadOutputAs<string>();
         Assert.Equal(largeOutput, output);
+    }
+
+    sealed class ForwardingStreamInterceptor : Interceptor
+    {
+        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(
+            TRequest request,
+            ClientInterceptorContext<TRequest, TResponse> context,
+            AsyncServerStreamingCallContinuation<TRequest, TResponse> continuation)
+        {
+            AsyncServerStreamingCall<TResponse> call = continuation(request, context);
+            Mock<IAsyncStreamReader<TResponse>> reader = new();
+            reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>()))
+                .Returns((CancellationToken cancellation) => call.ResponseStream.MoveNext(cancellation));
+            reader.SetupGet(r => r.Current).Returns(() => call.ResponseStream.Current);
+            return new AsyncServerStreamingCall<TResponse>(
+                reader.Object, call.ResponseHeadersAsync, call.GetStatus, call.GetTrailers, call.Dispose);
+        }
     }
 
     sealed class RetryCompletionInterceptor(bool retryActivity) : Interceptor

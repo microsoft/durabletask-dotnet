@@ -4,6 +4,8 @@
 using System.Text;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
 
@@ -280,7 +282,20 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
                 return false;
             }
 
-            this.Current = await this.transform(this.inner.Current, cancellationToken);
+            try
+            {
+                this.Current = await this.transform(this.inner.Current, cancellationToken);
+            }
+            catch (Exception ex) when (this.inner.Current is P.WorkItem workItem
+                && workItem.RequestCase is P.WorkItem.RequestOneofCase.ActivityRequest
+                    or P.WorkItem.RequestOneofCase.OrchestratorRequest
+                    or P.WorkItem.RequestOneofCase.EntityRequest
+                    or P.WorkItem.RequestOneofCase.EntityRequestV2
+                && !cancellationToken.IsCancellationRequested)
+            {
+                throw new WorkItemPayloadException(workItem, ex);
+            }
+
             return true;
         }
     }

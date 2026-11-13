@@ -107,5 +107,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 78, Level = LogLevel.Warning, Message = "Activity notification callback failed for phase '{Phase}'.")]
         public static partial void ActivityNotificationFailed(this ILogger logger, ActivityNotificationPhase phase, Exception exception);
+
+        [LoggerMessage(EventId = 79, Level = LogLevel.Warning, Message = "Ownership of '{workItemType}' work item was lost before abandonment. Completion token = '{completionToken}'")]
+        public static partial void WorkItemOwnershipLost(this ILogger logger, string workItemType, string completionToken, Exception exception);
     }
 }

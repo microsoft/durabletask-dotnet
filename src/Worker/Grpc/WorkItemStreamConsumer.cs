@@ -44,8 +44,8 @@ internal static class WorkItemStreamConsumer
     /// Consume a work-item stream until shutdown, silent disconnect, or graceful drain.
     /// </summary>
     /// <param name="openStream">
-    /// Factory that opens the stream with the supplied linked-cancellation token. Production passes
-    /// <c>ct => stream.ResponseStream.ReadAllAsync(ct)</c>; tests pass arbitrary fakes.
+    /// Factory that opens the stream with linked cancellation and a receipt callback. The callback
+    /// records real deliveries handled without yielding them; yielded items are observed automatically.
     /// </param>
     /// <param name="silentDisconnectTimeout">
     /// How long to wait between successive items (or health pings) before treating the stream as
@@ -70,7 +70,7 @@ internal static class WorkItemStreamConsumer
     /// </param>
     /// <returns>The classified outcome plus whether any message was observed.</returns>
     public static async Task<WorkItemStreamResult> ConsumeAsync(
-        Func<CancellationToken, IAsyncEnumerable<P.WorkItem>> openStream,
+        Func<CancellationToken, Action, IAsyncEnumerable<P.WorkItem>> openStream,
         TimeSpan silentDisconnectTimeout,
         Action<P.WorkItem> onItem,
         Action? onFirstMessage,
@@ -100,18 +100,22 @@ internal static class WorkItemStreamConsumer
 
         bool firstMessageObserved = false;
 
+        void ObserveMessage()
+        {
+            ArmSilentDisconnectTimer();
+
+            if (!firstMessageObserved)
+            {
+                firstMessageObserved = true;
+                onFirstMessage?.Invoke();
+            }
+        }
+
         try
         {
-            await foreach (P.WorkItem workItem in openStream(tokenSource.Token).ConfigureAwait(false))
+            await foreach (P.WorkItem workItem in openStream(tokenSource.Token, ObserveMessage).ConfigureAwait(false))
             {
-                ArmSilentDisconnectTimer();
-
-                if (!firstMessageObserved)
-                {
-                    firstMessageObserved = true;
-                    onFirstMessage?.Invoke();
-                }
-
+                ObserveMessage();
                 onItem(workItem);
             }
         }

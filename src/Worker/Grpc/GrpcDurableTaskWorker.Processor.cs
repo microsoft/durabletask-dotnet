@@ -391,7 +391,7 @@ sealed partial class GrpcDurableTaskWorker
             // Catch delivery failures inside the iterator; a faulted ReadAllAsync cannot be resumed.
             // A false transport read still ends this stream permanently.
             WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-                ct => this.ReadWorkItemsAsync(stream.ResponseStream, ct),
+                (ct, onMessageReceived) => this.ReadWorkItemsAsync(stream.ResponseStream, onMessageReceived, ct),
                 silentDisconnectTimeout,
                 workItem => this.DispatchWorkItem(workItem, cancellation),
                 onFirstMessage,
@@ -431,6 +431,7 @@ sealed partial class GrpcDurableTaskWorker
 
         async IAsyncEnumerable<P.WorkItem> ReadWorkItemsAsync(
             IAsyncStreamReader<P.WorkItem> reader,
+            Action onMessageReceived,
             [EnumeratorCancellation] CancellationToken cancellation)
         {
             while (true)
@@ -442,6 +443,7 @@ sealed partial class GrpcDurableTaskWorker
                 }
                 catch (WorkItemPayloadException ex)
                 {
+                    onMessageReceived();
                     await this.AbandonUnresolvedWorkItemAsync(ex, cancellation).ConfigureAwait(false);
                     continue;
                 }

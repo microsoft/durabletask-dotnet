@@ -36,6 +36,9 @@ public class GrpcDurableTaskWorkerTests
     static readonly MethodInfo ProcessorConnectAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("ConnectAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo ProcessWorkItemsAsyncMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("ProcessWorkItemsAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo DispatchWorkItemMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("DispatchWorkItem", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -146,6 +149,64 @@ public class GrpcDurableTaskWorkerTests
         Assert.Equal(new[] { "failed" }, abandoned);
         Assert.Equal(abandonStatus is StatusCode.OK or StatusCode.NotFound ? 1 : 2, invoker.GetWorkItemsCallCount);
         store.Verify(s => s.DownloadAsync(Token, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    [InlineData(0, false)]
+    public async Task ProcessWorkItemsAsync_FailedDeliveries_CountAsReceiptWithoutDispatchAsync(int failedCount, bool healthPing)
+    {
+        // Arrange
+        P.WorkItem[] items = Enumerable.Range(0, failedCount).Select(index => new P.WorkItem
+        {
+            CompletionToken = $"failed-{index}",
+            ActivityRequest = new P.ActivityRequest { Input = "missing-payload" },
+        }).ToArray();
+        if (healthPing)
+        {
+            items = [.. items, new P.WorkItem { HealthPing = new P.HealthPing() }];
+        }
+
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken("missing-payload")).Returns(true);
+        store.Setup(s => s.DownloadAsync("missing-payload", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("Download failed."));
+        List<string> abandoned = [];
+        int firstMessages = 0;
+        ScriptedWorkerCallInvoker invoker = new(
+            (_, _) => CreateUnaryCall(Task.FromResult(new Empty())),
+            (_, _) => CreateServerStreamingCall(new SequenceAsyncStreamReader<P.WorkItem>(items)))
+        {
+            UnaryResponse = (operation, request, _) =>
+            {
+                Assert.Equal(1, firstMessages);
+                Assert.Equal("AbandonTaskActivityWorkItem", operation);
+                abandoned.Add(Assert.IsType<P.AbandonActivityTaskRequest>(request).CompletionToken);
+                return Task.FromResult<object>(new P.AbandonActivityTaskResponse());
+            },
+        };
+        int dispatched = 0;
+        int poisoned = 0;
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.Internal.SilentDisconnectTimeout = TimeSpan.Zero;
+        grpcOptions.ConfigureActivityNotification(_ => dispatched++);
+        P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(invoker.Intercept(
+            new AzureBlobPayloadsSideCarInterceptor(store.Object, new LargePayloadStorageOptions())));
+        object processor = CreateProcessor(CreateWorker(grpcOptions), client);
+        using AsyncServerStreamingCall<P.WorkItem> stream = client.GetWorkItems(new());
+
+        // Act
+        await (Task)ProcessWorkItemsAsyncMethod.Invoke(processor,
+            [stream, CancellationToken.None, (Action)(() => firstMessages++), (Action)(() => poisoned++)])!;
+
+        // Assert
+        bool observed = failedCount > 0 || healthPing;
+        Assert.Equal(observed ? 1 : 0, firstMessages);
+        Assert.Equal(observed ? 0 : 1, poisoned);
+        Assert.Equal(0, dispatched);
+        Assert.Equal(Enumerable.Range(0, failedCount).Select(index => $"failed-{index}"), abandoned);
+        Assert.Equal(1, invoker.GetWorkItemsCallCount);
     }
 
     [Fact]

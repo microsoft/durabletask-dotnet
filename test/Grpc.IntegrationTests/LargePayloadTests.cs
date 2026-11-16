@@ -10,11 +10,13 @@ using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Testing.Sidecar;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit.Abstractions;
+using IOrchestrationService = global::DurableTask.Core.IOrchestrationService;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
@@ -28,7 +30,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
     public async Task HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync(int storageStatus)
     {
         // Arrange
-        using GrpcSidecarFixture isolatedSidecar = new();
+        using GrpcSidecarFixture isolatedSidecar = new(new TwoActivitySlotService());
         string token = $"test-blob://missing-{Guid.NewGuid():N}";
         TaskName orchestration = nameof(HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync);
         TaskName activity = "HydrationActivity";
@@ -48,6 +50,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
         {
             worker.UseGrpc(isolatedSidecar.Channel);
+            worker.Services.Configure<DurableTaskWorkerOptions>(worker.Name,
+                options => options.Concurrency.MaximumConcurrentActivityWorkItems = 2);
             worker.AddTasks(tasks => tasks
                 .AddOrchestratorFunc<string, string>(orchestration, (context, input) =>
                     context.CallActivityAsync<string>(activity, input == "bad" ? new string('X', 1024) : input))
@@ -988,6 +992,11 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
         string? output = completed.ReadOutputAs<string>();
         Assert.Equal(largeOutput, output);
+    }
+
+    sealed class TwoActivitySlotService : InMemoryOrchestrationService, IOrchestrationService
+    {
+        int IOrchestrationService.MaxConcurrentTaskActivityWorkItems => 2;
     }
 
     sealed class ForwardingStreamInterceptor : Interceptor

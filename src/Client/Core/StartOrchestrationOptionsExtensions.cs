@@ -34,8 +34,34 @@ public static class StartOrchestrationOptionsExtensions
     /// Creates a new <see cref="StartOrchestrationOptions"/> with the specified deduplication statuses.
     /// </summary>
     /// <param name="options">The base options to extend.</param>
-    /// <param name="dedupeStatuses">The orchestration runtime statuses that should be considered for deduplication.</param>
+    /// <param name="dedupeStatuses">
+    /// The runtime statuses that prevent scheduling a new orchestration with the same instance ID.
+    /// An empty array requests reuse for all statuses.
+    /// </param>
     /// <returns>A new <see cref="StartOrchestrationOptions"/> instance with the deduplication statuses set.</returns>
+    /// <remarks>
+    /// <para>
+    /// If an existing instance has one of the specified statuses, scheduling fails with an
+    /// <see cref="DurableTask.Core.Exceptions.OrchestrationAlreadyExistsException"/>. Omitted statuses allow instance ID reuse, subject to backend
+    /// support and configuration. Reusing an active instance ID can terminate the existing orchestration.
+    /// See <see cref="StartOrchestrationOptions.DedupeStatuses"/> for default behavior and configuration restrictions,
+    /// and <see cref="ValidDedupeStatuses"/> for the supported statuses.
+    /// </para>
+    /// <para>
+    /// This method returns a copy and does not modify <paramref name="options"/>. Calling it without statuses
+    /// sets an empty list rather than restoring the <see langword="null"/> backend default.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// Prevent replacement of active instances while allowing instance ID reuse after completion, failure, or termination:
+    /// <code>
+    /// StartOrchestrationOptions options = new StartOrchestrationOptions("singleton-workflow")
+    ///     .WithDedupeStatuses(
+    ///         OrchestrationRuntimeStatus.Pending,
+    ///         OrchestrationRuntimeStatus.Running,
+    ///         OrchestrationRuntimeStatus.Suspended);
+    /// </code>
+    /// </example>
     public static StartOrchestrationOptions WithDedupeStatuses(
         this StartOrchestrationOptions options,
         params OrchestrationRuntimeStatus[] dedupeStatuses)

@@ -16,7 +16,7 @@ public class WorkItemStreamConsumerTests
     public async Task EmptyStream_ReturnsGracefulDrain()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => EmptyStream(),
+            openStream: (_, _) => EmptyStream(),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
             onFirstMessage: () => throw new InvalidOperationException("onFirstMessage should not be invoked"),
@@ -35,7 +35,7 @@ public class WorkItemStreamConsumerTests
         int firstMessageCount = 0;
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => StreamOf(item1, item2),
+            openStream: (_, _) => StreamOf(item1, item2),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: received.Add,
             onFirstMessage: () => firstMessageCount++,
@@ -47,11 +47,35 @@ public class WorkItemStreamConsumerTests
         firstMessageCount.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NonYieldedReceipts_MarkStreamObservedWithoutDispatchAsync(bool yieldHealthyItem)
+    {
+        // Arrange
+        List<P.WorkItem> received = [];
+        int firstMessages = 0;
+
+        // Act
+        WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+            openStream: (_, observe) => StreamWithReceipts(observe, yieldHealthyItem),
+            silentDisconnectTimeout: TimeSpan.Zero,
+            onItem: received.Add,
+            onFirstMessage: () => firstMessages++,
+            cancellation: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(WorkItemStreamOutcome.GracefulDrain, result.Outcome);
+        Assert.True(result.FirstMessageObserved);
+        Assert.Equal(1, firstMessages);
+        Assert.Equal(yieldHealthyItem ? 1 : 0, received.Count);
+    }
+
     [Fact]
     public async Task VeryLargeSilentDisconnectTimeout_IsClamped_AndStreamCanStillComplete()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => EmptyStream(),
+            openStream: (_, _) => EmptyStream(),
             silentDisconnectTimeout: TimeSpan.FromDays(365),
             onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
             onFirstMessage: null,
@@ -65,7 +89,7 @@ public class WorkItemStreamConsumerTests
     public async Task HangingStream_SurfacingOce_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: false),
+            openStream: (ct, _) => HangingStream(ct, throwAsRpc: false),
             silentDisconnectTimeout: ShortTimeout,
             onItem: _ => { },
             onFirstMessage: null,
@@ -85,7 +109,7 @@ public class WorkItemStreamConsumerTests
     public async Task HangingStream_SurfacingRpcCancelled_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: true),
+            openStream: (ct, _) => HangingStream(ct, throwAsRpc: true),
             silentDisconnectTimeout: ShortTimeout,
             onItem: _ => { },
             onFirstMessage: null,
@@ -104,7 +128,7 @@ public class WorkItemStreamConsumerTests
         outer.CancelAfter(ShortTimeout);
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: false),
+            openStream: (ct, _) => HangingStream(ct, throwAsRpc: false),
             silentDisconnectTimeout: TimeSpan.FromSeconds(30),
             onItem: _ => { },
             onFirstMessage: null,
@@ -126,7 +150,7 @@ public class WorkItemStreamConsumerTests
         outer.CancelAfter(ShortTimeout);
 
         Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: true),
+            openStream: (ct, _) => HangingStream(ct, throwAsRpc: true),
             silentDisconnectTimeout: TimeSpan.FromSeconds(30),
             onItem: _ => { },
             onFirstMessage: null,
@@ -165,7 +189,7 @@ public class WorkItemStreamConsumerTests
         }
 
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => StreamOf(items),
+            openStream: (_, _) => StreamOf(items),
             silentDisconnectTimeout: TimeSpan.FromMilliseconds(500),
             onItem: _ => events.Add($"item{itemIndex++}"),
             onFirstMessage: null,
@@ -193,7 +217,7 @@ public class WorkItemStreamConsumerTests
     public async Task UnrelatedRpcException_Propagates()
     {
         Func<Task> act = () => WorkItemStreamConsumer.ConsumeAsync(
-            openStream: _ => ThrowingStream(new RpcException(new Status(StatusCode.Unavailable, "boom"))),
+            openStream: (_, _) => ThrowingStream(new RpcException(new Status(StatusCode.Unavailable, "boom"))),
             silentDisconnectTimeout: TimeSpan.FromSeconds(5),
             onItem: _ => { },
             onFirstMessage: null,
@@ -213,7 +237,7 @@ public class WorkItemStreamConsumerTests
 
         // Act
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
-            openStream: ct => HangingStream(ct, throwAsRpc: false),
+            openStream: (ct, _) => HangingStream(ct, throwAsRpc: false),
             silentDisconnectTimeout: TimeSpan.FromMilliseconds(timeoutMilliseconds),
             onItem: _ => { },
             onFirstMessage: null,
@@ -224,6 +248,16 @@ public class WorkItemStreamConsumerTests
     }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators
+    static async IAsyncEnumerable<P.WorkItem> StreamWithReceipts(Action observe, bool yieldHealthyItem)
+    {
+        observe();
+        observe();
+        if (yieldHealthyItem)
+        {
+            yield return new P.WorkItem { HealthPing = new P.HealthPing() };
+        }
+    }
+
     static async IAsyncEnumerable<P.WorkItem> EmptyStream()
     {
         yield break;

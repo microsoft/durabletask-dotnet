@@ -1104,6 +1104,20 @@ static class ProtoUtils
     }
 
     /// <summary>
+    /// Converts orchestration request properties, preserving source instance IDs as opaque strings.
+    /// </summary>
+    /// <param name="properties">The orchestration request properties to convert.</param>
+    /// <returns>The converted orchestration properties.</returns>
+    internal static Dictionary<string, object?> ConvertOrchestrationProperties(MapField<string, Value> properties)
+    {
+        return properties.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Key == "sourceInstanceId" && pair.Value.KindCase == Value.KindOneofCase.StringValue
+                ? pair.Value.StringValue
+                : ConvertValueToObject(pair.Value));
+    }
+
+    /// <summary>
     /// Converts a C# object to a protobuf Value.
     /// </summary>
     /// <param name="obj">The object to convert.</param>

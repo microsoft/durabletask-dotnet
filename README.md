@@ -88,6 +88,16 @@ static class HelloSequenceUntyped
 
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesUntyped.cs](samples/AzureFunctionsApp/HelloCitiesUntyped.cs).
 
+### Restarting as a clone
+
+```csharp
+string cloneId = await client.RestartAsync(
+    "source-instance",
+    "clone-instance",
+    version: "v2",
+    cancellation: CancellationToken.None);
+```
+
 ### Class-based syntax
 
 **IMPORTANT**: class based syntax in Durable Functions relies on a package reference to `Microsoft.DurableTask.Generators`. This is still in "preview" and may be subject to significant change before 1.0 or even post-1.0. It is recommended to stick with function-syntax for now.

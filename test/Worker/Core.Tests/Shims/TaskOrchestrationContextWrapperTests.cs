@@ -27,6 +27,45 @@ public class TaskOrchestrationContextWrapperTests
         VerifyWrapper(wrapper, innerContext, invocationContext, input);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("original-instance")]
+    [InlineData("previous-clone")]
+    public void SourceInstanceId_ReadsImmediateSourceFromProperties(string? source)
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        Dictionary<string, object?> properties = new();
+        if (source is not null)
+        {
+            properties["sourceInstanceId"] = source;
+        }
+
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input", properties);
+
+        // Act
+        string? actual = wrapper.SourceInstanceId;
+
+        // Assert
+        actual.Should().Be(source);
+        wrapper.Parent.Should().BeNull();
+    }
+
+    [Fact]
+    public void SourceInstanceId_WithoutProperties_IsNull()
+    {
+        // Arrange
+        TaskOrchestrationContextWrapper wrapper = new(
+            new TestOrchestrationContext(), new("Test", new(), NullLoggerFactory.Instance, null), "input");
+
+        // Act
+        string? source = wrapper.SourceInstanceId;
+
+        // Assert
+        source.Should().BeNull();
+    }
+
     [Fact]
     public void Ctor_NonNullParent_Populates()
     {

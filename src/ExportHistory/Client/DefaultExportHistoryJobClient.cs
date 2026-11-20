@@ -97,10 +97,20 @@ public sealed class DefaultExportHistoryJobClient(
 
             // First, delete the entity
             ExportJobOperationRequest request = new ExportJobOperationRequest(this.entityId, nameof(ExportJob.Delete));
-            await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
                 new TaskName(nameof(ExecuteExportJobOperationOrchestrator)),
                 request,
                 cancellation);
+
+            OrchestrationMetadata state = await this.durableTaskClient
+                .WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+            if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to delete export job '{this.JobId}': " +
+                    $"{state.FailureDetails?.ErrorMessage ?? string.Empty}");
+            }
 
             // Then terminate the linked export orchestration if it exists
             await this.TerminateAndPurgeOrchestrationAsync(orchestrationInstanceId, cancellation);

@@ -22,9 +22,12 @@ public sealed class GrpcSidecarFixture : IDisposable
     readonly IHost host;
 
     public GrpcSidecarFixture()
+        : this(new InMemoryOrchestrationService())
     {
-        InMemoryOrchestrationService service = new();
+    }
 
+    internal GrpcSidecarFixture(InMemoryOrchestrationService service)
+    {
         // Use a random port number to allow multiple instances to run in parallel
         string address = $"http://{ListenHost}:{Random.Shared.Next(30000, 40000)}";
         this.host = Host.CreateDefaultBuilder()

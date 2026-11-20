@@ -2,12 +2,81 @@
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
+using DurableTask.Core.Command;
+using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
+using SharedProtoUtils = Microsoft.DurableTask.ProtoUtils;
 
 namespace Microsoft.DurableTask.Client.Grpc.Tests;
 
 public class ProtoUtilsTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConstructOrchestratorResponse_TerminalCleanup_IsCompleteAndIdempotent(bool? insertMissingUnlocks)
+    {
+        // Arrange
+        const string InstanceId = "instance";
+        const string CriticalSectionId = "11111111-1111-1111-1111-111111111111";
+        const int CompletionId = 42;
+        string[] entities = ["@counter@one", "@counter@two"];
+        SharedProtoUtils.EntityConversionState? state = insertMissingUnlocks.HasValue
+            ? new(insertMissingUnlocks.Value)
+            : null;
+        state?.SetOrchestrationInstance(new DTCore.OrchestrationInstance
+        {
+            InstanceId = InstanceId,
+            ExecutionId = "execution",
+        });
+        state?.AddUnlockObligations(new P.EntityLockRequestedEvent
+        {
+            CriticalSectionId = CriticalSectionId,
+            LockSet = { entities },
+        });
+        OrchestrationCompleteOrchestratorAction completion = new()
+        {
+            Id = CompletionId,
+            OrchestrationStatus = DTCore.OrchestrationStatus.Completed,
+            Result = "result",
+        };
+
+        // Act
+        P.OrchestratorResponse response = SharedProtoUtils.ConstructOrchestratorResponse(
+            InstanceId,
+            "execution",
+            customStatus: null,
+            actions: [completion],
+            completionToken: "completion-token",
+            entityConversionState: state,
+            orchestrationActivity: null);
+        P.OrchestratorResponse converted = response.Clone();
+        state?.InsertMissingUnlocks(response, response.Actions.Last());
+
+        // Assert
+        int expectedUnlocks = insertMissingUnlocks == true ? entities.Length : 0;
+        converted.Actions.Should().HaveCount(expectedUnlocks + 1);
+        converted.Actions.Should().OnlyContain(action => action.Id == CompletionId);
+        converted.Actions.Last().CompleteOrchestration.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Completed);
+        converted.Actions.Last().CompleteOrchestration.Result.Should().Be("result");
+        P.EntityUnlockSentEvent[] unlocks = converted.Actions.Take(expectedUnlocks)
+            .Select(action => Assert.IsType<P.EntityUnlockSentEvent>(action.SendEntityMessage?.EntityUnlockSent))
+            .ToArray();
+        unlocks.Select(unlock => unlock.TargetInstanceId).Should().Equal(entities.Take(expectedUnlocks));
+        foreach (P.EntityUnlockSentEvent unlock in unlocks)
+        {
+            unlock.CriticalSectionId.Should().Be(CriticalSectionId);
+            unlock.ParentInstanceId.Should().Be(InstanceId);
+        }
+        converted.CompletionToken.Should().Be("completion-token");
+        response.Should().Be(converted);
+        if (state is not null)
+        {
+            state.ResetObligations().Should().BeEmpty();
+        }
+    }
+
     [Fact]
     public void GetAllStatuses_ReturnsExpectedStatuses()
     {

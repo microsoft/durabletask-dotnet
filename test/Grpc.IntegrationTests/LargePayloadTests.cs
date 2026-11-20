@@ -1,18 +1,163 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.IO;
 using System.Text.Json;
+using Azure;
+using FluentAssertions;
+using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Testing.Sidecar;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using Xunit.Abstractions;
+using IOrchestrationService = global::DurableTask.Core.IOrchestrationService;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
 public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(403)]
+    [InlineData(404)]
+    public async Task HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync(int storageStatus)
+    {
+        // Arrange
+        using GrpcSidecarFixture isolatedSidecar = new(new TwoActivitySlotService());
+        string token = $"test-blob://missing-{Guid.NewGuid():N}";
+        TaskName orchestration = nameof(HydrationFailure_KeepsHealthyActivitiesOnSameStreamAsync);
+        TaskName activity = "HydrationActivity";
+        TaskCompletionSource running = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource downloadFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Mock<PayloadStore> store = new();
+        store.Setup(s => s.IsKnownPayloadToken(It.IsAny<string>())).Returns((string value) => value == token);
+        store.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(token);
+        store.Setup(s => s.DownloadAsync(token, It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            downloadFailed.TrySetResult();
+            Exception failure = storageStatus == 0
+                ? new IOException("Download failed.") : new RequestFailedException(storageStatus, "Download failed.");
+            return Task.FromException<string>(failure);
+        });
+        await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
+        {
+            worker.UseGrpc(isolatedSidecar.Channel);
+            worker.Services.Configure<DurableTaskWorkerOptions>(worker.Name,
+                options => options.Concurrency.MaximumConcurrentActivityWorkItems = 2);
+            worker.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>(orchestration, (context, input) =>
+                    context.CallActivityAsync<string>(activity, input == "bad" ? new string('X', 1024) : input))
+                .AddActivityFunc<string, string>(activity, async (_, input) =>
+                {
+                    if (input == "running")
+                    {
+                        running.TrySetResult();
+                        await release.Task.WaitAsync(this.TimeoutToken);
+                    }
+
+                    return input;
+                }));
+            worker.UseExternalizedPayloads();
+            worker.Services.AddSingleton(store.Object);
+            worker.Services.PostConfigure<GrpcDurableTaskWorkerOptions>(
+                options => options.Interceptors.Insert(0, new ForwardingStreamInterceptor()));
+        }, client => client.UseGrpc(isolatedSidecar.Channel), services => services.AddExternalizedPayloadStore(options =>
+        {
+            options.ThresholdBytes = 16;
+            options.ConnectionString = "UseDevelopmentStorage=true";
+        }));
+
+        try
+        {
+            // Act
+            string alreadyRunning = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "running");
+            await running.Task.WaitAsync(this.TimeoutToken);
+            await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "bad");
+            await downloadFailed.Task.WaitAsync(this.TimeoutToken);
+
+            // The test sidecar does not settle abandoned activities; free the healthy slot before starting another.
+            release.TrySetResult();
+            OrchestrationMetadata runningResult = await server.Client.WaitForInstanceCompletionAsync(
+                alreadyRunning, getInputsAndOutputs: true, this.TimeoutToken);
+            string following = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestration, "following");
+            OrchestrationMetadata followingResult = await server.Client.WaitForInstanceCompletionAsync(
+                following, getInputsAndOutputs: true, this.TimeoutToken);
+
+            // Assert
+            Assert.Equal(OrchestrationRuntimeStatus.Completed, followingResult.RuntimeStatus);
+            Assert.Equal("following", followingResult.ReadOutputAs<string>());
+            Assert.Equal(OrchestrationRuntimeStatus.Completed, runningResult.RuntimeStatus);
+            Assert.Equal("running", runningResult.ReadOutputAs<string>());
+            Assert.Single(this.GetLogs(), log => log.EventId.Name == "EstablishedWorkItemConnection");
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CompletionRetry_DoesNotExternalizePayloadTokensAgain(bool retryActivity)
+    {
+        // Arrange
+        string payload = new('R', 1024);
+        TaskName orchestratorName = nameof(CompletionRetry_DoesNotExternalizePayloadTokensAgain);
+        TaskName activityName = "RetryPayloadActivity";
+        InMemoryPayloadStore store = new();
+        RetryCompletionInterceptor retry = new(retryActivity);
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, string>(orchestratorName, async (context, _) =>
+                    {
+                        string result = await context.CallActivityAsync<string>(activityName);
+                        context.SetCustomStatus(result);
+                        return result;
+                    })
+                    .AddActivityFunc<string>(activityName, _ => Task.FromResult(payload)));
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(store);
+                worker.Services.PostConfigure<GrpcDurableTaskWorkerOptions>(
+                    options => options.Interceptors.Add(retry));
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(store);
+            },
+            services => services.AddExternalizedPayloadStore(options =>
+            {
+                options.ThresholdBytes = 16;
+                options.ConnectionString = "UseDevelopmentStorage=true";
+            }));
+
+        // Act
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // Assert
+        retry.Payloads.Should().HaveCount(2);
+        retry.Payloads[0].Length.Should().BeGreaterThan(16);
+        retry.Payloads[1].Should().Be(retry.Payloads[0]);
+        store.UploadCount.Should().Be(3, "only the activity result, orchestration result, and custom status need uploading");
+        store.uploadedPayloads.Should().NotContain(value => store.IsKnownPayloadToken(value));
+        result.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        result.ReadOutputAs<string>().Should().Be(payload);
+        result.ReadCustomStatusAs<string>().Should().Be(payload);
+    }
+
     // Validates client externalizes a large orchestration input and worker resolves it.
     [Fact]
     public async Task LargeOrchestrationInputAndOutputAndCustomStatus()
@@ -741,18 +886,77 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
     }
 
-    // Validates that activity output larger than the chunk size limit (3.9MB) but within MaxPayloadBytes
-    // is externalized successfully when large payload is enabled, rather than being rejected by
-    // ValidateActionsSize pre-send validation.
-    [Fact]
-    public async Task LargeActivityOutput_ExceedsChunkSize_ExternalizesWithLP()
+    [Theory]
+    [InlineData(1, 5 * 1024 * 1024)]
+    [InlineData(5, 1024 * 1024)]
+    public async Task OversizedInlineResponse_FailsWithoutSchedulingActivities(int activityCount, int payloadBytes)
     {
-        // 5MB output exceeds 3.9MB chunk limit but is within 10MB default MaxPayloadBytes
-        string largeOutput = new string('L', 5 * 1024 * 1024);
-        TaskName orch = nameof(LargeActivityOutput_ExceedsChunkSize_ExternalizesWithLP);
+        TaskName orchestratorName = nameof(OversizedInlineResponse_FailsWithoutSchedulingActivities);
+        TaskName activityName = "MustNotRun";
+        int activitiesRun = 0;
+        await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
+            worker.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async context =>
+                {
+                    context.SetCustomStatus("pending");
+                    Task<int>[] activities = [.. Enumerable.Range(0, activityCount).Select(_ =>
+                        context.CallActivityAsync<int>(activityName, new string('A', payloadBytes)))];
+                    return (await Task.WhenAll(activities)).Sum();
+                })
+                .AddActivityFunc<string, int>(activityName, (_, input) =>
+                {
+                    Interlocked.Increment(ref activitiesRun);
+                    return Task.FromResult(input.Length);
+                })));
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TimeoutToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, timeout.Token);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Equal(typeof(InvalidOperationException).FullName, result.FailureDetails.ErrorType);
+        Assert.Contains("inline limit", result.FailureDetails.ErrorMessage);
+        Assert.Null(result.ReadCustomStatusAs<string>());
+        Assert.Equal(0, Volatile.Read(ref activitiesRun));
+    }
+
+    [Fact]
+    public async Task LegacyChunkSize_DoesNotLimitInlineResponses()
+    {
+        const int PayloadBytes = 2 * 1024 * 1024;
+        TaskName orchestratorName = nameof(LegacyChunkSize_DoesNotLimitInlineResponses);
+        TaskName activityName = "GetInputLength";
+        await using HostTestLifetime server = await this.StartWorkerAsync(worker =>
+        {
+#pragma warning disable CS0618 // Check that the old setting has no effect.
+            worker.UseGrpc(options => options.CompleteOrchestrationWorkItemChunkSizeInBytes = 1024 * 1024);
+#pragma warning restore CS0618
+            worker.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, context =>
+                    context.CallActivityAsync<int>(activityName, new string('A', PayloadBytes)))
+                .AddActivityFunc<string, int>(activityName, (_, input) => Task.FromResult(input.Length)));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, result.RuntimeStatus);
+        Assert.Equal(PayloadBytes, result.ReadOutputAs<int>());
+    }
+
+    // Externalization lets a 5 MiB result pass through the worker and client.
+    [Fact]
+    public async Task LargeActivityOutput_ExceedsGrpcLimit_ExternalizesSuccessfully()
+    {
+        string largeOutput = new('L', 5 * 1024 * 1024);
+        TaskName orch = nameof(LargeActivityOutput_ExceedsGrpcLimit_ExternalizesSuccessfully);
         TaskName activity = "ProduceLarge5MB";
 
-        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
+        InMemoryPayloadStore fakeStore = new();
 
         await using HostTestLifetime server = await this.StartWorkerAsync(
             worker =>
@@ -785,11 +989,67 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
-        // Should complete successfully — the interceptor externalizes the 5MB payload.
-        // ValidateActionsSize is skipped because the worker has the LargePayloads capability.
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
         string? output = completed.ReadOutputAs<string>();
-        Assert.Equal(largeOutput.Length, output?.Length);
+        Assert.Equal(largeOutput, output);
+    }
+
+    sealed class TwoActivitySlotService : InMemoryOrchestrationService, IOrchestrationService
+    {
+        int IOrchestrationService.MaxConcurrentTaskActivityWorkItems => 2;
+    }
+
+    sealed class ForwardingStreamInterceptor : Interceptor
+    {
+        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(
+            TRequest request,
+            ClientInterceptorContext<TRequest, TResponse> context,
+            AsyncServerStreamingCallContinuation<TRequest, TResponse> continuation)
+        {
+            AsyncServerStreamingCall<TResponse> call = continuation(request, context);
+            Mock<IAsyncStreamReader<TResponse>> reader = new();
+            reader.Setup(r => r.MoveNext(It.IsAny<CancellationToken>()))
+                .Returns((CancellationToken cancellation) => call.ResponseStream.MoveNext(cancellation));
+            reader.SetupGet(r => r.Current).Returns(() => call.ResponseStream.Current);
+            return new AsyncServerStreamingCall<TResponse>(
+                reader.Object, call.ResponseHeadersAsync, call.GetStatus, call.GetTrailers, call.Dispose);
+        }
+    }
+
+    sealed class RetryCompletionInterceptor(bool retryActivity) : Interceptor
+    {
+        public List<string> Payloads { get; } = [];
+
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
+            TRequest request,
+            ClientInterceptorContext<TRequest, TResponse> context,
+            AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
+        {
+            string? payload = request switch
+            {
+                P.ActivityResponse response when retryActivity => response.Result,
+                P.OrchestratorResponse response when !retryActivity =>
+                    response.Actions.FirstOrDefault(action => action.CompleteOrchestration is not null)
+                        ?.CompleteOrchestration.Result,
+                _ => null,
+            };
+            if (payload is not null)
+            {
+                this.Payloads.Add(payload);
+                if (this.Payloads.Count == 1)
+                {
+                    Status status = new(StatusCode.Unavailable, "Simulated completion transport failure.");
+                    return new AsyncUnaryCall<TResponse>(
+                        Task.FromException<TResponse>(new RpcException(status)),
+                        Task.FromResult(new Metadata()),
+                        () => status,
+                        () => new Metadata(),
+                        () => { });
+                }
+            }
+
+            return continuation(request, context);
+        }
     }
 
     class InMemoryPayloadStore : PayloadStore

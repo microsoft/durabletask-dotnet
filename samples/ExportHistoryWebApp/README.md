@@ -66,6 +66,11 @@ Request body (see `Models/CreateExportJobRequest.cs`):
 
 Notes:
 - For `Batch` mode, `completedTimeTo` must be greater than `completedTimeFrom` and cannot be in the future.
+- `Continuous` mode pages through fixed completion-time windows, then resets the instance-key cursor for the next window. This allows earlier-created instances that complete after the current window's upper bound to be picked up in a subsequent window, provided they are query-visible when that window is scanned.
+- Window upper bounds use the orchestrator's clock, not a server snapshot watermark. Delayed query visibility or clock skew can still leave an instance behind the pagination cursor or advanced completion-time bound, causing an export gap. If the backend does not guarantee timely query visibility and compatible timestamps, retain source histories and reconcile exports before purging; continuous export alone does not guarantee that every terminal instance has been exported.
+- For example, an instance stamped as completed at `T - 1s` but not query-visible until after a window ending at `T` has been scanned is excluded from the next window starting at `T`. Equal completion timestamps do not resolve this race: a smaller creation key becoming visible after pagination has passed it can still be missed unless its completion time is on the shared window boundary. A settle delay or trailing overlap would only cover bounded visibility delay and clock skew, not establish an unconditional guarantee.
+- Completion-time bounds are inclusive, so instances exactly on a window boundary can be exported again. Retries can also repeat exports; deterministic blob names target the same destination, subject to the versioning and immutability restrictions below. Progress counters count successful export operations, not distinct blobs.
+- After upgrading the worker, existing continuous jobs adopt completion-time windows at their next continue-as-new (after at most five polling/page cycles). Legacy checkpoints restart from the job's original `completedTimeFrom` to recover previously skipped instances, which can re-export existing blobs. Keep source histories available until reconciliation finishes; already-purged histories cannot be recovered.
 
 ### Get a job
 
@@ -101,6 +106,8 @@ Exported history is written to Azure Blob Storage:
 If a prefix is configured, the blob path becomes:
 
 - `{prefix}/{hash}.{ext}`
+
+Repeated exports target the same blob name, but destination policies can make the effects non-idempotent: with blob versioning enabled, repeated writes can create additional versions and storage costs; an applicable immutability policy can prevent an overwrite and fail the export. Choose a destination policy compatible with retries, boundary duplicates, and migration re-exports, and do not interpret a stable blob name as a guarantee of exactly-once writes.
 
 ## Using the included HTTP file
 

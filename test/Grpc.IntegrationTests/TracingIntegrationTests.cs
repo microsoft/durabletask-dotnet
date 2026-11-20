@@ -39,6 +39,85 @@ public class TracingIntegrationTests : IntegrationTestBase
     static readonly ActivitySource TestActivitySource = new(TestActivitySourceName);
 
     [Fact]
+    public async Task HistoryEventLookupCorrelatesDistinctScheduledOperations()
+    {
+        // Arrange
+        ConcurrentBag<Activity> activities = new();
+        using ActivityListener listener = CreateListener(ActivitySourceNames, activities);
+
+        string orchestratorName = nameof(HistoryEventLookupCorrelatesDistinctScheduledOperations);
+        string firstActivityName = $"{orchestratorName}.FirstActivity";
+        string secondActivityName = $"{orchestratorName}.SecondActivity";
+        string subOrchestratorName = $"{orchestratorName}.SubOrchestration";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<bool, bool>(
+                    orchestratorName,
+                    async (ctx, input) =>
+                    {
+                        await ctx.CallActivityAsync(firstActivityName, input);
+                        await ctx.CallActivityAsync(secondActivityName, input);
+                        await ctx.CallSubOrchestratorAsync(subOrchestratorName, input: input);
+                        return true;
+                    })
+                .AddOrchestratorFunc<bool, bool>(subOrchestratorName, (ctx, input) => input)
+                .AddActivityFunc<bool, bool>(firstActivityName, (ctx, input) => input)
+                .AddActivityFunc<bool, bool>(secondActivityName, (ctx, input) => input));
+        });
+
+        // Act
+        OrchestrationMetadata metadata;
+        using (TestActivitySource.StartActivity("Test"))
+        {
+            string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+                orchestratorName,
+                input: true,
+                cancellation: this.TimeoutToken);
+            metadata = await server.Client.WaitForInstanceCompletionAsync(
+                instanceId,
+                getInputsAndOutputs: true,
+                this.TimeoutToken);
+        }
+
+        // Assert
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        Activity orchestrationActivity = activities.First(
+            activity => activity.Kind == ActivityKind.Server
+                && activity.Source.Name == CoreActivitySourceName
+                && activity.OperationName == $"orchestration:{orchestratorName}");
+        List<Activity> scheduledActivities = [];
+        foreach (string operationName in new[]
+        {
+            $"activity:{firstActivityName}",
+            $"activity:{secondActivityName}",
+            $"orchestration:{subOrchestratorName}",
+        })
+        {
+            Activity scheduledActivity = activities.Should().ContainSingle(
+                activity => activity.Kind == ActivityKind.Client
+                    && activity.Source.Name == CoreActivitySourceName
+                    && activity.OperationName == operationName).Subject;
+            scheduledActivities.Add(scheduledActivity);
+            scheduledActivity.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
+            scheduledActivity.TraceId.Should().Be(orchestrationActivity.TraceId);
+
+            activities.Where(
+                activity => activity.Kind == ActivityKind.Server
+                    && activity.Source.Name == CoreActivitySourceName
+                    && activity.OperationName == operationName)
+                .Should().NotBeEmpty().And.AllSatisfy(activity =>
+                {
+                    activity.ParentSpanId.Should().Be(scheduledActivity.SpanId);
+                    activity.TraceId.Should().Be(scheduledActivity.TraceId);
+                });
+        }
+
+        scheduledActivities.Select(activity => activity.SpanId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
     public async Task MultiTaskOrchestration()
     {
         var activities = new ConcurrentBag<Activity>();

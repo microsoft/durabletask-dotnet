@@ -9,7 +9,14 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// <summary>
 /// Orchestrator input to start a runner for a given job.
 /// </summary>
-public sealed record ExportJobRunRequest(EntityInstanceId JobEntityId, int ProcessedCycles = 0);
+public sealed record ExportJobRunRequest(EntityInstanceId JobEntityId, int ProcessedCycles = 0)
+{
+    /// <summary>
+    /// Gets a value indicating whether continuous export uses completion-time windows.
+    /// Defaults to false to preserve replay of existing histories until continue-as-new.
+    /// </summary>
+    public bool UseCompletionTimeWindows { get; init; }
+}
 
 /// <summary>
 /// Orchestrator that performs the actual export work by querying orchestration instances
@@ -68,7 +75,10 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                 processedCycles++;
                 if (processedCycles > ContinueAsNewFrequency)
                 {
-                    context.ContinueAsNew(new ExportJobRunRequest(input.JobEntityId, ProcessedCycles: 0));
+                    context.ContinueAsNew(new ExportJobRunRequest(input.JobEntityId, ProcessedCycles: 0)
+                    {
+                        UseCompletionTimeWindows = true,
+                    });
                     return null!;
                 }
 
@@ -94,15 +104,74 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     LastInstanceKey: currentState.Checkpoint?.LastInstanceKey,
                     MaxInstancesPerBatch: currentState.Config.MaxInstancesPerBatch);
 
+                bool useCompletionTimeWindows = input.UseCompletionTimeWindows && config.Mode == ExportMode.Continuous;
+                if (useCompletionTimeWindows)
+                {
+                    // A creation-order cursor is only safe within a fixed completion-time window.
+                    // Legacy checkpoints must restart from the filter to recover skipped instances.
+                    ExportCheckpoint? checkpoint = currentState.Checkpoint;
+                    listRequest = listRequest with
+                    {
+                        CompletedTimeFrom = checkpoint?.CompletedTimeFrom ?? listRequest.CompletedTimeFrom,
+                        CompletedTimeTo = checkpoint?.CompletedTimeTo ?? new DateTimeOffset(context.CurrentUtcDateTime),
+                        LastInstanceKey = checkpoint?.CompletedTimeTo.HasValue == true ? checkpoint?.LastInstanceKey : null,
+                    };
+
+                    if (listRequest.CompletedTimeFrom > listRequest.CompletedTimeTo)
+                    {
+                        await context.CreateTimer(ContinuousExportIdleDelay, default);
+                        continue;
+                    }
+                }
+
                 InstancePage pageResult = await context.CallActivityAsync<InstancePage>(
                     nameof(ListTerminalInstancesActivity),
                     listRequest);
 
                 List<string> instancesToExport = pageResult.InstanceIds;
                 long scannedCount = instancesToExport.Count;
+                ExportCheckpoint nextCheckpoint = pageResult.NextCheckpoint;
+                bool windowComplete = false;
+
+                if (useCompletionTimeWindows)
+                {
+                    string? nextKey = nextCheckpoint.LastInstanceKey;
+                    windowComplete = string.IsNullOrEmpty(nextKey) ||
+                        (scannedCount == 0 && nextKey == listRequest.LastInstanceKey);
+                    nextCheckpoint = windowComplete
+                        ? new ExportCheckpoint
+                        {
+                            // Bounds are inclusive; overlap the boundary rather than risk missing an instance.
+                            CompletedTimeFrom = listRequest.CompletedTimeTo,
+                        }
+                        : new ExportCheckpoint(nextKey)
+                        {
+                            CompletedTimeFrom = listRequest.CompletedTimeFrom,
+                            CompletedTimeTo = listRequest.CompletedTimeTo,
+                        };
+                }
 
                 if (scannedCount == 0)
                 {
+                    if (useCompletionTimeWindows)
+                    {
+                        await this.CommitCheckpointAsync(
+                            context,
+                            input.JobEntityId,
+                            scannedInstances: 0,
+                            exportedInstances: 0,
+                            checkpoint: nextCheckpoint,
+                            failures: null);
+
+                        if (windowComplete)
+                        {
+                            logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "Completion-time window exported - waiting for the next poll.");
+                            await context.CreateTimer(ContinuousExportIdleDelay, default);
+                        }
+
+                        continue;
+                    }
+
                     if (config.Mode == ExportMode.Continuous)
                     {
                         logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export - export complete.");
@@ -136,8 +205,13 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                         input.JobEntityId,
                         scannedInstances: scannedCount,
                         exportedInstances: batchResult.ExportedCount,
-                        checkpoint: pageResult.NextCheckpoint,
+                        checkpoint: nextCheckpoint,
                         failures: null);
+
+                    if (windowComplete)
+                    {
+                        await context.CreateTimer(ContinuousExportIdleDelay, default);
+                    }
                 }
                 else
                 {

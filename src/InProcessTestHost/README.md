@@ -98,9 +98,7 @@ leaving execution pending or repeatedly requeueing unsupported work. Invalid tok
 mismatched identities still leave valid deliveries untouched.
 
 Direct callers must send all actions in one response, with `isPartial` false and `chunkIndex`
-omitted, within the configured SDK chunk-size and gRPC message-size limits. The SDK's
-existing oversized-response chunking path is unchanged: if it sends chunks to this test
-host, the orchestration fails terminally; chunking is not supported here.
+omitted, within the configured gRPC message-size limits.
 
 Replay history streaming is separate and remains supported. A full response releases the
 delivery's temporary replay snapshot, while an already captured history reader can still finish

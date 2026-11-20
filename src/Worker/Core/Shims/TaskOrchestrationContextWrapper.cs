@@ -336,8 +336,19 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             this.CompleteExternalEvent(eventName, bufferedEvent);
         }
 
-        // TODO: this needs to be tracked and disposed appropriately.
-        cancellationToken.Register(() => eventSource.TrySetCanceled(cancellationToken));
+        if (cancellationToken.CanBeCanceled && !eventSource.Task.IsCompleted)
+        {
+            CancellationTokenRegistration registration = cancellationToken.Register(() => eventSource.TrySetCanceled(cancellationToken));
+
+            // Cleanup must not depend on the orchestrator's task scheduler.
+            _ = eventSource.Task.ContinueWith(
+                static (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
+                registration,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
         return eventSource.Task;
     }
 

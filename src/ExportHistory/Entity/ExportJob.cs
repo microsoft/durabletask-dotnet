@@ -272,7 +272,7 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
 
             context.ScheduleNewOrchestration(
                 new TaskName(nameof(ExportJobOrchestrator)),
-                new ExportJobRunRequest(context.Id),
+                new ExportJobRunRequest(context.Id) { UseCompletionTimeWindows = true },
                 startOrchestrationOptions);
 
             this.State.OrchestratorInstanceId = instanceId;

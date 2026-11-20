@@ -13,16 +13,18 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
 {
     /// <summary>
-    /// The minimum allowed size (in bytes) for complete orchestration work item chunks.
+    /// The former minimum response chunk size, in bytes.
     /// </summary>
+    [Obsolete("Automatic response chunking is no longer supported.")]
     public const int MinCompleteOrchestrationWorkItemChunkSizeInBytes = 1 * 1024 * 1024; // 1 MB
 
     /// <summary>
-    /// The maximum allowed size (in bytes) for complete orchestration work item chunks.
+    /// The former maximum response chunk size, in bytes.
     /// </summary>
+    [Obsolete("Automatic response chunking is no longer supported.")]
     public const int MaxCompleteOrchestrationWorkItemChunkSizeInBytes = 4_089_446; // 3.9 MB
 
-    int completeOrchestrationWorkItemChunkSizeInBytes = MaxCompleteOrchestrationWorkItemChunkSizeInBytes;
+    int completeOrchestrationWorkItemChunkSizeInBytes = 4_089_446;
 
     /// <summary>
     /// Gets or sets the address of the gRPC endpoint to connect to. Default is localhost:4001.
@@ -71,19 +73,22 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
 
     /// <summary>
-    /// Gets or sets the maximum size of all actions in a complete orchestration work item chunk.
-    /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
+    /// Gets or sets the former response chunk size. The default is 3.9 MB.
     /// </summary>
     /// <remarks>
-    /// This value is used to limit the size of the complete orchestration work item request.
-    /// If the response exceeds this limit, it will be automatically split into multiple chunks of maximum size CompleteOrchestrationWorkItemChunkSizeInBytes
+    /// This value is retained for compatibility and has no effect.
+    /// Orchestration responses are sent as a single message.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when the value is less than 1 MB or greater than 3.9 MB.
     /// </exception>
+    [Obsolete("Automatic response chunking is no longer supported. This setting has no effect.")]
     public int CompleteOrchestrationWorkItemChunkSizeInBytes
     {
-        get => this.completeOrchestrationWorkItemChunkSizeInBytes;
+        get
+        {
+            return this.completeOrchestrationWorkItemChunkSizeInBytes;
+        }
         set
         {
             if (value < MinCompleteOrchestrationWorkItemChunkSizeInBytes ||
@@ -134,6 +139,12 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         /// unlock events into the history when an orchestration terminates while holding an entity lock.
         /// </summary>
         public bool InsertEntityUnlocksOnCompletion { get; set; }
+
+        /// <summary>
+        /// Gets or sets optional payload preparation that runs before final worker entity cleanup.
+        /// Permanent payload failures can turn a pending response into a terminal completion.
+        /// </summary>
+        public Func<P.OrchestratorResponse, CancellationToken, Task>? PrepareOrchestratorResponseAsync { get; set; }
 
         /// <summary>
         /// Gets or sets the maximum amount of time to wait for the Hello handshake with the backend before

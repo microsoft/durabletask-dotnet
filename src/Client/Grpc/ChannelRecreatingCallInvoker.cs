@@ -192,6 +192,12 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     void ObserveOutcome(Task responseAsync, string methodFullName, CancellationToken cancellation)
     {
+        if (responseAsync.Status == TaskStatus.RanToCompletion)
+        {
+            this.RecordSuccess();
+            return;
+        }
+
         object continuationState = cancellation.CanBeCanceled ? (methodFullName, cancellation) : methodFullName;
         responseAsync.ContinueWith(
             this.onUnaryCallCompleted,

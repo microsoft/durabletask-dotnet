@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Entities.Tests;
+using Moq;
 using Xunit;
 
 namespace Microsoft.DurableTask.ExportHistory.Tests.Entity;
@@ -15,6 +17,33 @@ public class ExportJobTests
     {
         this.logger = new TestLogger<ExportJob>();
         this.exportJob = new ExportJob(this.logger);
+    }
+
+    [Fact]
+    public async Task Run_ActiveJob_EnablesCompletionTimeWindows()
+    {
+        // Arrange
+        EntityInstanceId entityId = new(nameof(ExportJob), "test-job");
+        ExportJobState state = new()
+        {
+            Status = ExportJobStatus.Active,
+            Config = new ExportJobConfiguration(
+                ExportMode.Continuous,
+                new ExportFilter(DateTimeOffset.UtcNow.AddDays(-1), null, null),
+                new ExportDestination("container"),
+                ExportFormat.Default),
+        };
+        TestEntityOperation operation = new(nameof(ExportJob.Run), new TestEntityState(state), null);
+        Mock.Get(operation.Context).Setup(c => c.Id).Returns(entityId);
+
+        // Act
+        await this.exportJob.RunAsync(operation);
+
+        // Assert
+        Mock.Get(operation.Context).Verify(c => c.ScheduleNewOrchestration(
+            new TaskName(nameof(ExportJobOrchestrator)),
+            It.Is<ExportJobRunRequest>(r => r.JobEntityId == entityId && r.UseCompletionTimeWindows),
+            It.IsAny<StartOrchestrationOptions>()), Times.Once);
     }
 
     [Fact]
@@ -367,4 +396,3 @@ public class ExportJobTests
         jobState.Status.Should().Be(ExportJobStatus.Active);
     }
 }
-

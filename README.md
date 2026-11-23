@@ -200,6 +200,23 @@ For runnable DTS emulator examples that demonstrate versioning, see the [WorkerV
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
+### gRPC send limit
+
+The DTS .NET client and worker reject outgoing gRPC messages larger than 4 MiB
+(4,194,304 bytes) locally. The limit applies to each serialized message, not
+to the total size of a stream. To change the limit, set `MaxSendMessageSize` in
+the `UseDurableTaskScheduler` options callback for the client or worker:
+
+```csharp
+builder.UseDurableTaskScheduler(connectionString,
+    options => options.MaxSendMessageSize = 2 * 1024 * 1024);
+```
+
+Use a positive byte count, or set `MaxSendMessageSize` to `null` to restore the
+previous behavior of sending without an SDK cap. Raising or disabling the cap
+does not change the scheduler's limits, including the 3.9 MiB limit for work-item
+completion requests.
+
 ### Blob auto-purge infrastructure integration
 
 The optional service contract is maintained in

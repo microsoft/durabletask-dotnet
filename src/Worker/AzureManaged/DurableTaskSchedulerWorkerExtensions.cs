@@ -146,7 +146,7 @@ public static class DurableTaskSchedulerWorkerExtensions
             // but separate channels are created when any relevant property changes.
             // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
             string credentialType = source.Credential?.GetType().FullName ?? "null";
-            string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{source.WorkerId}";
+            string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{source.WorkerId}\u001F{source.MaxSendMessageSize}";
             GrpcChannel? newChannel = null;
             bool disposeNewChannel = false;
             lock (this.syncRoot)

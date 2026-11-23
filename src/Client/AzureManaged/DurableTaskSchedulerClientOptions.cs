@@ -65,6 +65,16 @@ public class DurableTaskSchedulerClientOptions
     public bool AllowInsecureCredentials { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum size, in bytes, of each outgoing gRPC message. Defaults to 4 MiB (4,194,304 bytes).
+    /// </summary>
+    /// <remarks>
+    /// Set to a positive value or <see langword="null"/> to disable the SDK send limit.
+    /// This setting does not change the scheduler's limits.
+    /// </remarks>
+    [Range(1, int.MaxValue)]
+    public int? MaxSendMessageSize { get; set; } = GrpcMessageSizeDefaults.MaxSendMessageSize;
+
+    /// <summary>
     /// Gets or sets the options that determine how and when calls made to the scheduler will be retried.
     /// </summary>
     public ClientRetryOptions? RetryOptions { get; set; }
@@ -205,6 +215,7 @@ public class DurableTaskSchedulerClientOptions
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
             ServiceConfig = serviceConfig,
+            MaxSendMessageSize = this.MaxSendMessageSize,
         });
     }
 
